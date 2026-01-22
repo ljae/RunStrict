@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Neon Runner Test Route">
+  <metadata>
+    <name>Test Running Route</name>
+    <desc>5km test route simulating a runner at ~10 min/km pace</desc>
+  </metadata>
+  <trk>
+    <name>Test Run</name>
+    <trkseg>
+      <!-- Starting point (San Francisco) -->
+      <trkpt lat="37.7749" lon="-122.4194">
+        <time>2024-01-01T10:00:00Z</time>
+      </trkpt>
+
+      <!-- Moving north (every 30 seconds, ~83m apart for 10 min/km pace) -->
+      <trkpt lat="37.7757" lon="-122.4194">
+        <time>2024-01-01T10:00:30Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7765" lon="-122.4194">
+        <time>2024-01-01T10:01:00Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7773" lon="-122.4194">
+        <time>2024-01-01T10:01:30Z</time>
+      </trkpt>
+
+      <!-- Turn east -->
+      <trkpt lat="37.7773" lon="-122.4186">
+        <time>2024-01-01T10:02:00Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7773" lon="-122.4178">
+        <time>2024-01-01T10:02:30Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7773" lon="-122.4170">
+        <time>2024-01-01T10:03:00Z</time>
+      </trkpt>
+
+      <!-- Turn south -->
+      <trkpt lat="37.7765" lon="-122.4170">
+        <time>2024-01-01T10:03:30Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7757" lon="-122.4170">
+        <time>2024-01-01T10:04:00Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7749" lon="-122.4170">
+        <time>2024-01-01T10:04:30Z</time>
+      </trkpt>
+
+      <!-- Turn west (back to start) -->
+      <trkpt lat="37.7749" lon="-122.4178">
+        <time>2024-01-01T10:05:00Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7749" lon="-122.4186">
+        <time>2024-01-01T10:05:30Z</time>
+      </trkpt>
+
+      <trkpt lat="37.7749" lon="-122.4194">
+        <time>2024-01-01T10:06:00Z</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>
