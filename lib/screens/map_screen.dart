@@ -100,7 +100,7 @@ class _MapScreenState extends State<MapScreen> {
         position.longitude,
       );
 
-      // If position differs significantly, animate to new location
+      // If position differs significantly, animate smoothly to new location
       final distance = Geolocator.distanceBetween(
         initialLat,
         initialLng,
@@ -109,10 +109,10 @@ class _MapScreenState extends State<MapScreen> {
       );
 
       // Only animate if moved more than 50 meters (avoid unnecessary animation)
-      // Use setCamera instead of flyTo to avoid timeout issues
+      // Use easeTo with short duration for smooth transition instead of instant snap
       if (distance > 50 && _mapController != null) {
         try {
-          _mapController!.setCamera(
+          await _mapController!.easeTo(
             mapbox.CameraOptions(
               center: mapbox.Point(
                 coordinates: mapbox.Position(
@@ -122,9 +122,26 @@ class _MapScreenState extends State<MapScreen> {
               ),
               zoom: _getZoomLevelForIndex(_selectedZoomIndex),
             ),
+            mapbox.MapAnimationOptions(duration: 500, startDelay: 0),
           );
         } catch (e) {
-          debugPrint('setCamera failed: $e');
+          // Fallback to instant setCamera if easeTo fails/times out
+          debugPrint('easeTo failed, falling back to setCamera: $e');
+          try {
+            _mapController!.setCamera(
+              mapbox.CameraOptions(
+                center: mapbox.Point(
+                  coordinates: mapbox.Position(
+                    position.longitude,
+                    position.latitude,
+                  ),
+                ),
+                zoom: _getZoomLevelForIndex(_selectedZoomIndex),
+              ),
+            );
+          } catch (e2) {
+            debugPrint('setCamera fallback also failed: $e2');
+          }
         }
       }
     } catch (e) {
@@ -135,13 +152,22 @@ class _MapScreenState extends State<MapScreen> {
   void _onZoomChanged(int index) {
     if (!mounted) return;
     setState(() => _selectedZoomIndex = index);
-    // Use setCamera instead of flyTo to avoid timeout issues
+    // Use easeTo for smooth zoom transitions between ZONE/CITY/ALL
     try {
-      _mapController?.setCamera(
+      _mapController?.easeTo(
         mapbox.CameraOptions(zoom: _getZoomLevelForIndex(index)),
+        mapbox.MapAnimationOptions(duration: 300, startDelay: 0),
       );
     } catch (e) {
-      debugPrint('setCamera zoom failed: $e');
+      // Fallback to instant setCamera if easeTo fails
+      debugPrint('easeTo zoom failed, falling back: $e');
+      try {
+        _mapController?.setCamera(
+          mapbox.CameraOptions(zoom: _getZoomLevelForIndex(index)),
+        );
+      } catch (e2) {
+        debugPrint('setCamera zoom fallback failed: $e2');
+      }
     }
   }
 

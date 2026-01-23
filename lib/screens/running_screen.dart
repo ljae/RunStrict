@@ -9,7 +9,6 @@ import '../theme/neon_theme.dart';
 import '../providers/run_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../models/team.dart';
-import '../services/location_service.dart';
 import '../widgets/route_map.dart';
 import '../widgets/energy_hold_button.dart';
 
@@ -212,12 +211,11 @@ class _RunningScreenState extends State<RunningScreen>
               child: Column(
                 children: [
                   _buildTopBar(runningProvider, teamColor),
-                  const Spacer(),
+                  const SizedBox(height: 16),
+                  _buildSecondaryStats(runningProvider, teamColor),
+                  const SizedBox(height: 12),
                   _buildMainStats(runningProvider, teamColor),
                   const Spacer(),
-                  _buildSecondaryStats(runningProvider, teamColor),
-                  const SizedBox(height: 24),
-                  const SizedBox(height: 16),
                   _buildControls(runningProvider, teamColor),
                   const SizedBox(height: 40),
                 ],
@@ -241,61 +239,51 @@ class _RunningScreenState extends State<RunningScreen>
   Widget _buildTopBar(RunProvider provider, Color teamColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Placeholder for alignment
-          const SizedBox(width: 48),
-
-          // Title - Minimal pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceColor.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.05),
-                  blurRadius: 10,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (provider.isRunning)
-                  _buildPulsingDot(teamColor)
-                else if (provider.isPaused)
-                  Icon(Icons.pause, color: Colors.amber, size: 14)
-                else
-                  Icon(Icons.directions_run, color: teamColor, size: 14),
-                const SizedBox(width: 8),
-                Text(
-                  provider.isRunning
-                      ? 'TRACKING ACTIVE'
-                      : provider.isPaused
-                      ? 'PAUSED'
-                      : 'READY',
-                  style: GoogleFonts.outfit(
-                    color: provider.isRunning
-                        ? teamColor
-                        : provider.isPaused
-                        ? Colors.amber
-                        : AppTheme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-              ],
-            ),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.05),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ],
           ),
-
-          // GPS Signal Indicator - Minimal
-          _buildGpsIndicator(provider, teamColor),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (provider.isRunning)
+                _buildPulsingDot(teamColor)
+              else if (provider.isPaused)
+                Icon(Icons.pause, color: Colors.amber, size: 14)
+              else
+                Icon(Icons.directions_run, color: teamColor, size: 14),
+              const SizedBox(width: 8),
+              Text(
+                provider.isRunning
+                    ? 'TRACKING ACTIVE'
+                    : provider.isPaused
+                    ? 'PAUSED'
+                    : 'READY',
+                style: GoogleFonts.outfit(
+                  color: provider.isRunning
+                      ? teamColor
+                      : provider.isPaused
+                      ? Colors.amber
+                      : AppTheme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -314,53 +302,6 @@ class _RunningScreenState extends State<RunningScreen>
           ),
         );
       },
-    );
-  }
-
-  Widget _buildGpsIndicator(RunProvider provider, Color teamColor) {
-    final quality = provider.signalQuality;
-    final color = switch (quality) {
-      GpsSignalQuality.excellent => Colors.green,
-      GpsSignalQuality.good => Colors.lightGreen,
-      GpsSignalQuality.fair => Colors.amber,
-      GpsSignalQuality.poor => Colors.orange,
-      GpsSignalQuality.none => Colors.red,
-    };
-
-    final bars = switch (quality) {
-      GpsSignalQuality.excellent => 4,
-      GpsSignalQuality.good => 3,
-      GpsSignalQuality.fair => 2,
-      GpsSignalQuality.poor => 1,
-      GpsSignalQuality.none => 0,
-    };
-
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.gps_fixed, color: color, size: 16),
-          const SizedBox(width: 6),
-          Row(
-            children: List.generate(4, (index) {
-              return Container(
-                margin: const EdgeInsets.only(right: 2),
-                width: 3,
-                height: 6 + (index * 2).toDouble(), // Less height variation
-                decoration: BoxDecoration(
-                  color: index < bars ? color : Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
     );
   }
 
@@ -402,18 +343,11 @@ class _RunningScreenState extends State<RunningScreen>
   Widget _buildSecondaryStats(RunProvider provider, Color teamColor) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -424,14 +358,13 @@ class _RunningScreenState extends State<RunningScreen>
             label: 'TIME',
             color: Colors.white,
           ),
-          Container(width: 1, height: 50, color: Colors.white.withOpacity(0.1)),
+          Container(width: 1, height: 36, color: Colors.white.withOpacity(0.1)),
           _buildStatItem(
             icon: Icons.speed,
             value: provider.formattedPace,
             label: 'PACE',
             color: teamColor,
           ),
-          // Removed Calories Icon
         ],
       ),
     );
@@ -444,13 +377,14 @@ class _RunningScreenState extends State<RunningScreen>
     required Color color,
   }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color.withOpacity(0.8), size: 24),
-        const SizedBox(height: 8),
+        Icon(icon, color: color.withOpacity(0.8), size: 18),
+        const SizedBox(height: 4),
         Text(
           value,
           style: GoogleFonts.outfit(
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),

@@ -8,6 +8,7 @@ import '../theme/neon_theme.dart';
 import '../services/hex_service.dart';
 import '../providers/hex_data_provider.dart';
 import '../widgets/glowing_location_marker.dart';
+import '../widgets/smooth_camera_controller.dart';
 import '../utils/route_optimizer.dart';
 
 /// Widget for displaying running routes on Mapbox with car navigation-style chase camera.
@@ -61,8 +62,7 @@ class RouteMap extends StatefulWidget {
   State<RouteMap> createState() => _RouteMapState();
 }
 
-class _RouteMapState extends State<RouteMap>
-    with SingleTickerProviderStateMixin {
+class _RouteMapState extends State<RouteMap> with TickerProviderStateMixin {
   MapboxMap? _mapboxMap;
   PolylineAnnotationManager? _polylineManager;
   PolygonAnnotationManager? _polygonManager;
@@ -71,6 +71,9 @@ class _RouteMapState extends State<RouteMap>
   PolygonAnnotation? _currentHexAnnotation;
   PolylineAnnotation? _routeAnnotation;
   late AnimationController _pulseController;
+
+  // Smooth camera controller for 60fps interpolation during navigation mode
+  SmoothCameraController? _smoothCamera;
 
   bool _isMapReady = false;
   bool _isDrawingHexagons = false;
@@ -111,6 +114,8 @@ class _RouteMapState extends State<RouteMap>
 
   @override
   void dispose() {
+    _smoothCamera?.dispose();
+    _smoothCamera = null;
     _pulseController.removeListener(_onPulseAnimation);
     _pulseController.dispose();
     _polylineManager = null;
@@ -370,6 +375,22 @@ class _RouteMapState extends State<RouteMap>
     _labelManager = await _mapboxMap!.annotations
         .createPointAnnotationManager();
 
+    // Initialize smooth camera controller for navigation mode
+    if (widget.navigationMode) {
+      _smoothCamera = SmoothCameraController(
+        mapboxMap: mapboxMap,
+        tickerProvider: this,
+        zoom: _navZoom,
+        pitch: _navPitch,
+        padding: EdgeInsets.only(
+          top:
+              (_mapWidgetSize?.height ?? MediaQuery.of(context).size.height) *
+              _navPaddingRatio,
+        ),
+        animationDuration: const Duration(milliseconds: 1000),
+      );
+    }
+
     // Handle case where route is empty but we show live location
     if (widget.route.isEmpty && widget.showLiveLocation) {
       await _initializeWithCurrentLocation();
@@ -450,9 +471,25 @@ class _RouteMapState extends State<RouteMap>
       debugPrint(
         'RouteMap: Navigation mode changed to ${widget.navigationMode}',
       );
-      // Reset bearing when exiting navigation mode
       if (!widget.navigationMode) {
+        // Exiting navigation mode: dispose smooth camera
         _currentBearing = 0.0;
+        _smoothCamera?.dispose();
+        _smoothCamera = null;
+      } else if (_mapboxMap != null) {
+        // Entering navigation mode: create smooth camera
+        _smoothCamera = SmoothCameraController(
+          mapboxMap: _mapboxMap!,
+          tickerProvider: this,
+          zoom: _navZoom,
+          pitch: _navPitch,
+          padding: EdgeInsets.only(
+            top:
+                (_mapWidgetSize?.height ?? MediaQuery.of(context).size.height) *
+                _navPaddingRatio,
+          ),
+          animationDuration: const Duration(milliseconds: 1000),
+        );
       }
     }
 
@@ -565,10 +602,10 @@ class _RouteMapState extends State<RouteMap>
 
   // ========== NAVIGATION CAMERA CONTROL ==========
 
-  /// Updates camera for navigation mode.
+  /// Updates camera for navigation mode using SmoothCameraController.
   /// Calculates bearing from recent route points (movement direction).
-  /// This creates true "car navigation" feel where forward = direction of travel.
-  /// NOTE: This is synchronous (fire-and-forget) to prevent blocking GPS updates.
+  /// The SmoothCameraController handles 60fps interpolation between GPS updates,
+  /// creating buttery-smooth movement instead of jumping between positions.
   void _updateNavigationCamera() {
     if (_mapboxMap == null || widget.route.length < 2) {
       debugPrint(
@@ -579,45 +616,50 @@ class _RouteMapState extends State<RouteMap>
 
     final last = widget.route.last;
     final newBearing = _calculateBearingFromRoute();
-    debugPrint(
-      'NavCamera: UPDATE pos=(${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}), bearing=$newBearing',
-    );
 
-    // Track if bearing changed significantly (for animation decision)
-    double bearingDelta = 0;
+    // Calculate target bearing (use current if no new bearing available)
+    double targetBearing = _currentBearing;
     if (newBearing != null) {
-      final oldBearing = _currentBearing;
-      _currentBearing = _smoothBearing(_currentBearing, newBearing);
-      bearingDelta = (_currentBearing - oldBearing).abs();
-      if (bearingDelta > 180) bearingDelta = 360 - bearingDelta;
+      targetBearing = newBearing;
+      _currentBearing = newBearing;
     }
 
-    // Get the actual map widget size from stored dimensions
-    // Use _mapWidgetSize if available, otherwise estimate
-    final mapHeight =
-        _mapWidgetSize?.height ?? MediaQuery.of(context).size.height;
-    final paddingTop = mapHeight * _navPaddingRatio;
-
-    final cameraOptions = CameraOptions(
-      center: Point(coordinates: Position(last.longitude, last.latitude)),
-      zoom: _navZoom,
-      pitch: _navPitch,
-      bearing: _currentBearing,
-      padding: MbxEdgeInsets(top: paddingTop, left: 0, bottom: 0, right: 0),
-    );
-
-    // IMPORTANT: Do NOT await camera animations - they can hang indefinitely
-    // causing TimeoutException and blocking all subsequent updates.
-    // Fire-and-forget pattern is correct for continuous GPS updates.
-    try {
-      // Use setCamera for immediate updates (no animation lag)
-      // This is more reliable than easeTo which can hang
-      _mapboxMap!.setCamera(cameraOptions);
-      debugPrint(
-        'NavCamera: setCamera SUCCESS - bearing=${_currentBearing.toStringAsFixed(1)}, zoom=$_navZoom',
+    // Use SmoothCameraController for 60fps interpolated movement
+    if (_smoothCamera != null) {
+      _smoothCamera!.updateTarget(
+        latitude: last.latitude,
+        longitude: last.longitude,
+        bearing: targetBearing,
       );
-    } catch (e) {
-      debugPrint('NavCamera: setCamera error: $e');
+      debugPrint(
+        'NavCamera: smoothCamera.updateTarget - '
+        'pos=(${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)}), '
+        'bearing=${targetBearing.toStringAsFixed(1)}',
+      );
+    } else {
+      // Fallback: direct setCamera if smooth controller not available
+      final mapHeight =
+          _mapWidgetSize?.height ?? MediaQuery.of(context).size.height;
+      final paddingTop = mapHeight * _navPaddingRatio;
+
+      try {
+        _mapboxMap!.setCamera(
+          CameraOptions(
+            center: Point(coordinates: Position(last.longitude, last.latitude)),
+            zoom: _navZoom,
+            pitch: _navPitch,
+            bearing: _currentBearing,
+            padding: MbxEdgeInsets(
+              top: paddingTop,
+              left: 0,
+              bottom: 0,
+              right: 0,
+            ),
+          ),
+        );
+      } catch (e) {
+        debugPrint('NavCamera: setCamera fallback error: $e');
+      }
     }
   }
 
@@ -665,21 +707,8 @@ class _RouteMapState extends State<RouteMap>
     return (bearing + 360) % 360;
   }
 
-  /// Smoothly interpolates between current and target bearing.
-  /// Handles wraparound at 0/360 degrees.
-  double _smoothBearing(double current, double target) {
-    // Calculate shortest rotation direction
-    double diff = target - current;
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-
-    // Smooth interpolation factor:
-    // - 0.5 = move 50% toward target per update (responsive yet smooth)
-    // - Higher values = more responsive but potentially jerky
-    // - Lower values = smoother but feels laggy
-    const smoothFactor = 0.5;
-    return (current + diff * smoothFactor + 360) % 360;
-  }
+  // Bearing smoothing is now handled by SmoothCameraController's
+  // internal shortest-path rotation logic at 60fps.
 
   // ========== ROUTE LINE RENDERING ==========
 

@@ -14,8 +14,8 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 ///    we use shortest-path rotation to prevent 340° reverse spins.
 ///
 /// 3. **Rubber-band (Lag)**: Mapbox's easeTo uses easing curves that cause
-///    acceleration/deceleration "jelly" effect. We use Curves.linear for
-///    constant velocity movement.
+///    acceleration/deceleration "jelly" effect. We use easeOutCubic for
+///    natural deceleration that feels like "catching up" to the runner.
 ///
 /// ## Camera Effect:
 /// - Map rotates so "forward" points UP on screen
@@ -60,7 +60,7 @@ class SmoothCameraController {
     this.zoom = 18.0,
     this.pitch = 60.0,
     this.padding = EdgeInsets.zero,
-    this.animationDuration = const Duration(milliseconds: 800),
+    this.animationDuration = const Duration(milliseconds: 1000),
     this.onDebug,
   });
 
@@ -138,31 +138,22 @@ class SmoothCameraController {
       duration: animationDuration,
     );
 
-    // Create linear animations for lat, lng, bearing
-    // Using Curves.linear for constant velocity (no rubber-band effect)
-    _latAnimation = Tween<double>(
-      begin: _currentLat,
-      end: _targetLat,
-    ).animate(CurvedAnimation(
-      parent: _animController!,
-      curve: Curves.linear,
-    ));
+    // Create easeOutCubic animations for lat, lng, bearing
+    // easeOutCubic starts fast and decelerates naturally, giving a "catching up"
+    // feel that matches how a runner's camera should behave - quick response
+    // to movement changes, then settling smoothly into position.
+    _latAnimation = Tween<double>(begin: _currentLat, end: _targetLat).animate(
+      CurvedAnimation(parent: _animController!, curve: Curves.easeOutCubic),
+    );
 
-    _lngAnimation = Tween<double>(
-      begin: _currentLng,
-      end: _targetLng,
-    ).animate(CurvedAnimation(
-      parent: _animController!,
-      curve: Curves.linear,
-    ));
+    _lngAnimation = Tween<double>(begin: _currentLng, end: _targetLng).animate(
+      CurvedAnimation(parent: _animController!, curve: Curves.easeOutCubic),
+    );
 
-    _bearingAnimation = Tween<double>(
-      begin: _currentBearing,
-      end: _targetBearing,
-    ).animate(CurvedAnimation(
-      parent: _animController!,
-      curve: Curves.linear,
-    ));
+    _bearingAnimation =
+        Tween<double>(begin: _currentBearing, end: _targetBearing).animate(
+          CurvedAnimation(parent: _animController!, curve: Curves.easeOutCubic),
+        );
 
     // Listen to animation updates (called at ~60fps)
     _animController!.addListener(_onAnimationTick);
@@ -186,7 +177,11 @@ class SmoothCameraController {
   /// Called at ~60fps during animation to update camera position.
   void _onAnimationTick() {
     if (_isDisposed) return;
-    if (_latAnimation == null || _lngAnimation == null || _bearingAnimation == null) return;
+    if (_latAnimation == null ||
+        _lngAnimation == null ||
+        _bearingAnimation == null) {
+      return;
+    }
 
     // Update current position from animation values
     _currentLat = _latAnimation!.value;
@@ -250,11 +245,8 @@ class SmoothCameraController {
     );
   }
 
-  ({double latitude, double longitude, double bearing}) get currentPosition => (
-    latitude: _currentLat,
-    longitude: _currentLng,
-    bearing: _currentBearing,
-  );
+  ({double latitude, double longitude, double bearing}) get currentPosition =>
+      (latitude: _currentLat, longitude: _currentLng, bearing: _currentBearing);
 
   bool get isInitialized => _initialized;
   bool get isAnimating => _isAnimating;
