@@ -66,22 +66,65 @@ flutter test --coverage                   # Run with coverage
 
 ```
 lib/
-├── main.dart              # App entry, provider setup
-├── config/                # Configuration (Mapbox tokens, etc.)
-├── models/                # Data classes (RunSession, HexModel, Team)
+├── main.dart              # App entry, Provider setup
+├── config/
+│   └── mapbox_config.dart # Mapbox API configuration
+├── models/
 │   ├── team.dart          # Team enum with multiplier
 │   ├── user_model.dart    # User with seasonPoints
 │   ├── hex_model.dart     # Hex with lastRunnerTeam only
 │   ├── crew_model.dart    # Crew with isPurple/multiplier/maxMembers
-│   ├── run_session.dart   # Run data (Firestore optimized)
-│   └── daily_running_stat.dart # Daily stats (Cold/Warm data)
-├── providers/             # State management (ChangeNotifier classes)
-├── screens/               # Full-page UI widgets
-├── services/              # Business logic (LocationService, HexService)
-├── storage/               # Local persistence
-├── theme/                 # AppTheme, colors, typography
-├── utils/                 # Utility functions (ImageUtils)
-└── widgets/               # Reusable UI components
+│   ├── run_session.dart   # Active run session data
+│   ├── run_summary.dart   # Lightweight run summary for history
+│   ├── daily_running_stat.dart # Daily stats (Cold/Warm data)
+│   ├── location_point.dart # GPS point (active run)
+│   ├── route_point.dart   # Compact route point (cold storage)
+│   └── district_model.dart # Electoral district model
+├── providers/
+│   ├── app_state_provider.dart  # Global app state (team, user)
+│   ├── run_provider.dart        # Run lifecycle & hex capture
+│   ├── crew_provider.dart       # Crew management
+│   └── hex_data_provider.dart   # Hex data cache & state
+├── screens/
+│   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
+│   ├── map_screen.dart          # Hex territory exploration
+│   ├── running_screen.dart      # Pre-run & active run tracking
+│   ├── crew_screen.dart         # Crew management
+│   ├── leaderboard_screen.dart  # Rankings
+│   ├── run_history_screen.dart  # Past runs (Calendar)
+│   ├── results_screen.dart      # Election-style results
+│   └── team_selection_screen.dart # Onboarding
+├── services/
+│   ├── hex_service.dart           # H3 hex grid operations
+│   ├── location_service.dart      # GPS tracking
+│   ├── run_tracker.dart           # Run session & hex capture engine
+│   ├── gps_validator.dart         # Anti-spoofing
+│   ├── storage_service.dart       # Storage interface (abstract)
+│   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
+│   ├── local_storage_service.dart # SharedPreferences helpers
+│   ├── points_service.dart        # Flip points & settlement
+│   ├── season_service.dart        # 280-day season countdown
+│   ├── running_score_service.dart # Pace validation for capture
+│   └── data_manager.dart          # Hot/Cold data separation
+├── storage/
+│   └── local_storage.dart   # SQLite implementation
+├── theme/
+│   ├── app_theme.dart       # Colors, typography, animations
+│   └── neon_theme.dart      # Neon accent colors (used by route_map)
+├── utils/
+│   ├── image_utils.dart     # Location marker generation
+│   ├── route_optimizer.dart # Ring buffer + Douglas-Peucker
+│   └── lru_cache.dart       # LRU cache for hex data
+└── widgets/
+    ├── hexagon_map.dart           # Hex grid overlay
+    ├── route_map.dart             # Route display + navigation mode
+    ├── smooth_camera_controller.dart # 60fps camera interpolation
+    ├── glowing_location_marker.dart  # Team-colored pulsing marker
+    ├── flip_points_widget.dart    # Animated flip counter (header)
+    ├── season_countdown_widget.dart  # D-day countdown badge
+    ├── energy_hold_button.dart    # Hold-to-trigger button
+    ├── stat_card.dart             # Statistics card
+    └── neon_stat_card.dart        # Neon-styled stat card
 ```
 
 ---

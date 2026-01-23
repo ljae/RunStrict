@@ -182,7 +182,7 @@ class _MapScreenState extends State<MapScreen> {
       case 1:
         return 12.0; // CITY
       case 2:
-        return 9.0; // ALL
+        return 11.0; // ALL
       default:
         return 12.0;
     }
@@ -403,58 +403,20 @@ class _TeamStatsOverlay extends StatelessWidget {
     final purplePercent = (stats.purpleCount / total * 100).round();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: AppTheme.surfaceColor.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header
-          Row(
-            children: [
-              const Icon(
-                Icons.insights_rounded,
-                color: AppTheme.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'TERRITORY STATUS',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 2,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '$total HEXES',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Progress bar showing territory distribution
+          // Territory distribution bar
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(2),
             child: SizedBox(
-              height: 12,
+              height: 4,
               child: Row(
                 children: [
                   if (stats.redCount > 0)
@@ -481,79 +443,76 @@ class _TeamStatsOverlay extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Team counts
+          const SizedBox(height: 10),
+          // Inline team percentages + total hex count
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _TeamStatItem(
-                emoji: '🔴',
-                label: 'RED',
-                count: stats.redCount,
-                percent: redPercent,
-                color: AppTheme.athleticRed,
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppTheme.athleticRed,
+                  shape: BoxShape.circle,
+                ),
               ),
-              _TeamStatItem(
-                emoji: '🔵',
-                label: 'BLUE',
-                count: stats.blueCount,
-                percent: bluePercent,
-                color: AppTheme.electricBlue,
+              const SizedBox(width: 5),
+              Text(
+                '$redPercent%',
+                style: GoogleFonts.sora(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.athleticRed,
+                ),
               ),
-              _TeamStatItem(
-                emoji: '🟣',
-                label: 'PURPLE',
-                count: stats.purpleCount,
-                percent: purplePercent,
-                color: const Color(0xFF8B5CF6),
+              const SizedBox(width: 14),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppTheme.electricBlue,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '$bluePercent%',
+                style: GoogleFonts.sora(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.electricBlue,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF8B5CF6),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '$purplePercent%',
+                style: GoogleFonts.sora(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF8B5CF6),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$total hexes',
+                style: GoogleFonts.sora(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: AppTheme.textSecondary,
+                ),
               ),
             ],
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TeamStatItem extends StatelessWidget {
-  final String emoji;
-  final String label;
-  final int count;
-  final int percent;
-  final Color color;
-
-  const _TeamStatItem({
-    required this.emoji,
-    required this.label,
-    required this.count,
-    required this.percent,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
-        const SizedBox(height: 4),
-        Text(
-          '$count',
-          style: GoogleFonts.outfit(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          '$percent%',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -569,64 +528,45 @@ class _ZoomLevelSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      (icon: Icons.holiday_village, label: 'ZONE'), // Zoom 15
-      (icon: Icons.location_city, label: 'CITY'), // Zoom 12
-      (icon: Icons.public, label: 'ALL'), // Zoom 9
+    final icons = [
+      Icons.grid_view_rounded, // Close/ZONE
+      Icons.location_city_rounded, // Medium/CITY
+      Icons.public_rounded, // Far/ALL
     ];
 
     return Container(
-      height: 56,
-      padding: const EdgeInsets.all(4),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: AppTheme.surfaceColor.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Row(
-        children: List.generate(items.length, (index) {
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(icons.length, (index) {
           final isActive = index == selectedIndex;
-          final item = items[index];
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
+          return GestureDetector(
+            onTap: () => onChanged(index),
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive
+                    ? AppTheme.electricBlue.withOpacity(0.2)
+                    : Colors.transparent,
+              ),
+              child: Center(
+                child: Icon(
+                  icons[index],
+                  size: 18,
                   color: isActive
-                      ? AppTheme.electricBlue.withOpacity(0.15)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  border: isActive
-                      ? Border.all(
-                          color: AppTheme.electricBlue.withOpacity(0.5),
-                        )
-                      : null,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      item.icon,
-                      size: 16,
-                      color: isActive
-                          ? AppTheme.electricBlue
-                          : AppTheme.textSecondary,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.label,
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: isActive
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: isActive
-                            ? AppTheme.textPrimary
-                            : AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
+                      ? AppTheme.textPrimary
+                      : AppTheme.textSecondary,
                 ),
               ),
             ),
@@ -642,72 +582,126 @@ class _CallToActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.electricBlue.withOpacity(0.15),
-            AppTheme.backgroundStart,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return GestureDetector(
+      onTap: () {},
+      child: Container(
+        height: 80,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.06)),
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.electricBlue.withOpacity(0.3)),
-        boxShadow: AppTheme.glowShadow(AppTheme.electricBlue, intensity: 0.2),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.electricBlue.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.timer_outlined,
-              color: AppTheme.electricBlue,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Run to flip this zone!',
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                Text(
-                  '2.3km gap • Ends in 4h',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.electricBlue,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        child: Row(
+          children: [
+            // Product image
+            SizedBox(
+              width: 90,
+              height: 80,
+              child: Image.asset(
+                'assets/images/nike_air_zoom.png',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: const Color(0xFF1A1A1A),
+                    child: const Center(
+                      child: Icon(
+                        Icons.directions_run_rounded,
+                        color: Color(0xFF333333),
+                        size: 32,
+                      ),
+                    ),
+                  );
+                },
               ),
-              shadowColor: AppTheme.electricBlue.withOpacity(0.5),
             ),
-            child: const Icon(Icons.arrow_forward_rounded, size: 20),
-          ),
-        ],
+            const SizedBox(width: 14),
+            // Ad content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'NIKE',
+                          style: GoogleFonts.sora(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textSecondary,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Air Zoom G.T.',
+                          style: GoogleFonts.sora(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF4500).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '25% OFF',
+                            style: GoogleFonts.sora(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFFF4500),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Members Only',
+                          style: GoogleFonts.sora(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '350m away \u2022 Nike Gangnam',
+                      style: GoogleFonts.sora(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.textMuted,
+                size: 18,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

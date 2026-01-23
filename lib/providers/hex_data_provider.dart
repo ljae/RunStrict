@@ -16,8 +16,9 @@ class HexDataProvider with ChangeNotifier {
   static const int maxCacheSize = 500;
 
   // LRU cache for memory efficiency
-  final LruCache<String, HexModel> _hexCache =
-      LruCache<String, HexModel>(maxSize: maxCacheSize);
+  final LruCache<String, HexModel> _hexCache = LruCache<String, HexModel>(
+    maxSize: maxCacheSize,
+  );
 
   // Shared user location for synchronization between screens
   LatLng? _userLocation;
@@ -71,6 +72,18 @@ class HexDataProvider with ChangeNotifier {
     final cached = _hexCache.get(hexId);
     if (cached != null) return cached;
 
+    // Check if this hex was captured this session (survives LRU eviction)
+    final capturedTeam = _capturedHexTeams[hexId];
+    if (capturedTeam != null) {
+      final hex = HexModel(
+        id: hexId,
+        center: center,
+        lastRunnerTeam: capturedTeam,
+      );
+      _hexCache.put(hexId, hex);
+      return hex;
+    }
+
     // Create new hex with simulated last runner based on hash
     final hash = hexId.hashCode;
     final random = Random(hash);
@@ -90,11 +103,7 @@ class HexDataProvider with ChangeNotifier {
       lastRunner = Team.purple;
     }
 
-    final hex = HexModel(
-      id: hexId,
-      center: center,
-      lastRunnerTeam: lastRunner,
-    );
+    final hex = HexModel(id: hexId, center: center, lastRunnerTeam: lastRunner);
     _hexCache.put(hexId, hex);
     return hex;
   }
@@ -102,6 +111,10 @@ class HexDataProvider with ChangeNotifier {
   /// Track hexes that have been captured by the runner during this session
   /// This ensures proper flip counting even when hex simulation assigns same team
   final Set<String> _capturedHexesThisSession = {};
+
+  /// Persistent team colors for captured hexes (survives LRU eviction)
+  /// Key: hexId, Value: team color set by the runner
+  final Map<String, Team> _capturedHexTeams = {};
 
   /// Update hex with runner's color
   /// Returns true if the color actually changed (flipped) or first capture this session
@@ -124,17 +137,21 @@ class HexDataProvider with ChangeNotifier {
       // Hex exists in cache - check if color changes
       if (existing.lastRunnerTeam != newTeam) {
         debugPrint(
-            'HEX FLIPPED: $hexId from ${existing.lastRunnerTeam} -> $newTeam');
+          'HEX FLIPPED: $hexId from ${existing.lastRunnerTeam} -> $newTeam',
+        );
         _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: newTeam));
         _capturedHexesThisSession.add(hexId);
+        _capturedHexTeams[hexId] = newTeam;
         notifyListeners();
         return true; // Color changed (flipped)
       }
       // Same team as current owner
       // Still counts as a "capture" for first visit, but no color change
-      // For flip points: only count if it's genuinely a NEW capture this session
-      debugPrint('HEX SAME TEAM: $hexId already $newTeam (first capture this session)');
+      debugPrint(
+        'HEX SAME TEAM: $hexId already $newTeam (first capture this session)',
+      );
       _capturedHexesThisSession.add(hexId);
+      _capturedHexTeams[hexId] = newTeam;
       return true; // First capture this session counts for points
     } else {
       // Hex not in cache - create it with the runner's color
@@ -145,6 +162,7 @@ class HexDataProvider with ChangeNotifier {
           HexModel(id: hexId, center: hexCenter, lastRunnerTeam: newTeam),
         );
         _capturedHexesThisSession.add(hexId);
+        _capturedHexTeams[hexId] = newTeam;
         debugPrint('HEX CREATED & CAPTURED: $hexId -> $newTeam');
         notifyListeners();
         return true; // New hex, counts as capture
@@ -158,6 +176,7 @@ class HexDataProvider with ChangeNotifier {
   /// Clear captured hexes (call when run ends or new run starts)
   void clearCapturedHexes() {
     _capturedHexesThisSession.clear();
+    _capturedHexTeams.clear();
     debugPrint('HexDataProvider: Cleared captured hexes for new session');
   }
 
@@ -197,6 +216,8 @@ class HexDataProvider with ChangeNotifier {
   /// Clear all hex data (for season reset / The Void)
   void clearAllHexData() {
     _hexCache.clear();
+    _capturedHexesThisSession.clear();
+    _capturedHexTeams.clear();
     debugPrint('HexDataProvider: All hex data cleared (The Void)');
     notifyListeners();
   }

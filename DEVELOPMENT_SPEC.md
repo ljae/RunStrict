@@ -2,7 +2,7 @@
 
 ## Quick Reference for Development
 
-**Last Updated**: 2026-01-22 (RunningScreen unified - ActiveRunScreen deleted)  
+**Last Updated**: 2026-01-23 (FlipPoints moved to header, GPS timeout fix, doc sync)  
 **App Name**: RunStrict (Project Code: 280-Journey)  
 **Current Season Status**: D-280 (Pre-season)
 
@@ -102,26 +102,29 @@ shimmer: ^3.0.0
 
 ```
 lib/
-├── main.dart                    # App entry point
+├── main.dart                    # App entry point, Provider setup
 ├── config/
 │   └── mapbox_config.dart       # Mapbox API configuration
 ├── models/
 │   ├── team.dart                # Team enum (red/blue/purple)
 │   ├── user_model.dart          # User data model
-│   ├── hex_model.dart           # Hex tile model with state
-│   ├── crew_model.dart          # Crew & CrewMember models
+│   ├── hex_model.dart           # Hex tile model (lastRunnerTeam only)
+│   ├── crew_model.dart          # Crew with isPurple/multiplier/maxMembers
 │   ├── district_model.dart      # Electoral district model
-│   ├── run_session.dart         # Running session data
-│   └── location_point.dart      # GPS point model
+│   ├── run_session.dart         # Active run session data
+│   ├── run_summary.dart         # Lightweight run summary for history
+│   ├── daily_running_stat.dart  # Daily stats (Cold/Warm data)
+│   ├── location_point.dart      # GPS point model (active run)
+│   └── route_point.dart         # Compact route point (cold storage)
 ├── providers/
-│   ├── app_state_provider.dart  # Global app state
-│   ├── running_provider.dart    # Running session state
+│   ├── app_state_provider.dart  # Global app state (team, user)
+│   ├── run_provider.dart        # Run lifecycle & hex capture
 │   ├── crew_provider.dart       # Crew management state
-│   └── run_provider.dart        # Run data state
+│   └── hex_data_provider.dart   # Hex data cache & state
 ├── screens/
 │   ├── team_selection_screen.dart
-│   ├── home_screen.dart         # Main navigation hub
-│   ├── map_screen.dart          # Hex map view
+│   ├── home_screen.dart         # Main navigation hub + AppBar
+│   ├── map_screen.dart          # Hex map exploration view
 │   ├── running_screen.dart      # Run screen (pre-run & active tracking)
 │   ├── results_screen.dart      # Election-style results
 │   ├── crew_screen.dart         # Crew management
@@ -130,19 +133,34 @@ lib/
 ├── services/
 │   ├── hex_service.dart         # H3 hex grid operations
 │   ├── location_service.dart    # GPS tracking
-│   ├── run_tracker.dart         # Run session management
+│   ├── run_tracker.dart         # Run session management & hex capture
 │   ├── gps_validator.dart       # Anti-spoofing validation
-│   └── storage_service.dart     # Local storage operations
+│   ├── storage_service.dart     # Storage interface (abstract)
+│   ├── in_memory_storage_service.dart # In-memory storage (MVP/testing)
+│   ├── local_storage_service.dart # SharedPreferences (last location, etc.)
+│   ├── points_service.dart      # Flip points tracking & settlement
+│   ├── season_service.dart      # 280-day season countdown
+│   ├── running_score_service.dart # Pace validation for hex capture
+│   └── data_manager.dart        # Hot/Cold data separation manager
+├── storage/
+│   └── local_storage.dart       # SQLite implementation (runs, routes)
 ├── theme/
 │   ├── app_theme.dart           # Main theme configuration
 │   ├── broadcast_theme.dart     # Election broadcast styling
 │   ├── cyberpunk_theme.dart     # Alternative theme
 │   └── neon_theme.dart          # Neon accent theme
 ├── utils/
-│   └── image_utils.dart         # Location marker generation
+│   ├── image_utils.dart         # Location marker generation
+│   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker for routes
+│   └── lru_cache.dart           # LRU cache for hex data
 └── widgets/
     ├── hexagon_map.dart         # Hex grid overlay widget
-    ├── route_map.dart           # Running route display
+    ├── route_map.dart           # Running route display + navigation mode
+    ├── smooth_camera_controller.dart # 60fps camera interpolation
+    ├── glowing_location_marker.dart  # Team-colored pulsing marker
+    ├── flip_points_widget.dart  # Animated flip counter (header)
+    ├── season_countdown_widget.dart  # D-day countdown badge
+    ├── energy_hold_button.dart  # Hold-to-trigger action button
     ├── stat_card.dart           # Statistics card
     └── neon_stat_card.dart      # Neon-styled stat card
 ```
@@ -226,13 +244,16 @@ Purple Crews operate under a different economic law to incentivize betrayal.
 - **Purple Effect**: Purple tiles pulse slowly to indicate "Instability".
 
 ### 2. Running Screen (Pre-Run & Active Run)
-- **Pre-run state**: Shows map with hex grid, start button overlay
+- **Pre-run state**: Shows map with hex grid, pulsing hold-to-start button, "READY" indicator
 - **Active run state**: 
   - Glowing ball (user location) moving forward
   - Map rotates based on direction of movement (navigation mode)
-  - Car navigation style (camera view from behind)
+  - Car navigation style (60fps smooth camera interpolation via SmoothCameraController)
   - Tracing line draws the running path
-  - Stats overlay (distance, time, pace, flips)
+  - Stats overlay: distance, time, pace
+  - Top bar shows "RUNNING" + team-colored pulsing dot
+  - **Flip points shown in header AppBar** (not in running screen) with team-colored glow animation on each flip
+  - Hold-to-stop button (1.5s hold, no confirmation dialog)
 
 ### 3. Leaderboard Screen
 - **Filters**: Tabs for [ALL] / [RED] / [BLUE] / [PURPLE].
@@ -247,7 +268,6 @@ Purple Crews operate under a different economic law to incentivize betrayal.
 - **Stats**: Total km, Avg Pace, Total Time.
 
 ### 5. Results Screen
-- Election-style broadcast presentation
 - Real-time territory flip animations
 - District-by-district breakdown
 
@@ -421,7 +441,7 @@ bool canCaptureHex({required double paceMinPerKm}) {
 | Feature | Sub-feature | Status | Notes |
 |---------|-------------|--------|-------|
 | **Crew Economy** | Top 4 winner system | ⬜ TODO | Winner-Takes-All |
-| | Flip point tracking | ⬜ TODO | |
+| | Flip point tracking | ✅ Done | points_service.dart |
 | | 12:00 PM settlement | ⬜ TODO | Background worker |
 | **Advanced Hex** | Contested zones | ✅ Done | In HexState |
 | | District aggregation | ⬜ TODO | |
@@ -623,6 +643,16 @@ English:
     * `running_screen.dart`가 Pre-run 및 Active run 상태를 모두 처리
     * 단일 화면에서 시작 전/러닝 중 UI 전환
     * Navigation mode (베어링 추적) 기능 포함
+
+8.  **FlipPoints 헤더 이동 & 카메라 수정 (2026-01-23)**:
+    * `FlipPointsWidget`을 Running Screen에서 제거, AppBar 헤더에서만 표시
+    * 플립 포인트 획득 시 팀 컬러 글로우 + 스케일 바운스 애니메이션 추가 (peripheral vision에 눈에 띄게)
+    * Running Screen 상단 바: "RUNNING" + pulsing dot (러닝 중), "READY" (대기 중)
+    * 러닝 종료 확인 다이얼로그 제거 (hold-to-stop 버튼이 확인 역할)
+    * MapScreen GPS TimeoutException 처리 개선 (캐시 위치 폴백)
+    * `easeTo` 카메라 애니메이션을 fire-and-forget으로 변경 (타임아웃 방지)
+    * RunHistoryScreen stat card overflow 수정 (`FittedBox` 적용)
+    * Directory structure에 새 서비스/위젯 반영 (points_service, season_service, smooth_camera_controller 등)
 
 ---
 
