@@ -27,9 +27,6 @@ class RunSession {
   // Flip tracking
   int hexesColored; // Live flip count
 
-  // Pause tracking
-  int pauseCount; // Number of times the run was paused
-
   // Transient state (not persisted)
   String? currentHexId;
   double distanceInCurrentHex;
@@ -44,7 +41,6 @@ class RunSession {
     required this.teamAtRun,
     this.isPurpleRunner = false,
     this.hexesColored = 0,
-    this.pauseCount = 0,
     this.currentHexId,
     this.distanceInCurrentHex = 0,
   }) : route = route ?? [];
@@ -124,7 +120,6 @@ class RunSession {
   RunSession copyWith({
     double? distanceMeters,
     int? hexesColored,
-    int? pauseCount,
     String? currentHexId,
     double? distanceInCurrentHex,
   }) {
@@ -138,7 +133,6 @@ class RunSession {
       teamAtRun: teamAtRun,
       isPurpleRunner: isPurpleRunner,
       hexesColored: hexesColored ?? this.hexesColored,
-      pauseCount: pauseCount ?? this.pauseCount,
       currentHexId: currentHexId ?? this.currentHexId,
       distanceInCurrentHex: distanceInCurrentHex ?? this.distanceInCurrentHex,
     );
@@ -159,12 +153,8 @@ class RunSession {
     hexesColored++;
   }
 
-  /// Increment pause count
-  void recordPause() {
-    pauseCount++;
-  }
-
   @override
   String toString() =>
-      'RunSession(id: $id, distance: ${distanceKm.toStringAsFixed(2)}km, flips: $hexesColored, active: $isActive)';
+      'RunSession(id: $id, distance: ${distanceKm.toStringAsFixed(2)}km, '
+      'flips: $hexesColored, active: $isActive)';
 }

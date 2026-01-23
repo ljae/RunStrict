@@ -16,7 +16,10 @@ typedef HexCaptureCallback =
 typedef TierChangeCallback =
     void Function(ImpactTier oldTier, ImpactTier newTier);
 
-/// Service responsible for tracking runs, calculating distance, and applying anti-spoofing
+/// Service responsible for tracking runs, calculating distance,
+/// and applying anti-spoofing.
+///
+/// Simple two-state lifecycle: start → stop.
 class RunTracker {
   // Debug mode for simulator testing - set to true to allow higher speeds
   static const bool _debugMode = true;
@@ -37,13 +40,6 @@ class RunTracker {
   LocationPoint? _lastValidPoint;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
-  // Flag: skip distance calculation on first point after resume.
-  // Prevents ghost distance from stale _lastValidPoint to new location.
-  bool _skipNextDistanceCalc = false;
-
-  // Segment counter: increments on each resume to mark pause boundaries.
-  int _currentSegment = 0;
-
   // Hex scoring integration
   final HexService _hexService = HexService();
   HexCaptureCallback? _onHexCapture;
@@ -52,7 +48,7 @@ class RunTracker {
   bool _isPurpleRunner = false;
   int _crewMembersCoRunning = 1;
   ImpactTier _currentTier = ImpactTier.starter;
-  int _maxImpactTierIndex = 0; // Track max tier locally
+  int _maxImpactTierIndex = 0;
 
   /// Get the current active run session
   RunSession? get currentRun => _currentRun;
@@ -117,7 +113,7 @@ class RunTracker {
       startTime: DateTime.now(),
       distanceMeters: 0,
       isActive: true,
-      teamAtRun: team ?? Team.blue, // Default to blue if not specified
+      teamAtRun: team ?? Team.blue,
       isPurpleRunner: isPurpleRunner,
       hexesColored: 0,
     );
@@ -140,9 +136,8 @@ class RunTracker {
 
     // First point - record it and attempt to capture starting hex
     if (_lastValidPoint == null) {
-      final taggedPoint = point.copyWith(segmentIndex: _currentSegment);
-      _lastValidPoint = taggedPoint;
-      _currentRun!.addPoint(taggedPoint);
+      _lastValidPoint = point;
+      _currentRun!.addPoint(point);
       _currentRun!.currentHexId = currentHexId;
       _currentRun!.distanceInCurrentHex = 0;
 
@@ -158,30 +153,11 @@ class RunTracker {
         if (flipped) {
           _currentRun!.recordFlip();
           debugPrint(
-            'STARTING HEX CAPTURED! hexId=$currentHexId, Total flips: ${_currentRun!.hexesColored}',
+            'STARTING HEX CAPTURED! hexId=$currentHexId, '
+            'Total flips: ${_currentRun!.hexesColored}',
           );
         }
       }
-      return;
-    }
-
-    // Resume gap handling: first point after pause is used as new anchor.
-    // Skip distance calculation to avoid ghost distance from stale position.
-    if (_skipNextDistanceCalc) {
-      _skipNextDistanceCalc = false;
-      final taggedPoint = point.copyWith(segmentIndex: _currentSegment);
-      _lastValidPoint = taggedPoint;
-      _currentRun!.addPoint(taggedPoint);
-      // Update hex ID without triggering capture (just position awareness)
-      _currentRun!.currentHexId = _hexService.getHexId(
-        LatLng(point.latitude, point.longitude),
-        _hexResolution,
-      );
-      _currentRun!.distanceInCurrentHex = 0;
-      debugPrint(
-        'RunTracker: Resume anchor set at (${point.latitude.toStringAsFixed(5)}, '
-        '${point.longitude.toStringAsFixed(5)})',
-      );
       return;
     }
 
@@ -216,15 +192,15 @@ class RunTracker {
     final previousHexId = _currentRun!.currentHexId;
 
     if (previousHexId != currentHexId) {
-      // Transitioning to a new hex - IMMEDIATELY attempt capture on entry
+      // Transitioning to a new hex - attempt capture on entry
       debugPrint('Hex transition: $previousHexId -> $currentHexId');
 
-      // Attempt capture on hex ENTRY (not waiting for 20m)
       if (_runnerTeam != null) {
         final pace = _currentRun!.averagePaceMinPerKm;
         final canCapture = RunningScoreService.canCapture(pace);
         debugPrint(
-          'Hex ENTRY capture check: hexId=$currentHexId, pace=${pace.toStringAsFixed(1)}, canCapture=$canCapture',
+          'Hex ENTRY capture check: hexId=$currentHexId, '
+          'pace=${pace.toStringAsFixed(1)}, canCapture=$canCapture',
         );
 
         if (canCapture) {
@@ -236,14 +212,11 @@ class RunTracker {
               ) ??
               false;
 
-          debugPrint(
-            'Hex capture on ENTRY: hexId=$currentHexId, team=$_runnerTeam, flipped=$flipped',
-          );
-
           if (flipped) {
             _currentRun!.recordFlip();
             debugPrint(
-              'HEX FLIPPED ON ENTRY! Total flips: ${_currentRun!.hexesColored}',
+              'HEX FLIPPED ON ENTRY! '
+              'Total flips: ${_currentRun!.hexesColored}',
             );
           }
         }
@@ -255,18 +228,13 @@ class RunTracker {
       // Still in the same hex, accumulate distance
       _currentRun!.distanceInCurrentHex += distanceMeters;
 
-      // Check for capture every 20m while STAYING in the same hex
-      // This handles the case where runner stays in one hex for a long time
+      // Check for capture every 20m while staying in the same hex
       if (_runnerTeam != null &&
           _currentRun!.distanceInCurrentHex >= _captureCheckDistanceMeters) {
         final pace = _currentRun!.averagePaceMinPerKm;
         final canCapture = RunningScoreService.canCapture(pace);
-        debugPrint(
-          'Hex STAY capture check: hexId=$currentHexId, distance=${_currentRun!.distanceInCurrentHex.toStringAsFixed(1)}m, pace=${pace.toStringAsFixed(1)}, canCapture=$canCapture',
-        );
 
         if (canCapture) {
-          // Attempt capture
           bool flipped =
               _onHexCapture?.call(
                 currentHexId,
@@ -275,30 +243,26 @@ class RunTracker {
               ) ??
               false;
 
-          debugPrint(
-            'Hex capture on STAY: hexId=$currentHexId, team=$_runnerTeam, flipped=$flipped',
-          );
-
           if (flipped) {
             _currentRun!.recordFlip();
             debugPrint(
-              'HEX FLIPPED ON STAY! Total flips: ${_currentRun!.hexesColored}',
+              'HEX FLIPPED ON STAY! '
+              'Total flips: ${_currentRun!.hexesColored}',
             );
           }
 
-          // Reset distance to avoid spamming capture calls every meter
+          // Reset distance to avoid spamming capture calls
           _currentRun!.distanceInCurrentHex = 0;
         }
       }
     }
 
     // Update run state
-    final taggedPoint = point.copyWith(segmentIndex: _currentSegment);
     _currentRun!.updateDistance(newTotalDistance);
-    _currentRun!.addPoint(taggedPoint);
+    _currentRun!.addPoint(point);
     _currentRun!.currentHexId = currentHexId;
 
-    _lastValidPoint = taggedPoint;
+    _lastValidPoint = point;
   }
 
   /// Anti-spoofing: Validate if a location point is legitimate
@@ -306,14 +270,14 @@ class RunTracker {
     // Skip anti-spoofing checks in debug mode for simulator testing
     if (_debugMode) return true;
 
-    // Check 1: Speed filter (max 25 km/h)
+    // Check 1: Speed filter
     final timeDiffSeconds = current.timestamp
         .difference(last.timestamp)
         .inSeconds;
-    if (timeDiffSeconds == 0) return false; // Duplicate timestamp
+    if (timeDiffSeconds == 0) return false;
 
     final distanceMeters = _calculateDistance(last, current);
-    final speedKmh = (distanceMeters / timeDiffSeconds) * 3.6; // m/s to km/h
+    final speedKmh = (distanceMeters / timeDiffSeconds) * 3.6;
 
     if (speedKmh > _maxSpeedKmh) {
       // ignore: avoid_print
@@ -321,7 +285,7 @@ class RunTracker {
       return false;
     }
 
-    // Check 2: Teleport detection (max 1km instant jump)
+    // Check 2: Teleport detection
     if (distanceMeters > _maxTeleportMeters) {
       // ignore: avoid_print
       print('Teleport detected: ${distanceMeters.toStringAsFixed(2)}m');
@@ -369,28 +333,10 @@ class RunTracker {
     _locationSubscription = null;
     _currentRun = null;
     _lastValidPoint = null;
-    _skipNextDistanceCalc = false;
-    _currentSegment = 0;
     _currentTier = ImpactTier.starter;
     _maxImpactTierIndex = 0;
 
     return completedRun;
-  }
-
-  /// Pause tracking (keeps run active but stops processing updates).
-  /// No tracing or flipping occurs while paused.
-  void pauseTracking() {
-    _locationSubscription?.pause();
-  }
-
-  /// Resume tracking after pause.
-  /// Sets flag to skip distance calculation on next point, preventing
-  /// ghost distance from the stale pause position to current location.
-  /// Increments segment counter so new points belong to a new segment.
-  void resumeTracking() {
-    _skipNextDistanceCalc = true;
-    _currentSegment++;
-    _locationSubscription?.resume();
   }
 
   /// Clean up resources

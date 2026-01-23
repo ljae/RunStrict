@@ -49,8 +49,7 @@ class RunSummary {
   }) {
     final durationSeconds = endTime.difference(startTime).inSeconds;
     final distanceKm = distanceMeters / 1000;
-    final avgPaceSecPerKm =
-        distanceKm > 0 ? durationSeconds / distanceKm : 0.0;
+    final avgPaceSecPerKm = distanceKm > 0 ? durationSeconds / distanceKm : 0.0;
 
     return RunSummary(
       id: id,
@@ -67,41 +66,40 @@ class RunSummary {
 
   /// SQLite serialization (minimal)
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'startTime': startTime.millisecondsSinceEpoch,
-        'endTime': endTime.millisecondsSinceEpoch,
-        'distanceKm': distanceKm,
-        'durationSeconds': durationSeconds,
-        'avgPaceSecPerKm': avgPaceSecPerKm,
-        'hexesColored': hexesColored,
-        'teamAtRun': teamAtRun.name,
-        'isPurpleRunner': isPurpleRunner ? 1 : 0,
-      };
+    'id': id,
+    'startTime': startTime.millisecondsSinceEpoch,
+    'endTime': endTime.millisecondsSinceEpoch,
+    'distanceKm': distanceKm,
+    'durationSeconds': durationSeconds,
+    'avgPaceSecPerKm': avgPaceSecPerKm,
+    'hexesColored': hexesColored,
+    'teamAtRun': teamAtRun.name,
+    'isPurpleRunner': isPurpleRunner ? 1 : 0,
+  };
 
   factory RunSummary.fromMap(Map<String, dynamic> map) => RunSummary(
-        id: map['id'] as String,
-        startTime:
-            DateTime.fromMillisecondsSinceEpoch(map['startTime'] as int),
-        endTime: DateTime.fromMillisecondsSinceEpoch(map['endTime'] as int),
-        distanceKm: (map['distanceKm'] as num).toDouble(),
-        durationSeconds: (map['durationSeconds'] as num).toInt(),
-        avgPaceSecPerKm: (map['avgPaceSecPerKm'] as num).toDouble(),
-        hexesColored: (map['hexesColored'] as num).toInt(),
-        teamAtRun: Team.values.byName(map['teamAtRun'] as String),
-        isPurpleRunner: (map['isPurpleRunner'] as int) == 1,
-      );
+    id: map['id'] as String,
+    startTime: DateTime.fromMillisecondsSinceEpoch(map['startTime'] as int),
+    endTime: DateTime.fromMillisecondsSinceEpoch(map['endTime'] as int),
+    distanceKm: (map['distanceKm'] as num).toDouble(),
+    durationSeconds: (map['durationSeconds'] as num).toInt(),
+    avgPaceSecPerKm: (map['avgPaceSecPerKm'] as num).toDouble(),
+    hexesColored: (map['hexesColored'] as num).toInt(),
+    teamAtRun: Team.values.byName(map['teamAtRun'] as String),
+    isPurpleRunner: (map['isPurpleRunner'] as int) == 1,
+  );
 
   /// Firestore serialization
   Map<String, dynamic> toFirestore() => {
-        'startTime': startTime.toIso8601String(),
-        'endTime': endTime.toIso8601String(),
-        'distanceKm': distanceKm,
-        'durationSeconds': durationSeconds,
-        'avgPaceSecPerKm': avgPaceSecPerKm,
-        'hexesColored': hexesColored,
-        'teamAtRun': teamAtRun.name,
-        'isPurpleRunner': isPurpleRunner,
-      };
+    'startTime': startTime.toIso8601String(),
+    'endTime': endTime.toIso8601String(),
+    'distanceKm': distanceKm,
+    'durationSeconds': durationSeconds,
+    'avgPaceSecPerKm': avgPaceSecPerKm,
+    'hexesColored': hexesColored,
+    'teamAtRun': teamAtRun.name,
+    'isPurpleRunner': isPurpleRunner,
+  };
 
   factory RunSummary.fromFirestore(String id, Map<String, dynamic> data) =>
       RunSummary(

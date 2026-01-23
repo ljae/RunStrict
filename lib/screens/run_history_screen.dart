@@ -42,17 +42,23 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             final periodRuns = _filterRunsByPeriod(allRuns, _selectedPeriod);
 
             // Calculate Stats
-            final totalDistance =
-                periodRuns.fold(0.0, (sum, run) => sum + run.distanceKm);
-            final totalPoints =
-                periodRuns.fold(0, (sum, run) => sum + run.pointsEarned);
+            final totalDistance = periodRuns.fold(
+              0.0,
+              (sum, run) => sum + run.distanceKm,
+            );
+            final totalPoints = periodRuns.fold(
+              0,
+              (sum, run) => sum + run.pointsEarned,
+            );
             final runCount = periodRuns.length;
 
             // Weighted average pace
             double avgPace = 0.0;
             if (totalDistance > 0) {
-              final totalSeconds =
-                  periodRuns.fold(0, (sum, run) => sum + run.duration.inSeconds);
+              final totalSeconds = periodRuns.fold(
+                0,
+                (sum, run) => sum + run.duration.inSeconds,
+              );
               final totalMinutes = totalSeconds / 60.0;
               avgPace = totalMinutes / totalDistance;
             }
@@ -137,19 +143,21 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                         periodRuns.isEmpty
                             ? SliverToBoxAdapter(child: _buildEmptyState())
                             : SliverPadding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 24),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
                                 sliver: SliverList(
-                                  delegate: SliverChildBuilderDelegate(
-                                    (context, index) {
-                                      return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 10),
-                                        child: _buildRunTile(periodRuns[index]),
-                                      );
-                                    },
-                                    childCount: periodRuns.length,
-                                  ),
+                                  delegate: SliverChildBuilderDelegate((
+                                    context,
+                                    index,
+                                  ) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
+                                      child: _buildRunTile(periodRuns[index]),
+                                    );
+                                  }, childCount: periodRuns.length),
                                 ),
                               ),
 
@@ -322,31 +330,34 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.sora(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: valueColor,
-                ),
-              ),
-              if (unit.isNotEmpty) ...[
-                const SizedBox(width: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
                 Text(
-                  unit,
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white38,
+                  value,
+                  style: GoogleFonts.sora(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: valueColor,
                   ),
                 ),
+                if (unit.isNotEmpty) ...[
+                  const SizedBox(width: 2),
+                  Text(
+                    unit,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white38,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -386,10 +397,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               ),
             ),
           ),
-          AspectRatio(
-            aspectRatio: 1.8,
-            child: _buildChart(runs, period),
-          ),
+          AspectRatio(aspectRatio: 1.8, child: _buildChart(runs, period)),
         ],
       ),
     );
@@ -448,7 +456,9 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   ? AppTheme.electricBlue
                   : Colors.white.withOpacity(0.05),
               width: period == HistoryPeriod.month ? 4 : 14,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(4),
+              ),
               backDrawRodData: BackgroundBarChartRodData(
                 show: true,
                 toY: maxY == 0 ? 10 : maxY * 1.2,
@@ -482,9 +492,15 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -498,10 +514,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: maxY > 0 ? maxY / 3 : 1,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.white.withOpacity(0.03),
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: Colors.white.withOpacity(0.03), strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         barGroups: barGroups,
@@ -554,9 +568,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             decoration: BoxDecoration(
               color: AppTheme.electricBlue.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.electricBlue.withOpacity(0.2),
-              ),
+              border: Border.all(color: AppTheme.electricBlue.withOpacity(0.2)),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -623,11 +635,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                         shape: BoxShape.circle,
                       ),
                     ),
-                    Icon(
-                      Icons.speed_rounded,
-                      size: 12,
-                      color: Colors.white30,
-                    ),
+                    Icon(Icons.speed_rounded, size: 12, color: Colors.white30),
                     const SizedBox(width: 4),
                     Text(
                       _formatPace(run.averagePaceMinPerKm),
@@ -696,18 +704,12 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             const SizedBox(height: 16),
             Text(
               'No runs yet',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                color: Colors.white38,
-              ),
+              style: GoogleFonts.inter(fontSize: 16, color: Colors.white38),
             ),
             const SizedBox(height: 8),
             Text(
               'Start running to track your progress',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: Colors.white24,
-              ),
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.white24),
             ),
           ],
         ),

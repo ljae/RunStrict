@@ -2,9 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/run_session.dart';
 import '../models/run_summary.dart';
-import '../models/route_point.dart';
 import '../models/location_point.dart';
-import '../models/team.dart';
 import '../services/storage_service.dart';
 
 /// SQLite implementation of StorageService for local data persistence
@@ -14,7 +12,7 @@ import '../services/storage_service.dart';
 /// - CompressedRoute in 'routes' table (cold storage, lazy loaded)
 class LocalStorage implements StorageService {
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 2;
+  static const int _databaseVersion = 3;
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -75,17 +73,33 @@ class LocalStorage implements StorageService {
       // Migrate from v1 to v2: add new columns
       try {
         await db.execute(
-            'ALTER TABLE $_tableRuns ADD COLUMN hexesColored INTEGER NOT NULL DEFAULT 0');
+          'ALTER TABLE $_tableRuns ADD COLUMN hexesColored INTEGER NOT NULL DEFAULT 0',
+        );
         await db.execute(
-            'ALTER TABLE $_tableRuns ADD COLUMN teamAtRun TEXT NOT NULL DEFAULT "blue"');
+          'ALTER TABLE $_tableRuns ADD COLUMN teamAtRun TEXT NOT NULL DEFAULT "blue"',
+        );
         await db.execute(
-            'ALTER TABLE $_tableRuns ADD COLUMN isPurpleRunner INTEGER NOT NULL DEFAULT 0');
+          'ALTER TABLE $_tableRuns ADD COLUMN isPurpleRunner INTEGER NOT NULL DEFAULT 0',
+        );
         await db.execute(
-            'ALTER TABLE $_tableRuns ADD COLUMN durationSeconds INTEGER NOT NULL DEFAULT 0');
+          'ALTER TABLE $_tableRuns ADD COLUMN durationSeconds INTEGER NOT NULL DEFAULT 0',
+        );
         await db.execute(
-            'ALTER TABLE $_tableRuns ADD COLUMN avgPaceSecPerKm REAL NOT NULL DEFAULT 0');
+          'ALTER TABLE $_tableRuns ADD COLUMN avgPaceSecPerKm REAL NOT NULL DEFAULT 0',
+        );
       } catch (e) {
         // Columns may already exist
+      }
+    }
+    if (oldVersion < 3) {
+      // Migrate from v2 to v3: add pauseCount column
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN '
+          'pauseCount INTEGER NOT NULL DEFAULT 0',
+        );
+      } catch (e) {
+        // Column may already exist
       }
     }
   }
@@ -191,7 +205,9 @@ class LocalStorage implements StorageService {
       return LocationPoint(
         latitude: map['lat'] as double,
         longitude: map['lng'] as double,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestampMs'] as int),
+        timestamp: DateTime.fromMillisecondsSinceEpoch(
+          map['timestampMs'] as int,
+        ),
       );
     }).toList();
   }
@@ -226,7 +242,8 @@ class LocalStorage implements StorageService {
 
     return {
       'totalRuns': result.first['totalRuns'] as int,
-      'totalDistance': (result.first['totalDistanceKm'] as num).toDouble() * 1000,
+      'totalDistance':
+          (result.first['totalDistanceKm'] as num).toDouble() * 1000,
       'totalHexes': result.first['totalHexes'] as int,
     };
   }
@@ -258,7 +275,8 @@ class LocalStorage implements StorageService {
     final startMs = seasonStart.millisecondsSinceEpoch;
     final endMs = seasonEnd.millisecondsSinceEpoch;
 
-    final result = await _database!.rawQuery('''
+    final result = await _database!.rawQuery(
+      '''
       SELECT
         COUNT(*) as totalRuns,
         COALESCE(SUM(distanceKm), 0) as totalDistanceKm,
@@ -266,14 +284,16 @@ class LocalStorage implements StorageService {
         COALESCE(SUM(durationSeconds), 0) as totalDuration
       FROM $_tableRuns
       WHERE startTime >= ? AND startTime <= ?
-    ''', [startMs, endMs]);
+    ''',
+      [startMs, endMs],
+    );
 
     if (result.isEmpty) {
       return {
         'totalRuns': 0,
         'totalDistanceKm': 0.0,
         'totalHexes': 0,
-        'totalDuration': 0
+        'totalDuration': 0,
       };
     }
 

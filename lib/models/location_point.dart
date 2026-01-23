@@ -10,8 +10,6 @@ class LocationPoint {
   final double? altitude; // Altitude in meters (optional)
   final double? heading; // Heading in degrees (optional)
   final bool isValid; // Whether this point passed anti-spoofing checks
-  final int
-  segmentIndex; // Running segment (increments after each pause/resume)
 
   LocationPoint({
     required this.latitude,
@@ -22,7 +20,6 @@ class LocationPoint {
     this.altitude,
     this.heading,
     this.isValid = true,
-    this.segmentIndex = 0,
   });
 
   /// Create LocationPoint from JSON
@@ -36,7 +33,6 @@ class LocationPoint {
       altitude: json['altitude'] as double?,
       heading: json['heading'] as double?,
       isValid: json['isValid'] as bool? ?? true,
-      segmentIndex: (json['segmentIndex'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -51,7 +47,6 @@ class LocationPoint {
       'altitude': altitude,
       'heading': heading,
       'isValid': isValid,
-      'segmentIndex': segmentIndex,
     };
   }
 
@@ -99,7 +94,6 @@ class LocationPoint {
     double? altitude,
     double? heading,
     bool? isValid,
-    int? segmentIndex,
   }) {
     return LocationPoint(
       latitude: latitude ?? this.latitude,
@@ -110,13 +104,12 @@ class LocationPoint {
       altitude: altitude ?? this.altitude,
       heading: heading ?? this.heading,
       isValid: isValid ?? this.isValid,
-      segmentIndex: segmentIndex ?? this.segmentIndex,
     );
   }
 
   @override
   String toString() {
     return 'LocationPoint(lat: $latitude, lng: $longitude, '
-        'time: $timestamp, segment: $segmentIndex, valid: $isValid)';
+        'time: $timestamp, valid: $isValid)';
   }
 }

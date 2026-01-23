@@ -12,33 +12,18 @@ import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
 
-/// Three distinct run states for the tracking system:
-/// - [stopped]: No active run. Tracing/flipping disabled. Run saved to history.
-/// - [running]: Active run. GPS tracing and hex flipping enabled.
-/// - [paused]: Temporary stop. No tracing/flipping. App kill → auto-save.
-enum RunState { stopped, running, paused }
-
-/// Provider for managing run state and coordinating services
+/// Provider for managing run state and coordinating services.
 ///
-/// Data Flow Architecture (Optimized for Real-time Updates):
+/// Two states only:
+/// - Ready: No active run. Waiting for user to start.
+/// - Running: Active run with GPS tracking, distance, and hex flipping.
 ///
+/// Data Flow:
 /// LocationService.locationStream
-///   → RunTracker._onLocationUpdate (processes point, updates RunSession)
-///   → RunProvider._locationSubscription (receives each point)
-///   → RunProvider.notifyListeners() (triggers UI rebuild)
-///   → RunningScreen rebuilds with new routeVersion
-///   → RouteMap.didUpdateWidget detects routeVersion change
-///   → Camera follows + Route line updates
-///
-/// Key Optimization: Use routeVersion counter instead of comparing list references
-///
-/// ## Run State Machine:
-/// stopped → running (startRun)
-/// running → paused (pauseRun)
-/// paused → running (resumeRun)
-/// running → stopped (stopRun) [saves to history]
-/// paused → stopped (stopRun or app kill) [saves to history]
-class RunProvider with ChangeNotifier, WidgetsBindingObserver {
+///   → RunTracker._onLocationUpdate (distance + hex capture)
+///   → RunProvider._locationSubscription (UI sync)
+///   → notifyListeners() → UI rebuild
+class RunProvider with ChangeNotifier {
   final LocationService _locationService;
   final RunTracker _runTracker;
   final StorageService _storageService;
@@ -51,7 +36,7 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
   String? _error;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
-  // Route version counter - increments on each new point for efficient change detection
+  // Route version counter - increments on each new point
   int _routeVersion = 0;
 
   RunProvider({
@@ -69,21 +54,15 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
     _pointsService = pointsService;
   }
 
-  // Run state
-  RunState _runState = RunState.stopped;
-
   // Getters
   RunSession? get activeRun => _activeRun;
   List<RunSession> get runHistory => _runHistory;
   Map<String, dynamic>? get totalStats => _totalStats;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  RunState get runState => _runState;
-  bool get isRunning => _runState == RunState.running;
-  bool get isActive => _runState != RunState.stopped;
-  bool get isPaused => _runState == RunState.paused;
+  bool get isRunning => _activeRun != null && _activeRun!.isActive;
 
-  // New state for timer and units
+  // Timer state
   Timer? _tickTimer;
   Duration _duration = Duration.zero;
   bool _isMetric = true;
@@ -91,22 +70,12 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
   bool get isMetric => _isMetric;
   Duration get duration => _duration;
 
-  /// Get current Speed in km/h or mph
-  /// Calculated from recent data (e.g. RunTracker should ideally provide instantaneous speed)
-  /// For now, we can calculate average speed or use instantaneous speed if available from tracker
+  /// Current speed in km/h or mph
   double get currentSpeed {
-    // If paused or not running, speed is 0
     if (!isRunning) return 0.0;
-
-    // Prefer instantaneous speed from tracker if possible, or calculate from pace
-    // _activeRun might update every location update.
-    // If we use average pace:
     final paceMinPerKm = _activeRun?.averagePaceMinPerKm ?? 0;
     if (paceMinPerKm <= 0 || paceMinPerKm.isInfinite) return 0.0;
-
-    // Speed (km/h) = 60 / pace (min/km)
     final speedKmh = 60 / paceMinPerKm;
-
     return _isMetric ? speedKmh : speedKmh * 0.621371;
   }
 
@@ -124,10 +93,8 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// Get current GPS signal quality
+  /// GPS signal quality
   GpsSignalQuality get signalQuality {
-    // In a real app, this would check accuracy from _locationService
-    // For now, return excellent if tracking
     return _locationService.isTracking
         ? GpsSignalQuality.excellent
         : GpsSignalQuality.none;
@@ -151,22 +118,17 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
-  /// Formatted distance
+  /// Distance in km
   double get distance => _activeRun?.distanceKm ?? 0.0;
 
   /// Route points for map
   List<LocationPoint> get routePoints => _activeRun?.route ?? [];
 
-  /// Route version - use this to detect route changes efficiently
-  /// Increments every time a new point is added
+  /// Route version for efficient change detection
   int get routeVersion => _routeVersion;
 
-  /// Initialize the provider and load data.
-  /// Registers app lifecycle observer for auto-saving paused runs.
+  /// Initialize the provider and load data
   Future<void> initialize() async {
-    // Register lifecycle observer to auto-save paused runs on app kill
-    WidgetsBinding.instance.addObserver(this);
-
     _setLoading(true);
     try {
       await _storageService.initialize();
@@ -177,23 +139,6 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
       _setError('Failed to initialize: $e');
     } finally {
       _setLoading(false);
-    }
-  }
-
-  /// App lifecycle handler.
-  /// If the app goes to background (paused/detached) while run is PAUSED,
-  /// auto-stop and save the run to prevent data loss on app kill.
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      // Auto-save paused runs when app is backgrounded/killed
-      if (_runState == RunState.paused) {
-        debugPrint(
-          'RunProvider: App lifecycle=$state while run PAUSED - auto-stopping',
-        );
-        stopRun();
-      }
     }
   }
 
@@ -219,17 +164,15 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
       // Clear any captured hexes from previous runs
       HexDataProvider().clearCapturedHexes();
 
-      // CRITICAL: Set callbacks BEFORE starting the run to avoid race condition
-      // where location points arrive before callbacks are registered
+      // Set callbacks BEFORE starting the run
       _runTracker.setCallbacks(
         onHexCapture: _handleHexCapture,
         onTierChange: (oldTier, newTier) {
-          // Can notify UI for celebration
           notifyListeners();
         },
       );
 
-      // Start run tracking (this subscribes to location stream)
+      // Start run tracking
       _runTracker.startNewRun(
         _locationService.locationStream,
         runId,
@@ -237,9 +180,8 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
         isPurpleRunner: isPurpleRunner,
       );
 
-      // Start timer and set state to running
+      // Start timer
       _duration = Duration.zero;
-      _runState = RunState.running;
       _startTimer();
 
       // Create initial run session
@@ -248,32 +190,21 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
       // Notify listeners immediately so UI can respond
       notifyListeners();
 
-      // Listen to location updates to refresh UI and sync location across screens.
-      // CRITICAL: Only process updates when in RUNNING state.
-      // When PAUSED: ignore updates (no tracing, no flipping, no route version increment).
-      // When STOPPED: subscription is cancelled entirely.
+      // Listen to location updates for UI sync
       _locationSubscription = _locationService.locationStream.listen((point) {
-        // Guard: skip processing if not actively running
-        if (_runState != RunState.running) return;
-
         _activeRun = _runTracker.currentRun;
 
-        // INCREMENT ROUTE VERSION - This is the key for efficient change detection!
-        // RouteMap uses this to detect when route has changed without comparing list references
+        // Increment route version for efficient change detection
         _routeVersion++;
 
-        // Update shared location in HexDataProvider for syncing across screens
+        // Update shared location in HexDataProvider
         final location = LatLng(point.latitude, point.longitude);
-        final hexId = HexService().getHexId(
-          location,
-          9,
-        ); // Resolution 9 for neighborhood
+        final hexId = HexService().getHexId(location, 9);
         HexDataProvider().updateUserLocation(location, hexId);
 
         notifyListeners();
       });
     } on LocationPermissionException {
-      // Rethrow specific permission exceptions to be handled by UI
       await _locationService.stopTracking();
       rethrow;
     } catch (e) {
@@ -286,8 +217,6 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
   }
 
   bool _handleHexCapture(String hexId, Team runnerTeam, bool isPurpleRunner) {
-    // Update the hex data provider with the runner's color
-    // Returns true if the color actually changed (flipped)
     final colorChanged = HexDataProvider().updateHexColor(
       hexId,
       runnerTeam,
@@ -296,42 +225,16 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
     if (colorChanged) {
       debugPrint('RunProvider: Hex $hexId was flipped!');
 
-      // Add flip point to PointsService
-      // Purple runners get 2x multiplier
       final pointsToAdd = isPurpleRunner ? 2 : 1;
       _pointsService?.addRunPoints(pointsToAdd);
       debugPrint(
-        'RunProvider: Added $pointsToAdd flip point(s). Total: ${_pointsService?.currentPoints}',
+        'RunProvider: Added $pointsToAdd flip point(s). '
+        'Total: ${_pointsService?.currentPoints}',
       );
 
-      notifyListeners(); // Update UI to show new map state
+      notifyListeners();
     }
     return colorChanged;
-  }
-
-  /// Pause the current run.
-  /// Stops tracing and flipping. Timer stops. Location updates are ignored.
-  /// If app is killed while paused, run is auto-saved to history.
-  void pauseRun() {
-    if (isRunning) {
-      _runState = RunState.paused;
-      _stopTimer();
-      _activeRun?.recordPause();
-      _runTracker.pauseTracking();
-      notifyListeners();
-    }
-  }
-
-  /// Resume the current run from paused state.
-  /// Re-enables tracing and flipping. First GPS point after resume is used
-  /// as new anchor (no ghost distance from pause gap).
-  void resumeRun() {
-    if (isPaused) {
-      _runState = RunState.running;
-      _startTimer();
-      _runTracker.resumeTracking();
-      notifyListeners();
-    }
   }
 
   void _startTimer() {
@@ -347,18 +250,14 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
     _tickTimer = null;
   }
 
-  /// Stop the current run and save to history.
-  /// Can be called from both RUNNING and PAUSED states.
-  /// Records distance and flip count in running history.
+  /// Stop the current run and save to history
   Future<void> stopRun() async {
-    if (!isActive) return; // Can stop from running OR paused state
+    if (!isRunning) return;
 
     _setLoading(true);
     _setError(null);
 
     try {
-      // Stop tracking and set state
-      _runState = RunState.stopped;
       _stopTimer();
       final completedRun = _runTracker.stopRun();
       await _locationService.stopTracking();
@@ -369,11 +268,12 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
 
       if (completedRun != null) {
         debugPrint(
-          'RunProvider: Run completed - distance=${completedRun.distanceKm.toStringAsFixed(2)}km, '
+          'RunProvider: Run completed - '
+          'distance=${completedRun.distanceKm.toStringAsFixed(2)}km, '
           'flips=${completedRun.hexesColored}',
         );
 
-        // Save to database (stores distance and flips)
+        // Save to database
         await _storageService.saveRun(completedRun);
 
         // Refresh history and stats
@@ -385,7 +285,7 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
       HexDataProvider().clearUserLocation();
 
       _activeRun = null;
-      _routeVersion = 0; // Reset route version for next run
+      _routeVersion = 0;
       notifyListeners();
     } catch (e) {
       _setError('Failed to stop run: $e');
@@ -443,7 +343,6 @@ class RunProvider with ChangeNotifier, WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _stopTimer();
     _locationSubscription?.cancel();
     _locationService.dispose();

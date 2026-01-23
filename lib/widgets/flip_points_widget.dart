@@ -47,6 +47,14 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   late AnimationController _plusController;
   late Animation<double> _plusAnimation;
 
+  // Glow/pulse animation (team-colored halo)
+  late AnimationController _glowController;
+  late Animation<double> _glowAnimation;
+
+  // Scale bounce animation
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +84,44 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
     ]).animate(_plusController);
 
+    // Glow animation: peaks at ~25% then fades out with easeOutCubic
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _glowAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 75,
+      ),
+    ]).animate(_glowController);
+
+    // Scale bounce: 1.0 → 1.12 → 1.0 with elasticOut
+    _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.12), weight: 30),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.12,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 70,
+      ),
+    ]).animate(_scaleController);
+
     // Listen for point changes
     widget.pointsService.addListener(_onPointsChanged);
 
@@ -90,6 +136,8 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
       controller.dispose();
     }
     _plusController.dispose();
+    _glowController.dispose();
+    _scaleController.dispose();
     super.dispose();
   }
 
@@ -129,6 +177,10 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
 
     // Show plus indicator
     _plusController.forward(from: 0);
+
+    // Trigger glow and scale bounce
+    _glowController.forward(from: 0);
+    _scaleController.forward(from: 0);
 
     // Calculate which digits need to change
     final oldDigits = _getDigits(_displayedPoints);
@@ -173,6 +225,10 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
 
     // Show plus indicator
     _plusController.forward(from: 0);
+
+    // Trigger glow and scale bounce
+    _glowController.forward(from: 0);
+    _scaleController.forward(from: 0);
 
     // Calculate which digits need to change
     final oldDigits = _getDigits(_displayedPoints);
@@ -220,33 +276,59 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   @override
   Widget build(BuildContext context) {
     final displayDigits = _getDigits(_displayedPoints);
-    final targetDigits = _isAnimating ? _getDigits(_targetPoints) : displayDigits;
+    final targetDigits = _isAnimating
+        ? _getDigits(_targetPoints)
+        : displayDigits;
 
     // Ensure both have same length for animation
     final maxLen = math.max(displayDigits.length, targetDigits.length);
     while (displayDigits.length < maxLen) displayDigits.insert(0, 0);
     while (targetDigits.length < maxLen) targetDigits.insert(0, 0);
 
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.compact ? 8 : 12,
-        vertical: widget.compact ? 4 : 6,
-      ),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(widget.compact ? 8 : 10),
-        border: Border.all(
-          color: widget.accentColor.withOpacity(0.15),
-          width: 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return AnimatedBuilder(
+      animation: Listenable.merge([_glowAnimation, _scaleAnimation]),
+      builder: (context, child) {
+        final glowValue = _glowAnimation.value;
+        final scaleValue = _scaleAnimation.value;
+
+        return Transform.scale(
+          scale: scaleValue,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.compact ? 8 : 12,
+              vertical: widget.compact ? 4 : 6,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceColor.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(widget.compact ? 8 : 10),
+              border: Border.all(
+                color: Color.lerp(
+                  widget.accentColor.withOpacity(0.15),
+                  widget.accentColor.withOpacity(0.7),
+                  glowValue,
+                )!,
+                width: 1.0 + (0.5 * glowValue),
+              ),
+              boxShadow: [
+                // Base shadow (always present)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+                // Team-colored glow (animated)
+                if (glowValue > 0)
+                  BoxShadow(
+                    color: widget.accentColor.withOpacity(0.6 * glowValue),
+                    blurRadius: 16 + (8 * glowValue),
+                    spreadRadius: 2 * glowValue,
+                  ),
+              ],
+            ),
+            child: child,
           ),
-        ],
-      ),
+        );
+      },
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -290,7 +372,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: widget.compact ? 10 : 12,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF22C55E), // Green for positive
+                        color: widget.accentColor,
                       ),
                     ),
                   ),
@@ -487,11 +569,7 @@ class FlipPointsCompact extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.flip_rounded,
-          size: 12,
-          color: accentColor.withOpacity(0.7),
-        ),
+        Icon(Icons.flip_rounded, size: 12, color: accentColor.withOpacity(0.7)),
         const SizedBox(width: 4),
         Text(
           PointsService.formatPoints(points),

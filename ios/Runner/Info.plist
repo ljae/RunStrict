@@ -45,6 +45,8 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>FLTEnableImpeller</key>
+	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need your location to track your runs and calculate distance.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

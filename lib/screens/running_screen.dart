@@ -1,11 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../theme/app_theme.dart';
-import '../theme/neon_theme.dart';
 import '../providers/run_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../models/team.dart';
@@ -78,14 +74,6 @@ class _RunningScreenState extends State<RunningScreen>
         _isInitializing = false;
       });
     }
-  }
-
-  void _pauseRun() {
-    context.read<RunProvider>().pauseRun();
-  }
-
-  void _resumeRun() {
-    context.read<RunProvider>().resumeRun();
   }
 
   Future<void> _stopRun() async {
@@ -246,41 +234,35 @@ class _RunningScreenState extends State<RunningScreen>
             color: AppTheme.surfaceColor.withOpacity(0.4),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white.withOpacity(0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withOpacity(0.05),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (provider.isRunning)
-                _buildPulsingDot(teamColor)
-              else if (provider.isPaused)
-                Icon(Icons.pause, color: Colors.amber, size: 14)
-              else
-                Icon(Icons.directions_run, color: teamColor, size: 14),
-              const SizedBox(width: 8),
-              Text(
-                provider.isRunning
-                    ? 'TRACKING ACTIVE'
-                    : provider.isPaused
-                    ? 'PAUSED'
-                    : 'READY',
-                style: GoogleFonts.outfit(
-                  color: provider.isRunning
-                      ? teamColor
-                      : provider.isPaused
-                      ? Colors.amber
-                      : AppTheme.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2.0,
+              if (provider.isRunning) ...[
+                _buildPulsingDot(teamColor),
+                const SizedBox(width: 8),
+                Text(
+                  'RUNNING',
+                  style: GoogleFonts.outfit(
+                    color: teamColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2.0,
+                  ),
                 ),
-              ),
+              ] else ...[
+                Icon(Icons.directions_run, color: teamColor, size: 14),
+                const SizedBox(width: 8),
+                Text(
+                  'READY',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -350,20 +332,23 @@ class _RunningScreenState extends State<RunningScreen>
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem(
-            icon: Icons.timer_outlined,
-            value: provider.formattedTime,
-            label: 'TIME',
-            color: Colors.white,
+          Expanded(
+            child: _buildStatItem(
+              icon: Icons.timer_outlined,
+              value: provider.formattedTime,
+              label: 'TIME',
+              color: Colors.white,
+            ),
           ),
           Container(width: 1, height: 36, color: Colors.white.withOpacity(0.1)),
-          _buildStatItem(
-            icon: Icons.speed,
-            value: provider.formattedPace,
-            label: 'PACE',
-            color: teamColor,
+          Expanded(
+            child: _buildStatItem(
+              icon: Icons.speed,
+              value: provider.formattedPace,
+              label: 'PACE',
+              color: teamColor,
+            ),
           ),
         ],
       ),
@@ -417,59 +402,23 @@ class _RunningScreenState extends State<RunningScreen>
       );
     }
 
-    if (provider.isActive) {
-      if (provider.isPaused) {
-        // Split view: Stop and Resume
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              Expanded(
-                child: EnergyHoldButton(
-                  // label: 'STOP',
-                  icon: Icons.stop_rounded,
-                  baseColor: AppTheme.surfaceColor,
-                  fillColor: AppTheme.athleticRed,
-                  iconColor: AppTheme.athleticRed,
-                  onComplete: _stopRun,
-                  isHoldRequired: true,
-                  duration: const Duration(milliseconds: 1500),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: EnergyHoldButton(
-                  // label: 'RESUME',
-                  icon: Icons.play_arrow_rounded,
-                  baseColor: teamColor.withOpacity(0.2),
-                  fillColor: teamColor,
-                  iconColor: Colors.white,
-                  onComplete: _resumeRun,
-                  isHoldRequired: true,
-                  duration: const Duration(milliseconds: 1000),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-
-      // Running state: Wide Hold Button
+    if (provider.isRunning) {
+      // Running state: Full-width stop button
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: EnergyHoldButton(
-          // label: 'PAUSE',
-          icon: Icons.pause_circle_outline_rounded,
+          icon: Icons.stop_rounded,
           baseColor: AppTheme.surfaceColor.withOpacity(0.9),
-          fillColor: teamColor,
-          iconColor: teamColor,
-          onComplete: _pauseRun,
+          fillColor: AppTheme.athleticRed,
+          iconColor: AppTheme.athleticRed,
+          onComplete: _stopRun,
           isHoldRequired: true,
+          duration: const Duration(milliseconds: 1500),
         ),
       );
     }
 
-    // Start Button
+    // Ready state: Pulsing start button
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
@@ -478,7 +427,6 @@ class _RunningScreenState extends State<RunningScreen>
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: EnergyHoldButton(
-              // label: 'GO',
               icon: Icons.directions_run,
               baseColor: teamColor.withOpacity(0.2),
               fillColor: teamColor,
@@ -490,66 +438,6 @@ class _RunningScreenState extends State<RunningScreen>
           ),
         );
       },
-    );
-  }
-
-  Widget _buildControlButton({
-    required VoidCallback onTap,
-    required IconData icon,
-    required Color color,
-    required Color iconColor,
-    required double size,
-    bool withGlow = false,
-    Color? borderColor,
-    String? label,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          // Minimal or no shadow
-          boxShadow: withGlow
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.3),
-                    blurRadius: 20,
-                    spreadRadius: -5,
-                    offset: const Offset(0, 10),
-                  ),
-                ]
-              : [],
-          border: Border.all(
-            color: borderColor ?? Colors.white.withOpacity(0.1),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: iconColor,
-              size: size * 0.35,
-            ), // Slightly smaller icon
-            if (label != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: GoogleFonts.outfit(
-                  color: iconColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 2,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 
