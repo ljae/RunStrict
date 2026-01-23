@@ -77,68 +77,9 @@ class _RunningScreenState extends State<RunningScreen>
   }
 
   Future<void> _stopRun() async {
-    final confirmed = await _showStopConfirmation();
-    if (confirmed == true && mounted) {
+    if (mounted) {
       await context.read<RunProvider>().stopRun();
     }
-  }
-
-  Future<bool?> _showStopConfirmation() {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: AppTheme.athleticRed.withOpacity(0.5),
-            width: 2,
-          ),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.stop_circle_outlined, color: AppTheme.athleticRed),
-            const SizedBox(width: 12),
-            Text(
-              'END RUN?',
-              style: GoogleFonts.outfit(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Your progress will be saved.',
-          style: GoogleFonts.inter(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'CANCEL',
-              style: GoogleFonts.inter(color: AppTheme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.athleticRed,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            child: Text(
-              'END',
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

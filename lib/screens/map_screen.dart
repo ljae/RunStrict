@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
@@ -87,12 +88,20 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       // 2. Fetch fresh GPS position (SLOW but ACCURATE)
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
+      } on TimeoutException {
+        // GPS couldn't get a high-accuracy fix in time.
+        // Camera is already showing cached position — no action needed.
+        debugPrint('GPS timeout: using cached position');
+        return;
+      }
 
       // Persist fresh location for next time
       LocalStorageService().saveLastLocation(
@@ -109,10 +118,10 @@ class _MapScreenState extends State<MapScreen> {
       );
 
       // Only animate if moved more than 50 meters (avoid unnecessary animation)
-      // Use easeTo with short duration for smooth transition instead of instant snap
+      // Use fire-and-forget easeTo — don't await the animation Future
       if (distance > 50 && _mapController != null) {
         try {
-          await _mapController!.easeTo(
+          _mapController!.easeTo(
             mapbox.CameraOptions(
               center: mapbox.Point(
                 coordinates: mapbox.Position(
@@ -125,23 +134,18 @@ class _MapScreenState extends State<MapScreen> {
             mapbox.MapAnimationOptions(duration: 500, startDelay: 0),
           );
         } catch (e) {
-          // Fallback to instant setCamera if easeTo fails/times out
-          debugPrint('easeTo failed, falling back to setCamera: $e');
-          try {
-            _mapController!.setCamera(
-              mapbox.CameraOptions(
-                center: mapbox.Point(
-                  coordinates: mapbox.Position(
-                    position.longitude,
-                    position.latitude,
-                  ),
+          // Fallback to instant setCamera if easeTo fails
+          _mapController!.setCamera(
+            mapbox.CameraOptions(
+              center: mapbox.Point(
+                coordinates: mapbox.Position(
+                  position.longitude,
+                  position.latitude,
                 ),
-                zoom: _getZoomLevelForIndex(_selectedZoomIndex),
               ),
-            );
-          } catch (e2) {
-            debugPrint('setCamera fallback also failed: $e2');
-          }
+              zoom: _getZoomLevelForIndex(_selectedZoomIndex),
+            ),
+          );
         }
       }
     } catch (e) {
