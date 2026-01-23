@@ -37,6 +37,13 @@ class RunTracker {
   LocationPoint? _lastValidPoint;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
+  // Flag: skip distance calculation on first point after resume.
+  // Prevents ghost distance from stale _lastValidPoint to new location.
+  bool _skipNextDistanceCalc = false;
+
+  // Segment counter: increments on each resume to mark pause boundaries.
+  int _currentSegment = 0;
+
   // Hex scoring integration
   final HexService _hexService = HexService();
   HexCaptureCallback? _onHexCapture;
@@ -133,8 +140,9 @@ class RunTracker {
 
     // First point - record it and attempt to capture starting hex
     if (_lastValidPoint == null) {
-      _lastValidPoint = point;
-      _currentRun!.addPoint(point);
+      final taggedPoint = point.copyWith(segmentIndex: _currentSegment);
+      _lastValidPoint = taggedPoint;
+      _currentRun!.addPoint(taggedPoint);
       _currentRun!.currentHexId = currentHexId;
       _currentRun!.distanceInCurrentHex = 0;
 
@@ -154,6 +162,26 @@ class RunTracker {
           );
         }
       }
+      return;
+    }
+
+    // Resume gap handling: first point after pause is used as new anchor.
+    // Skip distance calculation to avoid ghost distance from stale position.
+    if (_skipNextDistanceCalc) {
+      _skipNextDistanceCalc = false;
+      final taggedPoint = point.copyWith(segmentIndex: _currentSegment);
+      _lastValidPoint = taggedPoint;
+      _currentRun!.addPoint(taggedPoint);
+      // Update hex ID without triggering capture (just position awareness)
+      _currentRun!.currentHexId = _hexService.getHexId(
+        LatLng(point.latitude, point.longitude),
+        _hexResolution,
+      );
+      _currentRun!.distanceInCurrentHex = 0;
+      debugPrint(
+        'RunTracker: Resume anchor set at (${point.latitude.toStringAsFixed(5)}, '
+        '${point.longitude.toStringAsFixed(5)})',
+      );
       return;
     }
 
@@ -265,11 +293,12 @@ class RunTracker {
     }
 
     // Update run state
+    final taggedPoint = point.copyWith(segmentIndex: _currentSegment);
     _currentRun!.updateDistance(newTotalDistance);
-    _currentRun!.addPoint(point);
+    _currentRun!.addPoint(taggedPoint);
     _currentRun!.currentHexId = currentHexId;
 
-    _lastValidPoint = point;
+    _lastValidPoint = taggedPoint;
   }
 
   /// Anti-spoofing: Validate if a location point is legitimate
@@ -340,19 +369,27 @@ class RunTracker {
     _locationSubscription = null;
     _currentRun = null;
     _lastValidPoint = null;
+    _skipNextDistanceCalc = false;
+    _currentSegment = 0;
     _currentTier = ImpactTier.starter;
     _maxImpactTierIndex = 0;
 
     return completedRun;
   }
 
-  /// Pause tracking (keeps run active but stops processing updates)
+  /// Pause tracking (keeps run active but stops processing updates).
+  /// No tracing or flipping occurs while paused.
   void pauseTracking() {
     _locationSubscription?.pause();
   }
 
-  /// Resume tracking
+  /// Resume tracking after pause.
+  /// Sets flag to skip distance calculation on next point, preventing
+  /// ghost distance from the stale pause position to current location.
+  /// Increments segment counter so new points belong to a new segment.
   void resumeTracking() {
+    _skipNextDistanceCalc = true;
+    _currentSegment++;
     _locationSubscription?.resume();
   }
 

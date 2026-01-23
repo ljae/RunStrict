@@ -27,6 +27,9 @@ class RunSession {
   // Flip tracking
   int hexesColored; // Live flip count
 
+  // Pause tracking
+  int pauseCount; // Number of times the run was paused
+
   // Transient state (not persisted)
   String? currentHexId;
   double distanceInCurrentHex;
@@ -41,6 +44,7 @@ class RunSession {
     required this.teamAtRun,
     this.isPurpleRunner = false,
     this.hexesColored = 0,
+    this.pauseCount = 0,
     this.currentHexId,
     this.distanceInCurrentHex = 0,
   }) : route = route ?? [];
@@ -78,7 +82,8 @@ class RunSession {
   double get distanceKm => distanceMeters / 1000;
 
   /// Check if runner can capture hex (pace < 8:00 min/km)
-  bool get canCaptureHex => averagePaceMinPerKm < 8.0 && averagePaceMinPerKm > 0;
+  bool get canCaptureHex =>
+      averagePaceMinPerKm < 8.0 && averagePaceMinPerKm > 0;
 
   /// Points earned (flip count * multiplier)
   int get pointsEarned {
@@ -119,6 +124,7 @@ class RunSession {
   RunSession copyWith({
     double? distanceMeters,
     int? hexesColored,
+    int? pauseCount,
     String? currentHexId,
     double? distanceInCurrentHex,
   }) {
@@ -132,6 +138,7 @@ class RunSession {
       teamAtRun: teamAtRun,
       isPurpleRunner: isPurpleRunner,
       hexesColored: hexesColored ?? this.hexesColored,
+      pauseCount: pauseCount ?? this.pauseCount,
       currentHexId: currentHexId ?? this.currentHexId,
       distanceInCurrentHex: distanceInCurrentHex ?? this.distanceInCurrentHex,
     );
@@ -150,6 +157,11 @@ class RunSession {
   /// Increment flip count
   void recordFlip() {
     hexesColored++;
+  }
+
+  /// Increment pause count
+  void recordPause() {
+    pauseCount++;
   }
 
   @override

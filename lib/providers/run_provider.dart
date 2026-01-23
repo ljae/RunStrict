@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
 import '../models/run_session.dart';
@@ -11,6 +11,12 @@ import '../services/points_service.dart';
 import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
+
+/// Three distinct run states for the tracking system:
+/// - [stopped]: No active run. Tracing/flipping disabled. Run saved to history.
+/// - [running]: Active run. GPS tracing and hex flipping enabled.
+/// - [paused]: Temporary stop. No tracing/flipping. App kill → auto-save.
+enum RunState { stopped, running, paused }
 
 /// Provider for managing run state and coordinating services
 ///
@@ -25,7 +31,14 @@ import '../services/hex_service.dart';
 ///   → Camera follows + Route line updates
 ///
 /// Key Optimization: Use routeVersion counter instead of comparing list references
-class RunProvider with ChangeNotifier {
+///
+/// ## Run State Machine:
+/// stopped → running (startRun)
+/// running → paused (pauseRun)
+/// paused → running (resumeRun)
+/// running → stopped (stopRun) [saves to history]
+/// paused → stopped (stopRun or app kill) [saves to history]
+class RunProvider with ChangeNotifier, WidgetsBindingObserver {
   final LocationService _locationService;
   final RunTracker _runTracker;
   final StorageService _storageService;
@@ -56,17 +69,19 @@ class RunProvider with ChangeNotifier {
     _pointsService = pointsService;
   }
 
+  // Run state
+  RunState _runState = RunState.stopped;
+
   // Getters
   RunSession? get activeRun => _activeRun;
   List<RunSession> get runHistory => _runHistory;
   Map<String, dynamic>? get totalStats => _totalStats;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get isRunning =>
-      _activeRun != null && _activeRun!.isActive && !_isPaused;
-  bool get isActive => _activeRun != null && _activeRun!.isActive;
-  bool _isPaused = false;
-  bool get isPaused => _isPaused;
+  RunState get runState => _runState;
+  bool get isRunning => _runState == RunState.running;
+  bool get isActive => _runState != RunState.stopped;
+  bool get isPaused => _runState == RunState.paused;
 
   // New state for timer and units
   Timer? _tickTimer;
@@ -80,8 +95,8 @@ class RunProvider with ChangeNotifier {
   /// Calculated from recent data (e.g. RunTracker should ideally provide instantaneous speed)
   /// For now, we can calculate average speed or use instantaneous speed if available from tracker
   double get currentSpeed {
-    // If paused, speed is 0
-    if (_isPaused || !isRunning) return 0.0;
+    // If paused or not running, speed is 0
+    if (!isRunning) return 0.0;
 
     // Prefer instantaneous speed from tracker if possible, or calculate from pace
     // _activeRun might update every location update.
@@ -146,8 +161,12 @@ class RunProvider with ChangeNotifier {
   /// Increments every time a new point is added
   int get routeVersion => _routeVersion;
 
-  /// Initialize the provider and load data
+  /// Initialize the provider and load data.
+  /// Registers app lifecycle observer for auto-saving paused runs.
   Future<void> initialize() async {
+    // Register lifecycle observer to auto-save paused runs on app kill
+    WidgetsBinding.instance.addObserver(this);
+
     _setLoading(true);
     try {
       await _storageService.initialize();
@@ -158,6 +177,23 @@ class RunProvider with ChangeNotifier {
       _setError('Failed to initialize: $e');
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// App lifecycle handler.
+  /// If the app goes to background (paused/detached) while run is PAUSED,
+  /// auto-stop and save the run to prevent data loss on app kill.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      // Auto-save paused runs when app is backgrounded/killed
+      if (_runState == RunState.paused) {
+        debugPrint(
+          'RunProvider: App lifecycle=$state while run PAUSED - auto-stopping',
+        );
+        stopRun();
+      }
     }
   }
 
@@ -201,8 +237,9 @@ class RunProvider with ChangeNotifier {
         isPurpleRunner: isPurpleRunner,
       );
 
-      // Start timer
+      // Start timer and set state to running
       _duration = Duration.zero;
+      _runState = RunState.running;
       _startTimer();
 
       // Create initial run session
@@ -211,8 +248,14 @@ class RunProvider with ChangeNotifier {
       // Notify listeners immediately so UI can respond
       notifyListeners();
 
-      // Listen to location updates to refresh UI and sync location across screens
+      // Listen to location updates to refresh UI and sync location across screens.
+      // CRITICAL: Only process updates when in RUNNING state.
+      // When PAUSED: ignore updates (no tracing, no flipping, no route version increment).
+      // When STOPPED: subscription is cancelled entirely.
       _locationSubscription = _locationService.locationStream.listen((point) {
+        // Guard: skip processing if not actively running
+        if (_runState != RunState.running) return;
+
         _activeRun = _runTracker.currentRun;
 
         // INCREMENT ROUTE VERSION - This is the key for efficient change detection!
@@ -266,20 +309,25 @@ class RunProvider with ChangeNotifier {
     return colorChanged;
   }
 
-  /// Pause the current run
+  /// Pause the current run.
+  /// Stops tracing and flipping. Timer stops. Location updates are ignored.
+  /// If app is killed while paused, run is auto-saved to history.
   void pauseRun() {
     if (isRunning) {
-      _isPaused = true;
+      _runState = RunState.paused;
       _stopTimer();
+      _activeRun?.recordPause();
       _runTracker.pauseTracking();
       notifyListeners();
     }
   }
 
-  /// Resume the current run
+  /// Resume the current run from paused state.
+  /// Re-enables tracing and flipping. First GPS point after resume is used
+  /// as new anchor (no ghost distance from pause gap).
   void resumeRun() {
     if (isPaused) {
-      _isPaused = false;
+      _runState = RunState.running;
       _startTimer();
       _runTracker.resumeTracking();
       notifyListeners();
@@ -299,15 +347,18 @@ class RunProvider with ChangeNotifier {
     _tickTimer = null;
   }
 
-  /// Stop the current run
+  /// Stop the current run and save to history.
+  /// Can be called from both RUNNING and PAUSED states.
+  /// Records distance and flip count in running history.
   Future<void> stopRun() async {
-    if (!isRunning) return;
+    if (!isActive) return; // Can stop from running OR paused state
 
     _setLoading(true);
     _setError(null);
 
     try {
-      // Stop tracking
+      // Stop tracking and set state
+      _runState = RunState.stopped;
       _stopTimer();
       final completedRun = _runTracker.stopRun();
       await _locationService.stopTracking();
@@ -317,7 +368,12 @@ class RunProvider with ChangeNotifier {
       _locationSubscription = null;
 
       if (completedRun != null) {
-        // Save to database
+        debugPrint(
+          'RunProvider: Run completed - distance=${completedRun.distanceKm.toStringAsFixed(2)}km, '
+          'flips=${completedRun.hexesColored}',
+        );
+
+        // Save to database (stores distance and flips)
         await _storageService.saveRun(completedRun);
 
         // Refresh history and stats
@@ -387,6 +443,7 @@ class RunProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopTimer();
     _locationSubscription?.cancel();
     _locationService.dispose();
