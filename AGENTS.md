@@ -8,16 +8,18 @@
 
 ### Core Concept
 - **Season**: 280 days (fixed duration)
-- **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - mid-season unlock)
+- **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - unlocks D-140)
 - **Hex System**: Displays color of **last runner** - no ownership
-- **D-Day Reset**: All territories and scores wiped (The Void)
+- **D-Day Reset**: All territories and scores wiped via TRUNCATE/DROP (The Void)
+- **Crew Benefit**: Simultaneous Runner Multiply (N runners = Nx points)
 
 ### Key Design Principles
 - Privacy optimized: No timestamps or runner IDs stored in hexes
 - User location shown as **person icon inside a hexagon** (team-colored)
 - Performance-optimized (no 3D rendering)
+- Serverless architecture: No backend API server (Supabase RLS handles auth)
 
-**Tech Stack**: Flutter 3.10+, Dart, Provider (state management), Mapbox, Firebase, H3 (hex grid)
+**Tech Stack**: Flutter 3.10+, Dart, Provider (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
 
 ---
 
@@ -66,65 +68,69 @@ flutter test --coverage                   # Run with coverage
 
 ```
 lib/
-├── main.dart              # App entry, Provider setup
+├── main.dart                    # App entry, Provider setup
 ├── config/
-│   └── mapbox_config.dart # Mapbox API configuration
+│   ├── mapbox_config.dart       # Mapbox API configuration
+│   └── supabase_config.dart     # Supabase URL & anon key
 ├── models/
-│   ├── team.dart          # Team enum with multiplier
-│   ├── user_model.dart    # User with seasonPoints
-│   ├── hex_model.dart     # Hex with lastRunnerTeam only
-│   ├── crew_model.dart    # Crew with isPurple/multiplier/maxMembers
-│   ├── run_session.dart   # Active run session data
-│   ├── run_summary.dart   # Lightweight run summary for history
-│   ├── daily_running_stat.dart # Daily stats (Cold/Warm data)
-│   ├── location_point.dart # GPS point (active run)
-│   ├── route_point.dart   # Compact route point (cold storage)
-│   └── district_model.dart # Electoral district model
+│   ├── team.dart                # Team enum (red/blue/purple)
+│   ├── user_model.dart          # User with seasonPoints
+│   ├── hex_model.dart           # Hex with lastRunnerTeam only
+│   ├── crew_model.dart          # Crew with maxMembers/leaderId
+│   ├── run_session.dart         # Active run session data
+│   ├── run_summary.dart         # Completed run (with hexPath)
+│   ├── daily_running_stat.dart  # Daily stats (Warm data)
+│   ├── daily_hex_flip_record.dart # Daily flip dedup tracking
+│   ├── location_point.dart      # GPS point (active run)
+│   └── route_point.dart         # Compact route point (cold storage)
 ├── providers/
 │   ├── app_state_provider.dart  # Global app state (team, user)
 │   ├── run_provider.dart        # Run lifecycle & hex capture
 │   ├── crew_provider.dart       # Crew management
 │   └── hex_data_provider.dart   # Hex data cache & state
 ├── screens/
+│   ├── team_selection_screen.dart  # Onboarding / new season
 │   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
 │   ├── map_screen.dart          # Hex territory exploration
 │   ├── running_screen.dart      # Pre-run & active run tracking
 │   ├── crew_screen.dart         # Crew management
-│   ├── leaderboard_screen.dart  # Rankings
+│   ├── leaderboard_screen.dart  # Rankings (ALL/City/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
-│   ├── results_screen.dart      # Election-style results
-│   └── team_selection_screen.dart # Onboarding
+│   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
-│   ├── hex_service.dart           # H3 hex grid operations
-│   ├── location_service.dart      # GPS tracking
-│   ├── run_tracker.dart           # Run session & hex capture engine
-│   ├── gps_validator.dart         # Anti-spoofing
-│   ├── storage_service.dart       # Storage interface (abstract)
+│   ├── supabase_service.dart    # Supabase client init & RPC wrappers
+│   ├── hex_service.dart         # H3 hex grid operations
+│   ├── location_service.dart    # GPS tracking
+│   ├── run_tracker.dart         # Run session & hex capture engine
+│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer)
+│   ├── storage_service.dart     # Storage interface (abstract)
 │   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
 │   ├── local_storage_service.dart # SharedPreferences helpers
-│   ├── points_service.dart        # Flip points & settlement
-│   ├── season_service.dart        # 280-day season countdown
+│   ├── points_service.dart      # Flip points & multiplier calculation
+│   ├── season_service.dart      # 280-day season countdown
+│   ├── crew_multiplier_service.dart # Simultaneous runner tracking (Realtime)
 │   ├── running_score_service.dart # Pace validation for capture
-│   └── data_manager.dart          # Hot/Cold data separation
+│   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
-│   └── local_storage.dart   # SQLite implementation
+│   └── local_storage.dart       # SQLite implementation
 ├── theme/
-│   ├── app_theme.dart       # Colors, typography, animations
-│   └── neon_theme.dart      # Neon accent colors (used by route_map)
+│   ├── app_theme.dart           # Colors, typography, animations
+│   └── neon_theme.dart          # Neon accent colors (used by route_map)
 ├── utils/
-│   ├── image_utils.dart     # Location marker generation
-│   ├── route_optimizer.dart # Ring buffer + Douglas-Peucker
-│   └── lru_cache.dart       # LRU cache for hex data
+│   ├── image_utils.dart         # Location marker generation
+│   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
+│   └── lru_cache.dart           # LRU cache for hex data
 └── widgets/
-    ├── hexagon_map.dart           # Hex grid overlay
-    ├── route_map.dart             # Route display + navigation mode
+    ├── hexagon_map.dart         # Hex grid overlay
+    ├── route_map.dart           # Route display + navigation mode
     ├── smooth_camera_controller.dart # 60fps camera interpolation
     ├── glowing_location_marker.dart  # Team-colored pulsing marker
-    ├── flip_points_widget.dart    # Animated flip counter (header)
+    ├── flip_points_widget.dart  # Animated flip counter (header)
     ├── season_countdown_widget.dart  # D-day countdown badge
-    ├── energy_hold_button.dart    # Hold-to-trigger button
-    ├── stat_card.dart             # Statistics card
-    └── neon_stat_card.dart        # Neon-styled stat card
+    ├── energy_hold_button.dart  # Hold-to-trigger button
+    ├── capturable_hex_pulse.dart # Pulsing effect for capturable hexes
+    ├── stat_card.dart           # Statistics card
+    └── neon_stat_card.dart      # Neon-styled stat card
 ```
 
 ---
@@ -264,7 +270,7 @@ class RunSession {
 - Immutable data classes with `final` fields
 - Implement `copyWith()` for modifications
 - Implement `fromJson()` factory and `toJson()` for serialization
-- Separate Firestore serialization (`toFirestore()`/`fromFirestore()`)
+- Use `fromRow()` / `toRow()` for Supabase row serialization
 
 ```dart
 class UserModel {
@@ -289,18 +295,17 @@ class UserModel {
     );
   }
 
-  factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
-    id: json['id'] as String,
-    name: json['name'] as String,
-    team: Team.values.byName(json['team'] as String),
-    seasonPoints: (json['seasonPoints'] as num?)?.toInt() ?? 0,
+  factory UserModel.fromRow(Map<String, dynamic> row) => UserModel(
+    id: row['id'] as String,
+    name: row['name'] as String,
+    team: Team.values.byName(row['team'] as String),
+    seasonPoints: (row['season_points'] as num?)?.toInt() ?? 0,
   );
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
+  Map<String, dynamic> toRow() => {
     'name': name,
     'team': team.name,
-    'seasonPoints': seasonPoints,
+    'season_points': seasonPoints,
   };
 }
 ```
@@ -332,32 +337,34 @@ Use `AppTheme.teamColor(isRed)` for team-aware coloring.
 
 ## Game-Specific Guidelines
 
-### Team & Multiplier Logic
+### Crew Economy: Simultaneous Runner Multiply
 ```dart
-// Purple Crew gets 2x multiplier
-final points = hexesColored * team.multiplier;
-// Red/Blue: 1x, Purple: 2x
-
-// Crew member limits
-// Red/Blue: Max 12 members, Purple: Max 24 members
-final maxMembers = crew.isPurple ? 24 : 12;
+// Multiplier = number of crew members running at the same time
+// Red/Blue: Max 12 members = 12x potential
+// Purple: Max 24 members = 24x potential
+// All teams have 1x base multiplier (no Purple 2x bonus)
+final multiplier = activeCrewRunners; // Linear: N runners = Nx
+final points = flipsEarned * multiplier;
 ```
 
-### Hex Color Change
+### Hex Capture & Flip
 ```dart
 // Hex only stores lastRunnerTeam - no timestamps/IDs
-bool setRunnerColor(Team runnerTeam, {bool isPurpleRunner = false}) {
-  final Team newTeam = isPurpleRunner ? Team.purple : runnerTeam;
-  if (lastRunnerTeam == newTeam) return false;
-  lastRunnerTeam = newTeam;
+bool setRunnerColor(Team runnerTeam) {
+  if (lastRunnerTeam == runnerTeam) return false;
+  lastRunnerTeam = runnerTeam;
   return true; // Color changed (flip)
 }
+
+// Daily flip limit: same hex once per day per runner
+// Check via RPC: has_flipped_today(user_id, hex_id)
 ```
 
 ### Pace Validation
 ```dart
 // Must be running at valid pace to capture hex
-bool get canCaptureHex => averagePaceMinPerKm < 8.0;
+bool get canCaptureHex => paceMinPerKm < 8.0;
+// Also: speed < 25 km/h AND GPS accuracy ≤ 50m
 ```
 
 ---
@@ -378,6 +385,23 @@ class RunningScreen extends StatelessWidget {
     );
   }
 }
+```
+
+### Supabase RPC Call
+```dart
+// Call a PostgreSQL function via Supabase
+final result = await supabase.rpc('get_crew_multiplier', params: {
+  'p_crew_id': crewId,
+});
+
+// Real-time subscription
+supabase
+  .from('active_runs')
+  .stream(primaryKey: ['user_id'])
+  .eq('crew_id', crewId)
+  .listen((data) {
+    // Update multiplier display
+  });
 ```
 
 ### Async Initialization
@@ -401,7 +425,9 @@ void initState() {
 - Use relative imports for internal files
 - Run `flutter analyze` before committing
 - Add `///` documentation for public APIs
-- Use derived getters (`isPurple`, `multiplier`, `maxMembers`) instead of stored fields
+- Use derived getters (`isPurple`, `maxMembers`) instead of stored fields
+- Use Supabase RPC for complex queries (multiplier, leaderboard)
+- Use Supabase Realtime for live updates (active runners, hex colors)
 
 ### Don't
 - Don't use `print()` - use `debugPrint()` instead
@@ -409,7 +435,8 @@ void initState() {
 - Don't put business logic in widgets - use services/providers
 - Don't hardcode colors - use `AppTheme` constants
 - Don't create new state management patterns - stick with Provider
-- Don't store derived/calculated data in Firestore (calculate on-demand)
+- Don't store derived/calculated data in database (calculate on-demand)
+- Don't create backend API endpoints - use RLS + Edge Functions
 
 ---
 
@@ -440,6 +467,6 @@ void main() {
 | `geolocator` | GPS location tracking |
 | `mapbox_maps_flutter` | Map rendering |
 | `h3_flutter` | Hexagonal grid system |
-| `firebase_core` | Firebase integration |
-| `cloud_firestore` | Database |
+| `supabase_flutter` | Backend (Auth + DB + Realtime + Storage) |
 | `sqflite` | Local SQLite storage |
+| `sensors_plus` | Accelerometer (anti-spoofing) |

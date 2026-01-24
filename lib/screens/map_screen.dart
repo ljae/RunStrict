@@ -260,15 +260,15 @@ class _MapScreenState extends State<MapScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                // Only show CTA card in ZONE view
+                                if (_showUserLocation) ...[
+                                  const _CallToActionCard(),
+                                  const SizedBox(height: 16),
+                                ],
                                 _ZoomLevelSelector(
                                   selectedIndex: _selectedZoomIndex,
                                   onChanged: _onZoomChanged,
                                 ),
-                                // Only show CTA card in ZONE view
-                                if (_showUserLocation) ...[
-                                  const SizedBox(height: 16),
-                                  const _CallToActionCard(),
-                                ],
                               ],
                             ),
                           ),
