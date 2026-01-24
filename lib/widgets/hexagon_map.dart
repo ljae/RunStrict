@@ -4,22 +4,20 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:geolocator/geolocator.dart' as geo;
 import '../services/hex_service.dart';
-import '../models/hex_model.dart';
 import '../models/location_point.dart';
+import '../models/team.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../providers/hex_data_provider.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../widgets/energy_hold_button.dart';
 import '../widgets/glowing_location_marker.dart';
 
 class HexagonMap extends StatefulWidget {
   final latlong.LatLng? initialCenter;
   final bool showScoreLabels;
-  final Function(String hexId, HexModel hex)? onHexTapped;
   final Function(HexAggregatedStats)? onScoresUpdated;
   final Function(MapboxMap)? onMapCreated; // Expose controller
   final Color? teamColor;
+  final Team? userTeam; // User's team for capturable hex detection
   final bool showUserLocation;
   final List<LocationPoint>? route; // Route for tracking line
 
@@ -27,10 +25,10 @@ class HexagonMap extends StatefulWidget {
     super.key,
     this.initialCenter,
     this.showScoreLabels = true,
-    this.onHexTapped,
     this.onScoresUpdated,
     this.onMapCreated,
     this.teamColor,
+    this.userTeam,
     this.showUserLocation = true,
     this.route,
   });
@@ -39,8 +37,7 @@ class HexagonMap extends StatefulWidget {
   State<HexagonMap> createState() => _HexagonMapState();
 }
 
-class _HexagonMapState extends State<HexagonMap>
-    implements OnPolygonAnnotationClickListener {
+class _HexagonMapState extends State<HexagonMap> {
   MapboxMap? _mapboxMap;
   PolygonAnnotationManager? _polygonManager;
   PointAnnotationManager? _labelManager;
@@ -48,8 +45,6 @@ class _HexagonMapState extends State<HexagonMap>
   bool _isMapReady = false;
   List<String> _visibleHexIds = [];
   double _currentZoom = 14.0;
-  final Map<String, String> _annotationToHexId =
-      {}; // Map annotation ID to Hex ID
   String? _currentUserHexId;
   latlong.LatLng? _userLocation;
   int _cameraChangeCounter = 0; // For forcing overlay updates
@@ -61,6 +56,7 @@ class _HexagonMapState extends State<HexagonMap>
   @override
   void initState() {
     super.initState();
+
     // Listen for hex updates to redraw map
     _hexProvider.addListener(_onHexDataChanged);
     // Subscribe to location stream for real-time sync during active runs
@@ -103,17 +99,6 @@ class _HexagonMapState extends State<HexagonMap>
   }
 
   @override
-  void onPolygonAnnotationClick(PolygonAnnotation annotation) {
-    final hexId = _annotationToHexId[annotation.id];
-    if (hexId != null) {
-      final hex = _hexProvider.getCachedHex(hexId);
-      if (hex != null && widget.onHexTapped != null) {
-        widget.onHexTapped!(hexId, hex);
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     // Calculate initial center: use provided center, then user location
     // Map loads immediately - no blocking on location fetch
@@ -134,36 +119,30 @@ class _HexagonMapState extends State<HexagonMap>
       );
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Stack(
-        children: [
-          MapWidget(
-            cameraOptions: CameraOptions(
-              center: initialCameraCenter,
-              zoom: 14.0,
-            ),
-            styleUri: MapboxStyles.DARK,
-            onMapCreated: _onMapCreated,
-            onCameraChangeListener: _onCameraChangeListener,
+    return Stack(
+      children: [
+        MapWidget(
+          cameraOptions: CameraOptions(center: initialCameraCenter, zoom: 14.0),
+          styleUri: MapboxStyles.DARK,
+          onMapCreated: _onMapCreated,
+          onCameraChangeListener: _onCameraChangeListener,
+        ),
+        // Custom glowing location marker overlay
+        if (_isMapReady && _userLocation != null && widget.showUserLocation)
+          _UserLocationOverlay(
+            key: ValueKey(_cameraChangeCounter),
+            mapboxMap: _mapboxMap!,
+            userLocation: _userLocation!,
+            teamColor: widget.teamColor ?? AppTheme.electricBlue,
           ),
-          // Custom glowing location marker overlay
-          if (_isMapReady && _userLocation != null && widget.showUserLocation)
-            _UserLocationOverlay(
-              key: ValueKey(_cameraChangeCounter),
-              mapboxMap: _mapboxMap!,
-              userLocation: _userLocation!,
-              teamColor: widget.teamColor ?? AppTheme.electricBlue,
+        if (!_isMapReady)
+          Container(
+            color: AppTheme.backgroundStart,
+            child: const Center(
+              child: CircularProgressIndicator(color: AppTheme.electricBlue),
             ),
-          if (!_isMapReady)
-            Container(
-              color: AppTheme.backgroundStart,
-              child: const Center(
-                child: CircularProgressIndicator(color: AppTheme.electricBlue),
-              ),
-            ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -174,7 +153,6 @@ class _HexagonMapState extends State<HexagonMap>
     }
     _polygonManager = await _mapboxMap!.annotations
         .createPolygonAnnotationManager();
-    _polygonManager!.addOnPolygonAnnotationClickListener(this); // Add listener
     _labelManager = await _mapboxMap!.annotations
         .createPointAnnotationManager();
     _polylineManager = await _mapboxMap!.annotations
@@ -441,7 +419,6 @@ class _HexagonMapState extends State<HexagonMap>
       }
 
       final polygonOptions = <PolygonAnnotationOptions>[];
-      final addedHexIds = <String>[]; // Track which hexes were actually added
 
       for (final hexId in hexIds) {
         final boundary = HexService().getHexBoundary(hexId);
@@ -467,14 +444,19 @@ class _HexagonMapState extends State<HexagonMap>
           coordinates.add(coordinates.first); // Close loop
         }
 
-        // Get colors based on hex's last runner (subtle fill, NOT white)
         // Highlight user's current hex
         final isUserHex = hexId == _currentUserHexId;
         final teamColor = widget.teamColor ?? AppTheme.electricBlue;
 
         final fillColor = isUserHex ? teamColor : hex.hexLightColor;
         final outlineColor = isUserHex ? teamColor : hex.hexColor;
-        final opacity = isUserHex ? 0.5 : (hex.isNeutral ? 0.15 : 0.3);
+
+        // Static opacity: user hex brighter, neutral subtle, colored moderate
+        final double opacity = isUserHex
+            ? 0.5
+            : hex.isNeutral
+            ? 0.15
+            : 0.3;
 
         polygonOptions.add(
           PolygonAnnotationOptions(
@@ -484,25 +466,12 @@ class _HexagonMapState extends State<HexagonMap>
             fillOpacity: opacity,
           ),
         );
-        addedHexIds.add(hexId);
       }
 
       // Re-check before createMulti - state may have changed during loop
       if (!mounted || _polygonManager == null) return;
 
-      final annotations = await _polygonManager!.createMulti(polygonOptions);
-
-      _annotationToHexId.clear();
-      if (annotations != null) {
-        for (int i = 0; i < annotations.length; i++) {
-          if (i < addedHexIds.length) {
-            final annotation = annotations[i];
-            if (annotation != null) {
-              _annotationToHexId[annotation.id] = addedHexIds[i];
-            }
-          }
-        }
-      }
+      await _polygonManager!.createMulti(polygonOptions);
 
       // Add score labels if zoom is high enough
       if (widget.showScoreLabels &&
@@ -590,146 +559,6 @@ class _HexagonMapState extends State<HexagonMap>
     _polylineManager = null;
     _mapboxMap = null;
     super.dispose();
-  }
-}
-
-/// Widget to display a single hex score label overlay
-class HexOwnerLabel extends StatelessWidget {
-  final HexModel hex;
-  final double zoom;
-
-  const HexOwnerLabel({super.key, required this.hex, required this.zoom});
-
-  @override
-  Widget build(BuildContext context) {
-    // Only show detailed labels at high zoom
-    if (zoom < 13) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: hex.hexColor.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        hex.emoji,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-class _HexDetailSheet extends StatelessWidget {
-  final HexModel hex;
-
-  const _HexDetailSheet({required this.hex});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = hex.hexColor;
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(top: BorderSide(color: color.withOpacity(0.5))),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'HEX #${hex.id.substring(0, 6)}',
-                    style: GoogleFonts.inter(
-                      color: Colors.white54,
-                      fontSize: 12,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    hex.displayName,
-                    style: GoogleFonts.bebasNeue(
-                      fontSize: 24,
-                      color: color,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: color),
-                ),
-                child: Text(
-                  hex.emoji,
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildStatRow('Status', 'Owned', Icons.check_circle),
-          const SizedBox(height: 12),
-          _buildStatRow('Last Flip', 'Just now', Icons.history),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: EnergyHoldButton(
-              label: 'START RUN HERE',
-              icon: Icons.directions_run,
-              baseColor: color.withOpacity(0.2),
-              fillColor: color,
-              iconColor: Colors.white,
-              onComplete: () {
-                Navigator.pop(context);
-                // Navigate to run screen or focus
-              },
-              isHoldRequired: false,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatRow(String label, String value, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.white54, size: 16),
-        const SizedBox(width: 8),
-        Text(label, style: GoogleFonts.inter(color: Colors.white54)),
-        const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
   }
 }
 

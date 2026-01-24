@@ -53,16 +53,10 @@ class _RunningScreenState extends State<RunningScreen>
     });
 
     try {
-      // Determine if runner is purple (Twin Crew)
-      // For now, we simulate this if they are in a crew
       final appState = context.read<AppStateProvider>();
-      final isPurple = appState.currentUser?.crewId != null;
-      final team = appState.userTeam ?? Team.blue; // Default to blue if null
+      final team = appState.userTeam ?? Team.blue;
 
-      await context.read<RunProvider>().startRun(
-        team: team,
-        isPurpleRunner: isPurple,
-      );
+      await context.read<RunProvider>().startRun(team: team);
 
       // Run started - stay on RunningScreen
     } catch (e) {

@@ -118,12 +118,8 @@ class HexDataProvider with ChangeNotifier {
 
   /// Update hex with runner's color
   /// Returns true if the color actually changed (flipped) or first capture this session
-  bool updateHexColor(
-    String hexId,
-    Team runnerTeam, {
-    bool isPurpleRunner = false,
-  }) {
-    final newTeam = isPurpleRunner ? Team.purple : runnerTeam;
+  bool updateHexColor(String hexId, Team runnerTeam) {
+    final newTeam = runnerTeam;
     final existing = _hexCache.get(hexId);
 
     // Check if this hex was already captured this session
@@ -134,7 +130,7 @@ class HexDataProvider with ChangeNotifier {
     }
 
     if (existing != null) {
-      // Hex exists in cache - check if color changes
+      // Hex exists in cache - check if color actually changes (flip)
       if (existing.lastRunnerTeam != newTeam) {
         debugPrint(
           'HEX FLIPPED: $hexId from ${existing.lastRunnerTeam} -> $newTeam',
@@ -145,14 +141,10 @@ class HexDataProvider with ChangeNotifier {
         notifyListeners();
         return true; // Color changed (flipped)
       }
-      // Same team as current owner
-      // Still counts as a "capture" for first visit, but no color change
-      debugPrint(
-        'HEX SAME TEAM: $hexId already $newTeam (first capture this session)',
-      );
+      // Same team as current owner — no color change, no flip
+      debugPrint('HEX SAME TEAM: $hexId already $newTeam (no flip)');
       _capturedHexesThisSession.add(hexId);
-      _capturedHexTeams[hexId] = newTeam;
-      return true; // First capture this session counts for points
+      return false; // No color change = not a flip
     } else {
       // Hex not in cache - create it with the runner's color
       try {

@@ -150,12 +150,10 @@ class LocalStorage implements StorageService {
       final summary = RunSummary.fromMap(map);
       return RunSession(
         id: summary.id,
-        startTime: summary.startTime,
-        endTime: summary.endTime,
+        startTime: summary.date,
         distanceMeters: summary.distanceKm * 1000,
         isActive: false,
         teamAtRun: summary.teamAtRun,
-        isPurpleRunner: summary.isPurpleRunner,
         hexesColored: summary.hexesColored,
       );
     }).toList();
@@ -181,13 +179,11 @@ class LocalStorage implements StorageService {
 
     return RunSession(
       id: summary.id,
-      startTime: summary.startTime,
-      endTime: summary.endTime,
+      startTime: summary.date,
       distanceMeters: summary.distanceKm * 1000,
       route: route,
       isActive: false,
       teamAtRun: summary.teamAtRun,
-      isPurpleRunner: summary.isPurpleRunner,
       hexesColored: summary.hexesColored,
     );
   }

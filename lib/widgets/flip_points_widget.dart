@@ -142,28 +142,22 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   }
 
   void _checkPendingPoints() {
-    if (widget.pointsService.hasPendingPoints) {
-      // Delay to allow widget to build first
+    final newPoints = widget.pointsService.currentPoints;
+    if (newPoints != _displayedPoints) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
-          _animatePendingPoints();
+          _animateToPoints(newPoints);
         }
       });
     }
   }
 
   void _onPointsChanged() {
-    // Check for pending points (settlement animation)
-    if (widget.pointsService.hasPendingPoints && !_isAnimating) {
-      _animatePendingPoints();
-      return;
-    }
-
-    // Check for real-time point additions (hex flips during run)
     final newPoints = widget.pointsService.currentPoints;
     if (newPoints != _displayedPoints && !_isAnimating) {
       _animateToPoints(newPoints);
     }
+    // If animating, do nothing — animation completion will re-check
   }
 
   void _animateToPoints(int newPoints) {
@@ -209,55 +203,16 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
           _displayedPoints = _targetPoints;
           _isAnimating = false;
         });
-      }
-    });
-  }
 
-  void _animatePendingPoints() {
-    if (_isAnimating) return;
-
-    widget.pointsService.startPendingAnimation();
-    _targetPoints = widget.pointsService.totalPoints;
-
-    setState(() {
-      _isAnimating = true;
-    });
-
-    // Show plus indicator
-    _plusController.forward(from: 0);
-
-    // Trigger glow and scale bounce
-    _glowController.forward(from: 0);
-    _scaleController.forward(from: 0);
-
-    // Calculate which digits need to change
-    final oldDigits = _getDigits(_displayedPoints);
-    final newDigits = _getDigits(_targetPoints);
-
-    // Stagger the digit animations from right to left
-    int delay = 0;
-    for (int i = newDigits.length - 1; i >= 0; i--) {
-      final oldDigit = i < oldDigits.length ? oldDigits[i] : 0;
-      final newDigit = newDigits[i];
-
-      if (oldDigit != newDigit || i >= oldDigits.length) {
-        Future.delayed(Duration(milliseconds: delay), () {
-          if (mounted && i < _digitControllers.length) {
-            _digitControllers[i].forward(from: 0);
-          }
-        });
-        delay += 80; // Stagger by 80ms
-      }
-    }
-
-    // Complete animation after all digits have flipped
-    Future.delayed(Duration(milliseconds: delay + 400), () {
-      if (mounted) {
-        setState(() {
-          _displayedPoints = _targetPoints;
-          _isAnimating = false;
-        });
-        widget.pointsService.completePendingAnimation();
+        // Re-check: catch any points that arrived during animation
+        final latestPoints = widget.pointsService.currentPoints;
+        if (latestPoints != _displayedPoints) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && !_isAnimating) {
+              _animateToPoints(latestPoints);
+            }
+          });
+        }
       }
     });
   }

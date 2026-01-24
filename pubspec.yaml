@@ -57,10 +57,11 @@ dependencies:
   # Fonts
   google_fonts: ^6.2.1
 
-  # Firebase
-  firebase_core: ^3.8.1
-  cloud_firestore: ^5.5.1
-  firebase_auth: ^5.3.3
+  # Backend (Auth + Database + Realtime + Storage)
+  supabase_flutter: ^2.0.0
+
+  # Sensors (Anti-spoofing)
+  sensors_plus: ^6.1.1
 
   # Hex Grid & Spatial
   latlong2: ^0.9.0
@@ -69,8 +70,6 @@ dependencies:
   # Animations
   animated_text_kit: ^4.2.2
   shimmer: ^3.0.0
-  image_sequence_animator: ^2.0.0
-  fl_chart: ^1.1.1
 
 
 

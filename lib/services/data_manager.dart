@@ -33,10 +33,7 @@ abstract class DataManager {
   /// Get paginated run history
   /// [limit] - max items per page
   /// [offset] - skip this many items
-  Future<List<RunSummary>> getRunHistory({
-    int limit = 20,
-    int offset = 0,
-  });
+  Future<List<RunSummary>> getRunHistory({int limit = 20, int offset = 0});
 
   /// Get run count (for pagination UI)
   Future<int> getRunCount();
@@ -173,9 +170,11 @@ class InMemoryDataManager implements DataManager {
   Future<List<RunSummary>> getRunsInRange(DateTime start, DateTime end) async {
     _checkInitialized();
     return _runSummaries
-        .where((r) =>
-            r.startTime.isAfter(start.subtract(const Duration(seconds: 1))) &&
-            r.startTime.isBefore(end.add(const Duration(seconds: 1))))
+        .where(
+          (r) =>
+              r.date.isAfter(start.subtract(const Duration(seconds: 1))) &&
+              r.date.isBefore(end.add(const Duration(seconds: 1))),
+        )
         .toList();
   }
 
@@ -184,7 +183,8 @@ class InMemoryDataManager implements DataManager {
     _checkInitialized();
     _routes[runId] = route;
     debugPrint(
-        'DataManager: Saved route for $runId (${route.points.length} points, ${route.sizeKb.toStringAsFixed(1)}KB)');
+      'DataManager: Saved route for $runId (${route.points.length} points, ${route.sizeKb.toStringAsFixed(1)}KB)',
+    );
   }
 
   @override

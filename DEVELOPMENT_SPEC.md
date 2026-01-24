@@ -567,7 +567,7 @@ class UserModel {
 
 ```dart
 class HexModel {
-  final String id;             // H3 hex index (resolution 8)
+  final String id;             // H3 hex index (resolution 9)
   final LatLng center;         // Geographic center
   Team? lastRunnerTeam;        // null = neutral, else team color
 
@@ -721,7 +721,7 @@ CREATE TABLE crews (
 
 -- Hex map (deleted on season reset)
 CREATE TABLE hexes (
-  id TEXT PRIMARY KEY,                       -- H3 index string (resolution 8)
+  id TEXT PRIMARY KEY,                       -- H3 index string (resolution 9)
   last_runner_team TEXT CHECK (last_runner_team IN ('red', 'blue', 'purple'))
   -- NO timestamps, NO runner IDs (privacy + cost)
 );

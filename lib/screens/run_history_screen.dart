@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -48,7 +47,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             );
             final totalPoints = periodRuns.fold(
               0,
-              (sum, run) => sum + run.pointsEarned,
+              (sum, run) => sum + run.hexesColored,
             );
             final runCount = periodRuns.length;
 
@@ -436,119 +435,88 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       }
     }
 
-    // Build BarGroups
-    List<BarChartGroupData> barGroups = [];
+    // Calculate max value for normalization
     double maxY = 0;
-
     for (int i = minX; i <= maxX; i++) {
       final val = buckets[i] ?? 0.0;
       if (val > maxY) maxY = val;
+    }
+    if (maxY == 0) maxY = 5;
 
-      if (period == HistoryPeriod.month && val == 0) continue;
-
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: val,
-              color: val > 0
-                  ? AppTheme.electricBlue
-                  : Colors.white.withOpacity(0.05),
-              width: period == HistoryPeriod.month ? 4 : 14,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(4),
-              ),
-              backDrawRodData: BackgroundBarChartRodData(
-                show: true,
-                toY: maxY == 0 ? 10 : maxY * 1.2,
-                color: Colors.white.withOpacity(0.03),
-              ),
-            ),
-          ],
-        ),
-      );
+    // Build bar entries (show all positions for consistent spacing)
+    final entries = <_BarEntry>[];
+    for (int i = minX; i <= maxX; i++) {
+      final val = buckets[i] ?? 0.0;
+      entries.add(_BarEntry(x: i, value: val, label: _getLabel(i, period)));
     }
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxY == 0 ? 5 : maxY * 1.2,
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) => AppTheme.surfaceColor,
-            tooltipBorder: BorderSide(color: Colors.white.withOpacity(0.1)),
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              return BarTooltipItem(
-                '${rod.toY.toStringAsFixed(1)} km',
-                GoogleFonts.inter(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (val, meta) =>
-                  _getBottomTitles(val, meta, period),
-              reservedSize: 28,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: entries.map((entry) {
+                final fraction = entry.value / maxY;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1),
+                    child: FractionallySizedBox(
+                      heightFactor: fraction.clamp(0.02, 1.0),
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: entry.value > 0
+                              ? AppTheme.electricBlue
+                              : Colors.white.withValues(alpha: 0.05),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxY > 0 ? maxY / 3 : 1,
-          getDrawingHorizontalLine: (value) =>
-              FlLine(color: Colors.white.withOpacity(0.03), strokeWidth: 1),
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: barGroups,
+          const SizedBox(height: 4),
+          Row(
+            children: entries.map((entry) {
+              return Expanded(
+                child: Center(
+                  child: Text(
+                    entry.label,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: Colors.white24,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _getBottomTitles(double value, TitleMeta meta, HistoryPeriod period) {
-    String text = '';
-    final style = GoogleFonts.inter(
-      fontSize: 10,
-      color: Colors.white24,
-      fontWeight: FontWeight.w500,
-    );
-
+  String _getLabel(int value, HistoryPeriod period) {
     if (period == HistoryPeriod.week) {
-      final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
-      text = DateFormat.E().format(date)[0];
+      final date = DateTime.now().subtract(Duration(days: 6 - value));
+      return DateFormat.E().format(date)[0];
     } else if (period == HistoryPeriod.month) {
-      if (value.toInt() % 5 == 0) {
-        text = value.toInt().toString();
-      }
+      // Show labels at day 1, 7, 14, 21, 28
+      return (value == 1 || value % 7 == 0) ? '$value' : '';
     } else {
       if (value >= 1 && value <= 12) {
-        final d = DateTime(2024, value.toInt());
-        text = DateFormat.MMM().format(d)[0];
+        final d = DateTime(2024, value);
+        return DateFormat.MMM().format(d)[0];
       }
+      return '';
     }
-
-    return SideTitleWidget(
-      meta: meta,
-      child: Text(text, style: style),
-    );
   }
 
   Widget _buildRunTile(RunSession run) {
@@ -638,7 +606,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     Icon(Icons.speed_rounded, size: 12, color: Colors.white30),
                     const SizedBox(width: 4),
                     Text(
-                      _formatPace(run.averagePaceMinPerKm),
+                      _formatPace(run.paceMinPerKm),
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         color: Colors.white38,
@@ -651,7 +619,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           ),
 
           // Points
-          if (run.pointsEarned > 0)
+          if (run.hexesColored > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -665,7 +633,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '+${run.pointsEarned}',
+                    '+${run.hexesColored}',
                     style: GoogleFonts.sora(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -757,4 +725,13 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       }
     }).toList();
   }
+}
+
+/// Simple data class for bar chart entries.
+class _BarEntry {
+  final int x;
+  final double value;
+  final String label;
+
+  const _BarEntry({required this.x, required this.value, required this.label});
 }

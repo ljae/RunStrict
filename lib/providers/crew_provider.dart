@@ -3,18 +3,32 @@ import '../models/crew_model.dart';
 import '../models/team.dart';
 import '../models/user_model.dart';
 
-/// Provider for crew management
-///
-/// Stats (weeklyDistance, hexesClaimed, wins, losses) are calculated
-/// on-demand from runs/ and dailyStats/ collections - not stored locally.
+class CrewMemberInfo {
+  final String id;
+  final String name;
+  final String avatar;
+  final int flipCount;
+  final Team team;
+  final bool isRunning;
+
+  const CrewMemberInfo({
+    required this.id,
+    required this.name,
+    required this.avatar,
+    this.flipCount = 0,
+    required this.team,
+    this.isRunning = false,
+  });
+}
+
 class CrewProvider with ChangeNotifier {
   CrewModel? _myCrew;
-  List<CrewMember> _myCrewMembers = [];
+  List<CrewMemberInfo> _myCrewMembers = [];
   List<CrewModel> _availableCrews = [];
   bool _isLoading = false;
 
   CrewModel? get myCrew => _myCrew;
-  List<CrewMember> get myCrewMembers => List.unmodifiable(_myCrewMembers);
+  List<CrewMemberInfo> get myCrewMembers => List.unmodifiable(_myCrewMembers);
   List<CrewModel> get availableCrews => List.unmodifiable(_availableCrews);
   bool get isLoading => _isLoading;
   bool get hasCrew => _myCrew != null;
@@ -24,7 +38,7 @@ class CrewProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void setMyCrewMembers(List<CrewMember> members) {
+  void setMyCrewMembers(List<CrewMemberInfo> members) {
     _myCrewMembers = members;
     notifyListeners();
   }
@@ -33,7 +47,6 @@ class CrewProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    // Simulate network delay
     await Future.delayed(const Duration(seconds: 1));
 
     final newCrew = CrewModel(
@@ -41,16 +54,14 @@ class CrewProvider with ChangeNotifier {
       name: name,
       team: team,
       memberIds: [user.id],
-      createdAt: DateTime.now(),
     );
 
     _myCrew = newCrew;
     _myCrewMembers = [
-      CrewMember(
+      CrewMemberInfo(
         id: user.id,
         name: user.name,
         avatar: user.avatar,
-        distance: 0, // Calculated from dailyStats on-demand
         team: user.team,
       ),
     ];
@@ -67,25 +78,20 @@ class CrewProvider with ChangeNotifier {
 
     try {
       final crew = _availableCrews.firstWhere((c) => c.id == crewId);
-
-      // Update crew with new member
       _myCrew = crew.addMember(user.id);
-
-      // In a real app, we'd fetch actual members with their stats
       final mockMembers = _generateMockMembers(
         crew.team,
         count: crew.memberIds.length,
       );
       _myCrewMembers = [
         ...mockMembers,
-        CrewMember(
+        CrewMemberInfo(
           id: user.id,
           name: user.name,
           avatar: user.avatar,
-          distance: 0, // Calculated from dailyStats on-demand
           team: user.team,
         ),
-      ]..sort((a, b) => b.distance.compareTo(a.distance));
+      ]..sort((a, b) => b.flipCount.compareTo(a.flipCount));
 
       _isLoading = false;
       notifyListeners();
@@ -127,12 +133,10 @@ class CrewProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Mock data for demonstration
   void loadMockData(Team userTeam, {bool hasCrew = true}) {
     _isLoading = true;
     notifyListeners();
 
-    // Simulate loading delay
     Future.delayed(const Duration(milliseconds: 500), () {
       if (hasCrew) {
         _myCrew = CrewModel(
@@ -144,7 +148,7 @@ class CrewProvider with ChangeNotifier {
         _myCrewMembers = _generateMockMembers(userTeam);
       } else {
         _myCrew = null;
-        fetchAvailableCrews(userTeam); // Load suggestions
+        fetchAvailableCrews(userTeam);
       }
 
       _isLoading = false;
@@ -152,7 +156,7 @@ class CrewProvider with ChangeNotifier {
     });
   }
 
-  List<CrewMember> _generateMockMembers(Team team, {int count = 12}) {
+  List<CrewMemberInfo> _generateMockMembers(Team team, {int count = 12}) {
     final names = [
       '새벽러너',
       '한강달리미',
@@ -190,19 +194,17 @@ class CrewProvider with ChangeNotifier {
       '👣',
     ];
 
-    // Ensure we don't go out of bounds
     final safeCount = count.clamp(0, names.length);
 
     return List.generate(
       safeCount,
-      (i) => CrewMember(
+      (i) => CrewMemberInfo(
         id: 'member_$i',
         name: names[i],
         avatar: avatars[i],
-        distance: (10 + (i * 2.5)) % 50, // Pseudo-random distance
-        flipCount: (5 + i * 2) % 20, // Mock flip count
+        flipCount: (5 + i * 2) % 20,
         team: team,
       ),
-    )..sort((a, b) => b.flipCount.compareTo(a.flipCount)); // Sort by flip count
+    )..sort((a, b) => b.flipCount.compareTo(a.flipCount));
   }
 }

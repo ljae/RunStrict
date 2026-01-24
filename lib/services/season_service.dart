@@ -2,16 +2,23 @@
 ///
 /// The season runs for exactly 280 days (gestation period metaphor).
 /// On D-Day (day 0), all territories and scores are reset (The Void).
+/// Server timezone: GMT+2 (Israel Standard Time).
 class SeasonService {
   /// Total duration of a season in days
   static const int seasonDurationDays = 280;
 
+  /// Server timezone offset (GMT+2)
+  static const int serverTimezoneOffsetHours = 2;
+
+  /// Current season number (increments each season)
+  final int seasonNumber;
+
   /// The start date of the current season.
-  /// In production, this would come from Firestore or remote config.
+  /// In production, this would come from Supabase or remote config.
   final DateTime seasonStartDate;
 
-  SeasonService({DateTime? startDate})
-      : seasonStartDate = startDate ?? _defaultSeasonStart();
+  SeasonService({DateTime? startDate, this.seasonNumber = 1})
+    : seasonStartDate = startDate ?? _defaultSeasonStart();
 
   /// Default season start for development/testing.
   /// Set to a date that gives us time to test various D-day states.
@@ -94,8 +101,27 @@ class SeasonService {
     return '$remaining';
   }
 
+  /// Season label (e.g., "S1", "S2").
+  String get seasonLabel => 'S$seasonNumber';
+
+  /// Current server time in GMT+2 as DateTime.
+  DateTime get serverTime {
+    final utc = DateTime.now().toUtc();
+    return utc.add(const Duration(hours: serverTimezoneOffsetHours));
+  }
+
+  /// Server time displayed as countdown minutes until midnight (daily reset).
+  /// e.g., 14:32 GMT+2 → "-0568" (1440 - 872 = 568 minutes until reset).
+  /// Counts DOWN to midnight like D-day counts down to season end.
+  String get serverTimeDisplay {
+    final time = serverTime;
+    final minutesSinceMidnight = time.hour * 60 + time.minute;
+    final minutesUntilReset = 1440 - minutesSinceMidnight;
+    return '-${minutesUntilReset.toString().padLeft(4, '0')}';
+  }
+
   @override
   String toString() {
-    return 'SeasonService(start: $seasonStartDate, remaining: $daysRemaining days, urgency: ${(urgencyLevel * 100).toStringAsFixed(0)}%)';
+    return 'SeasonService(season: $seasonNumber, start: $seasonStartDate, remaining: $daysRemaining days, urgency: ${(urgencyLevel * 100).toStringAsFixed(0)}%)';
   }
 }

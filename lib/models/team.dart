@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 /// - Red/Blue: Starting teams (compete for territory)
 /// - Purple: Mid-season chaos mechanic (unlocks D-140)
 enum Team {
-  red,   // Display: "FLAME" - Passion & Energy
-  blue,  // Display: "WAVE" - Trust & Harmony
+  red, // Display: "FLAME" - Passion & Energy
+  blue, // Display: "WAVE" - Trust & Harmony
   purple; // Display: "CHAOS" - The Betrayer's Path (D-140 unlock)
 
   String get displayName {
@@ -38,18 +38,6 @@ enum Team {
         return 'Trust & Harmony';
       case Team.purple:
         return "The Betrayer's Path";
-    }
-  }
-
-  /// Point multiplier for scoring
-  /// Purple Crew gets 2x multiplier (high risk, high return)
-  int get multiplier {
-    switch (this) {
-      case Team.red:
-      case Team.blue:
-        return 1;
-      case Team.purple:
-        return 2;
     }
   }
 

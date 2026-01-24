@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../models/team.dart';
 
 /// Impact tier enum with visual feedback properties
 enum ImpactTier {
@@ -247,15 +246,13 @@ class RunningScoreState {
   final double totalDistanceKm;
   final double currentPaceMinPerKm;
   final int crewMembersRunning;
-  final bool isPurpleRunner;
   final String? currentHexId;
-  final int flipCount; // Track flips in this session
+  final int flipCount;
 
   RunningScoreState({
     this.totalDistanceKm = 0,
     this.currentPaceMinPerKm = 7.0,
     this.crewMembersRunning = 1,
-    this.isPurpleRunner = false,
     this.currentHexId,
     this.flipCount = 0,
   });
@@ -274,7 +271,6 @@ class RunningScoreState {
     double? totalDistanceKm,
     double? currentPaceMinPerKm,
     int? crewMembersRunning,
-    bool? isPurpleRunner,
     String? currentHexId,
     int? flipCount,
   }) {
@@ -282,14 +278,12 @@ class RunningScoreState {
       totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
       currentPaceMinPerKm: currentPaceMinPerKm ?? this.currentPaceMinPerKm,
       crewMembersRunning: crewMembersRunning ?? this.crewMembersRunning,
-      isPurpleRunner: isPurpleRunner ?? this.isPurpleRunner,
       currentHexId: currentHexId ?? this.currentHexId,
       flipCount: flipCount ?? this.flipCount,
     );
   }
 
-  /// Reset state (when run stops)
   RunningScoreState reset() {
-    return RunningScoreState(isPurpleRunner: isPurpleRunner);
+    return RunningScoreState();
   }
 }

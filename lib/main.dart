@@ -6,6 +6,7 @@ import 'theme/app_theme.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/run_provider.dart';
 import 'providers/crew_provider.dart';
+import 'providers/hex_data_provider.dart';
 import 'screens/team_selection_screen.dart';
 import 'screens/home_screen.dart';
 import 'config/mapbox_config.dart';
@@ -14,9 +15,13 @@ import 'services/location_service.dart';
 import 'services/run_tracker.dart';
 import 'services/in_memory_storage_service.dart';
 import 'services/points_service.dart';
+import 'services/supabase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase
+  await SupabaseService.initialize();
 
   // Initialize HexService
   await HexService().initialize();
@@ -45,11 +50,8 @@ class RunnerApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppStateProvider()),
-        ChangeNotifierProvider(
-          create: (_) => PointsService(
-            initialPoints: 0, // Start fresh, or load from storage
-          ),
-        ),
+        ChangeNotifierProvider(create: (_) => HexDataProvider()),
+        ChangeNotifierProvider(create: (_) => PointsService(initialPoints: 0)),
         ChangeNotifierProxyProvider<PointsService, RunProvider>(
           create: (context) {
             final provider = RunProvider(

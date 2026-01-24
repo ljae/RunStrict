@@ -1,18 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/season_service.dart';
 import '../theme/app_theme.dart';
 
-/// A minimal, professional D-day countdown widget for the MapScreen.
+/// Compact season status badge for AppBar.
 ///
-/// Displays remaining days as "D-280" through "D-1", then "D-DAY" on the final day.
-/// Features a subtle pulsing animation that intensifies as D-Day approaches.
+/// Displays three data points in minimal monospace style:
+///   S1 · D-280 · 14:32
+/// - Season number (muted)
+/// - D-day countdown (accent colored when urgent)
+/// - Server time GMT+2 in 24h format (muted, updates every minute)
 class SeasonCountdownWidget extends StatefulWidget {
-  /// The season service providing countdown data.
-  /// If null, creates a default SeasonService.
   final SeasonService? seasonService;
-
-  /// Whether to show the compact version (just the badge).
   final bool compact;
 
   const SeasonCountdownWidget({
@@ -28,127 +28,108 @@ class SeasonCountdownWidget extends StatefulWidget {
 class _SeasonCountdownWidgetState extends State<SeasonCountdownWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
-  late final Animation<double> _pulseAnimation;
   late SeasonService _seasonService;
+  Timer? _minuteTimer;
+  String _currentTime = '';
 
   @override
   void initState() {
     super.initState();
     _seasonService = widget.seasonService ?? SeasonService();
+    _currentTime = _seasonService.serverTimeDisplay;
 
-    // Pulse animation - speed and intensity based on urgency
+    // Pulse animation for urgency
     _pulseController = AnimationController(
       vsync: this,
       duration: _getPulseDuration(),
     );
 
-    _pulseAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
-
-    // Only animate if there's urgency
     if (_seasonService.urgencyLevel > 0.3) {
       _pulseController.repeat(reverse: true);
     }
+
+    // Update time display every 30 seconds
+    _minuteTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {
+          _currentTime = _seasonService.serverTimeDisplay;
+        });
+      }
+    });
   }
 
   Duration _getPulseDuration() {
     final urgency = _seasonService.urgencyLevel;
     if (urgency >= 0.8) return const Duration(milliseconds: 800);
     if (urgency >= 0.5) return const Duration(milliseconds: 1200);
-    if (urgency >= 0.3) return const Duration(milliseconds: 2000);
-    return const Duration(milliseconds: 3000);
+    return const Duration(milliseconds: 2000);
   }
 
   @override
   void dispose() {
+    _minuteTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
 
-  /// Get the accent color based on urgency level.
   Color _getAccentColor(double urgency) {
-    if (urgency >= 0.8) {
-      // Critical: Red
-      return AppTheme.athleticRed;
-    } else if (urgency >= 0.5) {
-      // Warning: Amber
-      return const Color(0xFFF59E0B);
-    } else if (urgency >= 0.3) {
-      // Caution: Soft amber
-      return const Color(0xFFFBBF24);
-    }
-    // Calm: Neutral gray
+    if (urgency >= 0.8) return AppTheme.athleticRed;
+    if (urgency >= 0.5) return const Color(0xFFF59E0B);
+    if (urgency >= 0.3) return const Color(0xFFFBBF24);
     return AppTheme.textSecondary;
   }
 
   @override
   Widget build(BuildContext context) {
-    final displayText = _seasonService.displayString;
     final urgency = _seasonService.urgencyLevel;
     final accentColor = _getAccentColor(urgency);
-    final isDDay = _seasonService.isDDay;
-    final isVoid = _seasonService.isSeasonEnded;
 
     return AnimatedBuilder(
-      animation: _pulseAnimation,
+      animation: _pulseController,
       builder: (context, child) {
-        final pulseValue = _pulseAnimation.value;
-        final glowIntensity = urgency * 0.4 * pulseValue;
-        final borderOpacity = 0.15 + (urgency * 0.3 * pulseValue);
+        final pulseValue = _pulseController.value;
+        final borderOpacity = urgency > 0.3
+            ? 0.15 + (urgency * 0.3 * pulseValue)
+            : 0.08;
 
         return Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: widget.compact ? 10 : 14,
-            vertical: widget.compact ? 6 : 8,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            // Glassmorphic background
-            color: AppTheme.surfaceColor.withOpacity(0.85),
-            borderRadius: BorderRadius.circular(widget.compact ? 8 : 10),
+            color: AppTheme.surfaceColor.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: accentColor.withOpacity(borderOpacity),
-              width: isDDay || isVoid ? 1.5 : 1.0,
+              color: urgency > 0.3
+                  ? accentColor.withValues(alpha: borderOpacity)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: 1.0,
             ),
-            boxShadow: [
-              // Subtle drop shadow
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-              // Glow effect (only when urgent)
-              if (urgency > 0.3)
-                BoxShadow(
-                  color: accentColor.withOpacity(glowIntensity),
-                  blurRadius: 20,
-                  spreadRadius: -2,
-                ),
-            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Subtle indicator dot
-              if (!widget.compact) ...[
-                _UrgencyIndicator(
-                  urgency: urgency,
-                  color: accentColor,
-                  pulseValue: pulseValue,
+              // Season label (S1)
+              Text(
+                _seasonService.seasonLabel,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textMuted,
+                  letterSpacing: 0,
                 ),
-                const SizedBox(width: 8),
-              ],
-
-              // Main countdown text
-              _CountdownText(
-                text: displayText,
-                color: accentColor,
-                urgency: urgency,
-                compact: widget.compact,
+              ),
+              _dot(),
+              // D-day countdown
+              _buildDDay(accentColor, urgency),
+              _dot(),
+              // Server time countdown (minutes until midnight GMT+2)
+              Text(
+                _currentTime,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: -0.3,
+                ),
               ),
             ],
           ),
@@ -156,110 +137,69 @@ class _SeasonCountdownWidgetState extends State<SeasonCountdownWidget>
       },
     );
   }
-}
 
-/// Small pulsing dot indicator showing urgency level.
-class _UrgencyIndicator extends StatelessWidget {
-  final double urgency;
-  final Color color;
-  final double pulseValue;
-
-  const _UrgencyIndicator({
-    required this.urgency,
-    required this.color,
-    required this.pulseValue,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final size = 6.0 + (urgency * 2 * pulseValue);
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color.withOpacity(0.8 + (0.2 * pulseValue)),
-        boxShadow: urgency > 0.5
-            ? [
-                BoxShadow(
-                  color: color.withOpacity(0.5 * pulseValue),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
+  Widget _dot() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Container(
+        width: 2,
+        height: 2,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppTheme.textMuted.withValues(alpha: 0.5),
+        ),
       ),
     );
   }
-}
 
-/// The main countdown text display.
-class _CountdownText extends StatelessWidget {
-  final String text;
-  final Color color;
-  final double urgency;
-  final bool compact;
+  Widget _buildDDay(Color accentColor, double urgency) {
+    final remaining = _seasonService.daysRemaining;
+    final isDDay = _seasonService.isDDay;
+    final isVoid = _seasonService.isSeasonEnded;
 
-  const _CountdownText({
-    required this.text,
-    required this.color,
-    required this.urgency,
-    required this.compact,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Parse the display text to style "D-" and number separately
-    final isDDay = text == 'D-DAY';
-    final isVoid = text == 'VOID';
-
-    if (isDDay || isVoid) {
-      // Special state: full emphasis
+    if (isDDay) {
       return Text(
-        text,
+        'D-DAY',
         style: GoogleFonts.jetBrainsMono(
-          fontSize: compact ? 12 : 14,
+          fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: color,
-          letterSpacing: 1.5,
+          color: accentColor,
+          letterSpacing: 0.5,
         ),
       );
     }
 
-    // Normal countdown: "D-" prefix + number
-    final parts = text.split('-');
-    if (parts.length != 2) {
-      return Text(text,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: compact ? 12 : 14,
-            color: color,
-          ));
+    if (isVoid) {
+      return Text(
+        'VOID',
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: accentColor,
+          letterSpacing: 0.5,
+        ),
+      );
     }
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
       children: [
-        // "D-" prefix (muted)
         Text(
           'D-',
           style: GoogleFonts.jetBrainsMono(
-            fontSize: compact ? 10 : 11,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textSecondary.withOpacity(0.7),
-            letterSpacing: 0.5,
+            fontSize: 9,
+            fontWeight: FontWeight.w400,
+            color: AppTheme.textMuted,
+            letterSpacing: 0,
           ),
         ),
-        // Number (emphasized)
         Text(
-          parts[1],
+          '$remaining',
           style: GoogleFonts.jetBrainsMono(
-            fontSize: compact ? 13 : 15,
+            fontSize: 10,
             fontWeight: FontWeight.w600,
-            color: urgency > 0.3 ? color : AppTheme.textPrimary,
-            letterSpacing: -0.5,
+            color: urgency > 0.3 ? accentColor : AppTheme.textPrimary,
+            letterSpacing: -0.3,
           ),
         ),
       ],
@@ -327,10 +267,7 @@ class _SeasonProgressBar extends StatelessWidget {
   final double progress;
   final Color accentColor;
 
-  const _SeasonProgressBar({
-    required this.progress,
-    required this.accentColor,
-  });
+  const _SeasonProgressBar({required this.progress, required this.accentColor});
 
   @override
   Widget build(BuildContext context) {
@@ -347,10 +284,7 @@ class _SeasonProgressBar extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                AppTheme.electricBlue,
-                accentColor,
-              ],
+              colors: [AppTheme.electricBlue, accentColor],
             ),
             borderRadius: BorderRadius.circular(2),
           ),

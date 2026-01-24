@@ -7,8 +7,8 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hexagon_map.dart';
 import '../models/hex_model.dart';
+import '../models/team.dart';
 import '../models/location_point.dart';
-import '../widgets/energy_hold_button.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/hex_data_provider.dart';
 import '../providers/run_provider.dart';
@@ -192,109 +192,85 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundStart,
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Expanded Map Area with Overlays
-                Expanded(
-                  child: Consumer<RunProvider>(
-                    builder: (context, runProvider, child) {
-                      // Get route from active run if in ZONE view
-                      final route = _showUserLocation
-                          ? runProvider.routePoints
-                          : null;
+      body: Consumer<RunProvider>(
+        builder: (context, runProvider, child) {
+          // Get route from active run if in ZONE view
+          final route = _showUserLocation ? runProvider.routePoints : null;
 
-                      return Stack(
-                        children: [
-                          // Full size map container
-                          Positioned.fill(
-                            child: _HexMapCard(
-                              isFullScreen: true,
-                              onMapCreated: _onMapCreated,
-                              showUserLocation: _showUserLocation,
-                              onStatsUpdated: _onStatsUpdated,
-                              route: route,
-                            ),
-                          ),
+          return Stack(
+            children: [
+              // Full-bleed map (edge-to-edge like RunningScreen)
+              Positioned.fill(
+                child: _HexMapCard(
+                  onMapCreated: _onMapCreated,
+                  showUserLocation: _showUserLocation,
+                  onStatsUpdated: _onStatsUpdated,
+                  route: route,
+                ),
+              ),
 
-                          // Top Right Controls
-                          Positioned(
-                            top: 16,
-                            right: 16,
-                            child: Column(
-                              children: [
-                                // Location FAB (only in ZONE view)
-                                if (_showUserLocation)
-                                  FloatingActionButton(
-                                    mini: true,
-                                    heroTag: 'location_fab',
-                                    backgroundColor: AppTheme.surfaceColor
-                                        .withValues(alpha: 0.9),
-                                    foregroundColor: AppTheme.electricBlue,
-                                    onPressed: _moveToUserLocation,
-                                    child: const Icon(Icons.my_location),
-                                  ),
-                              ],
-                            ),
-                          ),
-
-                          // Stats Overlay for CITY and ALL views
-                          if (!_showUserLocation && _hexStats != null)
-                            Positioned(
-                              top: 16,
-                              left: 16,
-                              right: 16,
-                              child: _TeamStatsOverlay(stats: _hexStats!),
-                            ),
-
-                          // Bottom Overlay Controls
-                          Positioned(
-                            bottom: 16,
-                            left: 16,
-                            right: 16,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Only show CTA card in ZONE view
-                                if (_showUserLocation) ...[
-                                  const _CallToActionCard(),
-                                  const SizedBox(height: 16),
-                                ],
-                                _ZoomLevelSelector(
-                                  selectedIndex: _selectedZoomIndex,
-                                  onChanged: _onZoomChanged,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+              // Location FAB (upper right, below AppBar)
+              if (_showUserLocation)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 76,
+                  right: 16,
+                  child: FloatingActionButton(
+                    mini: true,
+                    heroTag: 'location_fab',
+                    backgroundColor: AppTheme.surfaceColor.withValues(
+                      alpha: 0.9,
+                    ),
+                    foregroundColor: AppTheme.electricBlue,
+                    onPressed: _moveToUserLocation,
+                    child: const Icon(Icons.my_location),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
+
+              // Stats Overlay for CITY and ALL views
+              if (!_showUserLocation && _hexStats != null)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 76,
+                  left: 16,
+                  right: 16,
+                  child: _TeamStatsOverlay(stats: _hexStats!),
+                ),
+
+              // Bottom Controls (right above bottom nav bar)
+              Positioned(
+                bottom: 12,
+                left: 16,
+                right: 16,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // CTA card (only in ZONE view)
+                    if (_showUserLocation) ...[
+                      const _CallToActionCard(),
+                      const SizedBox(height: 10),
+                    ],
+                    // Zoom level selector
+                    _ZoomLevelSelector(
+                      selectedIndex: _selectedZoomIndex,
+                      onChanged: _onZoomChanged,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
 class _HexMapCard extends StatelessWidget {
-  final bool isFullScreen;
   final Function(mapbox.MapboxMap) onMapCreated;
   final bool showUserLocation;
   final Function(HexAggregatedStats)? onStatsUpdated;
   final List<LocationPoint>? route;
 
   const _HexMapCard({
-    this.isFullScreen = false,
     required this.onMapCreated,
     this.showUserLocation = true,
     this.onStatsUpdated,
@@ -307,82 +283,15 @@ class _HexMapCard extends StatelessWidget {
     final isRedTeam = appState.userTeam?.name == 'red';
     final teamColor = isRedTeam ? AppTheme.athleticRed : AppTheme.electricBlue;
 
-    return Container(
-      width: double.infinity,
-      padding: isFullScreen ? EdgeInsets.zero : const EdgeInsets.all(4),
-      decoration: AppTheme.meshDecoration().copyWith(
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          children: [
-            // Real Hexagon Map
-            Positioned.fill(
-              child: HexagonMap(
-                initialCenter: null,
-                showScoreLabels: false,
-                teamColor: teamColor,
-                showUserLocation: showUserLocation,
-                onMapCreated: onMapCreated,
-                onScoresUpdated: onStatsUpdated,
-                route: route,
-                onHexTapped: (hexId, hex) {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => _HexDetailSheet(hex: hex),
-                  );
-                },
-              ),
-            ),
-
-            // Header badge (only in user location mode)
-            if (showUserLocation)
-              IgnorePointer(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surfaceColor.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.08),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.hexagon_outlined,
-                              color: AppTheme.textPrimary,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'HEX MAP',
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+    return HexagonMap(
+      initialCenter: null,
+      showScoreLabels: false,
+      teamColor: teamColor,
+      userTeam: appState.userTeam,
+      showUserLocation: showUserLocation,
+      onMapCreated: onMapCreated,
+      onScoresUpdated: onStatsUpdated,
+      route: route,
     );
   }
 }
@@ -703,116 +612,6 @@ class _CallToActionCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _HexDetailSheet extends StatelessWidget {
-  final HexModel hex;
-
-  const _HexDetailSheet({required this.hex});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = hex.hexColor; // Use getter
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(top: BorderSide(color: color.withOpacity(0.5))),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'HEX #${hex.id.substring(0, 6)}',
-                    style: GoogleFonts.inter(
-                      color: Colors.white54,
-                      fontSize: 12,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    hex.displayName, // Use display name
-                    style: GoogleFonts.bebasNeue(
-                      fontSize: 24,
-                      color: color,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: color),
-                ),
-                child: Text(
-                  hex.emoji,
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildStatRow('Status', 'Owned', Icons.check_circle),
-          const SizedBox(height: 12),
-          _buildStatRow('Last Flip', 'Just now', Icons.history),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: EnergyHoldButton(
-              // label: 'START RUN HERE',
-              icon: Icons.directions_run,
-              baseColor: color.withOpacity(0.2),
-              fillColor: color,
-              iconColor: Colors.white,
-              onComplete: () {
-                Navigator.pop(context);
-                // Navigate to run screen or focus
-              },
-              isHoldRequired: false,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatRow(String label, String value, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.white54, size: 16),
-        const SizedBox(width: 8),
-        Text(label, style: GoogleFonts.inter(color: Colors.white54)),
-        const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

@@ -8,9 +8,7 @@ import '../models/team.dart';
 import '../services/hex_service.dart';
 import '../services/running_score_service.dart';
 
-/// Callback for hex capture events. Returns true if the hex was FLIPPED.
-typedef HexCaptureCallback =
-    bool Function(String hexId, Team runnerTeam, bool isPurpleRunner);
+typedef HexCaptureCallback = bool Function(String hexId, Team runnerTeam);
 
 /// Callback for tier change events
 typedef TierChangeCallback =
@@ -30,8 +28,8 @@ class RunTracker {
       ? 5000.0
       : 1000.0; // Anti-spoofing: max jump
 
-  // Hex resolution for territory tracking (resolution 9 for neighborhood level)
-  // IMPORTANT: Must match hexagon_map.dart and running_screen.dart
+  // Must match HexagonMap._fixedResolution (9) so captured hex IDs
+  // correspond to rendered hex IDs on the map.
   static const int _hexResolution = 9;
   // Distance required to trigger a capture check within a hex
   static const double _captureCheckDistanceMeters = 20.0;
@@ -45,7 +43,6 @@ class RunTracker {
   HexCaptureCallback? _onHexCapture;
   TierChangeCallback? _onTierChange;
   Team? _runnerTeam;
-  bool _isPurpleRunner = false;
   int _crewMembersCoRunning = 1;
   ImpactTier _currentTier = ImpactTier.starter;
   int _maxImpactTierIndex = 0;
@@ -59,9 +56,8 @@ class RunTracker {
   /// Get current running score state
   RunningScoreState get scoreState => RunningScoreState(
     totalDistanceKm: (_currentRun?.distanceMeters ?? 0) / 1000,
-    currentPaceMinPerKm: _currentRun?.averagePaceMinPerKm ?? 7.0,
+    currentPaceMinPerKm: _currentRun?.paceMinPerKm ?? 7.0,
     crewMembersRunning: _crewMembersCoRunning,
-    isPurpleRunner: _isPurpleRunner,
     currentHexId: _currentRun?.currentHexId,
     flipCount: _currentRun?.hexesColored ?? 0,
   );
@@ -76,13 +72,8 @@ class RunTracker {
   }
 
   /// Set runner context for scoring
-  void setRunnerContext({
-    required Team team,
-    bool isPurpleRunner = false,
-    int crewMembersCoRunning = 1,
-  }) {
+  void setRunnerContext({required Team team, int crewMembersCoRunning = 1}) {
     _runnerTeam = team;
-    _isPurpleRunner = isPurpleRunner;
     _crewMembersCoRunning = crewMembersCoRunning;
   }
 
@@ -91,19 +82,15 @@ class RunTracker {
     Stream<LocationPoint> locationStream,
     String runId, {
     Team? team,
-    bool isPurpleRunner = false,
     int crewMembersCoRunning = 1,
   }) async {
     if (_currentRun != null) {
       throw StateError('A run is already in progress');
     }
 
-    // Ensure hex service is initialized
     await _hexService.initialize();
 
-    // Set runner context
     _runnerTeam = team;
-    _isPurpleRunner = isPurpleRunner;
     _crewMembersCoRunning = crewMembersCoRunning;
     _currentTier = ImpactTier.starter;
     _maxImpactTierIndex = 0;
@@ -114,7 +101,6 @@ class RunTracker {
       distanceMeters: 0,
       isActive: true,
       teamAtRun: team ?? Team.blue,
-      isPurpleRunner: isPurpleRunner,
       hexesColored: 0,
     );
 
@@ -146,12 +132,10 @@ class RunTracker {
         debugPrint(
           'First point: attempting capture of starting hex $currentHexId',
         );
-        bool flipped =
-            _onHexCapture?.call(currentHexId, _runnerTeam!, _isPurpleRunner) ??
-            false;
+        bool flipped = _onHexCapture?.call(currentHexId, _runnerTeam!) ?? false;
 
         if (flipped) {
-          _currentRun!.recordFlip();
+          _currentRun!.recordFlip(currentHexId);
           debugPrint(
             'STARTING HEX CAPTURED! hexId=$currentHexId, '
             'Total flips: ${_currentRun!.hexesColored}',
@@ -196,7 +180,7 @@ class RunTracker {
       debugPrint('Hex transition: $previousHexId -> $currentHexId');
 
       if (_runnerTeam != null) {
-        final pace = _currentRun!.averagePaceMinPerKm;
+        final pace = _currentRun!.paceMinPerKm;
         final canCapture = RunningScoreService.canCapture(pace);
         debugPrint(
           'Hex ENTRY capture check: hexId=$currentHexId, '
@@ -205,15 +189,10 @@ class RunTracker {
 
         if (canCapture) {
           bool flipped =
-              _onHexCapture?.call(
-                currentHexId,
-                _runnerTeam!,
-                _isPurpleRunner,
-              ) ??
-              false;
+              _onHexCapture?.call(currentHexId, _runnerTeam!) ?? false;
 
           if (flipped) {
-            _currentRun!.recordFlip();
+            _currentRun!.recordFlip(currentHexId);
             debugPrint(
               'HEX FLIPPED ON ENTRY! '
               'Total flips: ${_currentRun!.hexesColored}',
@@ -231,20 +210,15 @@ class RunTracker {
       // Check for capture every 20m while staying in the same hex
       if (_runnerTeam != null &&
           _currentRun!.distanceInCurrentHex >= _captureCheckDistanceMeters) {
-        final pace = _currentRun!.averagePaceMinPerKm;
+        final pace = _currentRun!.paceMinPerKm;
         final canCapture = RunningScoreService.canCapture(pace);
 
         if (canCapture) {
           bool flipped =
-              _onHexCapture?.call(
-                currentHexId,
-                _runnerTeam!,
-                _isPurpleRunner,
-              ) ??
-              false;
+              _onHexCapture?.call(currentHexId, _runnerTeam!) ?? false;
 
           if (flipped) {
-            _currentRun!.recordFlip();
+            _currentRun!.recordFlip(currentHexId);
             debugPrint(
               'HEX FLIPPED ON STAY! '
               'Total flips: ${_currentRun!.hexesColored}',

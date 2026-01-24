@@ -13,6 +13,10 @@ class AppTheme {
   static const Color electricBlue = Color(0xFF008DFF); // Logo Blue
   static const Color electricBlueDeep = Color(0xFF0070CC); // Deeper variant
 
+  // RunStrict Purple - CHAOS team (unlocks D-140)
+  static const Color chaosPurple = Color(0xFF8B5CF6); // Purple team
+  static const Color chaosPurpleDeep = Color(0xFF7C3AED); // Deeper variant
+
   // ---------------------------------------------------------------------------
   // ANIMATION CURVES (Modern, Smooth Transitions)
   // ---------------------------------------------------------------------------
@@ -84,38 +88,38 @@ class AppTheme {
         onSurface: textPrimary,
       ),
 
-      // Typography - Clean & Modern
+      // Typography - Bebas Neue for headers, Sora for body
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.sora(
+        displayLarge: GoogleFonts.bebasNeue(
           fontSize: 57,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: textPrimary,
-          letterSpacing: -1.0,
+          letterSpacing: 1.0,
         ),
-        displayMedium: GoogleFonts.sora(
+        displayMedium: GoogleFonts.bebasNeue(
           fontSize: 45,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: textPrimary,
-          letterSpacing: -0.5,
+          letterSpacing: 0.5,
         ),
-        displaySmall: GoogleFonts.sora(
+        displaySmall: GoogleFonts.bebasNeue(
           fontSize: 36,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w400,
           color: textPrimary,
         ),
-        headlineLarge: GoogleFonts.sora(
+        headlineLarge: GoogleFonts.bebasNeue(
           fontSize: 32,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w400,
           color: textPrimary,
         ),
-        headlineMedium: GoogleFonts.sora(
+        headlineMedium: GoogleFonts.bebasNeue(
           fontSize: 28,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w400,
           color: textPrimary,
         ),
-        headlineSmall: GoogleFonts.sora(
+        headlineSmall: GoogleFonts.bebasNeue(
           fontSize: 24,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w400,
           color: textPrimary,
         ),
         titleLarge: GoogleFonts.sora(

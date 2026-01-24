@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_state_provider.dart';
-import '../providers/crew_provider.dart';
 import '../widgets/season_countdown_widget.dart';
 import '../widgets/flip_points_widget.dart';
 import '../services/season_service.dart';
@@ -11,7 +9,6 @@ import '../services/points_service.dart';
 import 'map_screen.dart';
 import 'running_screen.dart';
 import 'crew_screen.dart';
-import 'results_screen.dart';
 import 'run_history_screen.dart';
 import 'leaderboard_screen.dart';
 
@@ -60,17 +57,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
       child: Scaffold(
-        backgroundColor: Colors.transparent, // Allow gradient to show through
+        backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
         appBar: _buildModernAppBar(context, appState, currentAccent),
         body: Stack(
           children: [
-            // Subtle texture overlay (optional, could be an image or noise pattern)
             Positioned.fill(
               child: Opacity(
                 opacity: 0.03,
-                child: Container(
-                  color: Colors.white, // Placeholder for texture
-                ),
+                child: Container(color: Colors.white),
               ),
             ),
             _screens[_currentIndex],
@@ -86,52 +81,77 @@ class _HomeScreenState extends State<HomeScreen> {
     AppStateProvider appState,
     Color accentColor,
   ) {
-    // Get the global PointsService from Provider
     final pointsService = context.watch<PointsService>();
+    final topPadding = MediaQuery.of(context).padding.top;
 
-    return AppBar(
-      backgroundColor: Colors.transparent, // Minimal - let background show
-      elevation: 0,
-      centerTitle: false,
-      titleSpacing: 20,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // RunStrict Logo
-          Image.asset(
-            'assets/images/runner_logo_transparent.png',
-            height: 32,
-            fit: BoxFit.contain,
+    return PreferredSize(
+      preferredSize: Size.fromHeight(topPadding + 68),
+      child: Container(
+        padding: EdgeInsets.only(top: topPadding),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          // D-day Countdown
-          SeasonCountdownWidget(
-            seasonService: _seasonService,
-            compact: true,
-          ),
-          const SizedBox(width: 8),
-          // Flip Points Counter
-          FlipPointsWidget(
-            pointsService: pointsService,
-            accentColor: accentColor,
-            compact: true,
-          ),
-        ],
-      ),
-      actions: [
-        // Minimal User Avatar
-        Padding(
-          padding: const EdgeInsets.only(right: 20),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: AppTheme.tubularBorder(accentColor, width: 1.5),
-            child: Center(
-              child: Icon(Icons.person_rounded, size: 18, color: accentColor),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 52,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Image.asset(
+                        'assets/images/runner_logo_transparent.png',
+                        height: 24,
+                        fit: BoxFit.contain,
+                      ),
+                      const Spacer(),
+                      SeasonCountdownWidget(
+                        seasonService: _seasonService,
+                        compact: true,
+                      ),
+                      const SizedBox(width: 8),
+                      FlipPointsWidget(
+                        pointsService: pointsService,
+                        accentColor: accentColor,
+                        compact: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Team accent glow line at bottom edge
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      accentColor.withOpacity(0.0),
+                      accentColor.withOpacity(0.3),
+                      accentColor.withOpacity(0.3),
+                      accentColor.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 0.3, 0.7, 1.0],
+                  ),
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 

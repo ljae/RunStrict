@@ -4,8 +4,13 @@ import '../theme/app_theme.dart';
 import '../models/team.dart';
 
 /// Leaderboard Screen - Season Rankings by Flip Points
-/// Displays runners ranked by flip points (not distance)
-/// Shows: name, total distance, sponsor (avatar), crew, team color
+/// Per DEVELOPMENT_SPEC §3.2.5 & §2.6:
+/// - Team Tabs: [ALL] / [RED] / [BLUE] / [PURPLE]
+/// - Scope Tabs: [ALL] / [City] / [Zone]
+/// - Top rankings for selected scope
+/// - Sticky Footer: "My Rank" (if user outside top displayed)
+/// - Purple Users: Glowing border in [ALL] tab
+/// - Per User: Avatar, Name, Flip Points
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 
@@ -15,13 +20,14 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
     with SingleTickerProviderStateMixin {
-  String _filter = 'ALL';
+  String _teamFilter = 'ALL';
+  String _scopeFilter = 'ALL';
   late AnimationController _pulseController;
 
   // Mock current user ID for highlighting
   static const String _currentUserId = 'user_1';
 
-  // Mock Data - In production, fetch from Firestore and sort by flipPoints
+  // Mock Data - In production, fetched via Supabase RPC: get_leaderboard()
   final List<LeaderboardRunner> _allRunners = [
     LeaderboardRunner(
       id: 'user_1',
@@ -29,7 +35,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.red,
       flipPoints: 2847,
       totalDistanceKm: 154.2,
-      sponsor: '🦊',
+      avatar: '🦊',
       crewName: 'Phoenix Squad',
     ),
     LeaderboardRunner(
@@ -38,7 +44,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.blue,
       flipPoints: 2654,
       totalDistanceKm: 148.5,
-      sponsor: '🐬',
+      avatar: '🐬',
       crewName: 'Tidal Force',
     ),
     LeaderboardRunner(
@@ -47,7 +53,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.red,
       flipPoints: 2412,
       totalDistanceKm: 142.8,
-      sponsor: '🔥',
+      avatar: '🔥',
       crewName: 'Phoenix Squad',
     ),
     LeaderboardRunner(
@@ -56,7 +62,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.blue,
       flipPoints: 2198,
       totalDistanceKm: 135.0,
-      sponsor: '🌊',
+      avatar: '🌊',
       crewName: 'Ocean Runners',
     ),
     LeaderboardRunner(
@@ -65,7 +71,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.purple,
       flipPoints: 2156,
       totalDistanceKm: 68.2,
-      sponsor: '💀',
+      avatar: '💀',
       crewName: 'Void Walkers',
     ),
     LeaderboardRunner(
@@ -74,7 +80,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.red,
       flipPoints: 1987,
       totalDistanceKm: 128.4,
-      sponsor: '🦉',
+      avatar: '🦉',
       crewName: 'Night Runners',
     ),
     LeaderboardRunner(
@@ -83,7 +89,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.blue,
       flipPoints: 1845,
       totalDistanceKm: 122.1,
-      sponsor: '⚡',
+      avatar: '⚡',
       crewName: 'Thunder Crew',
     ),
     LeaderboardRunner(
@@ -92,7 +98,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.purple,
       flipPoints: 1756,
       totalDistanceKm: 44.5,
-      sponsor: '🌀',
+      avatar: '🌀',
       crewName: 'Void Walkers',
     ),
     LeaderboardRunner(
@@ -101,7 +107,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.red,
       flipPoints: 1634,
       totalDistanceKm: 115.7,
-      sponsor: '🌟',
+      avatar: '🌟',
       crewName: 'Blaze Squad',
     ),
     LeaderboardRunner(
@@ -110,7 +116,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.blue,
       flipPoints: 1523,
       totalDistanceKm: 109.3,
-      sponsor: '🐋',
+      avatar: '🐋',
       crewName: 'Ocean Runners',
     ),
     LeaderboardRunner(
@@ -119,7 +125,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.red,
       flipPoints: 1412,
       totalDistanceKm: 105.0,
-      sponsor: '🦅',
+      avatar: '🦅',
       crewName: 'Phoenix Squad',
     ),
     LeaderboardRunner(
@@ -128,7 +134,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.blue,
       flipPoints: 1298,
       totalDistanceKm: 98.6,
-      sponsor: '🐙',
+      avatar: '🐙',
       crewName: 'Tidal Force',
     ),
     LeaderboardRunner(
@@ -137,7 +143,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.purple,
       flipPoints: 1245,
       totalDistanceKm: 32.1,
-      sponsor: '👁️',
+      avatar: '👁️',
       crewName: 'Shadow Protocol',
     ),
     LeaderboardRunner(
@@ -146,7 +152,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.red,
       flipPoints: 1156,
       totalDistanceKm: 95.2,
-      sponsor: '✨',
+      avatar: '✨',
       crewName: 'Blaze Squad',
     ),
     LeaderboardRunner(
@@ -155,19 +161,54 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: Team.blue,
       flipPoints: 1087,
       totalDistanceKm: 92.1,
-      sponsor: '🌊',
+      avatar: '🌊',
       crewName: 'Thunder Crew',
     ),
   ];
 
   List<LeaderboardRunner> get _filteredRunners {
-    if (_filter == 'ALL') return _allRunners;
-    final teamFilter = _filter == 'RED'
-        ? Team.red
-        : _filter == 'BLUE'
-            ? Team.blue
-            : Team.purple;
-    return _allRunners.where((r) => r.team == teamFilter).toList();
+    var runners = List<LeaderboardRunner>.from(_allRunners);
+
+    // Team filter
+    if (_teamFilter != 'ALL') {
+      final teamFilter = _teamFilter == 'RED'
+          ? Team.red
+          : _teamFilter == 'BLUE'
+          ? Team.blue
+          : Team.purple;
+      runners = runners.where((r) => r.team == teamFilter).toList();
+    }
+
+    // Scope filter (mock: reduce list for City/Zone)
+    // In production, this queries different geographic scopes via Supabase
+    if (_scopeFilter == 'CITY') {
+      runners = runners.take(10).toList();
+    } else if (_scopeFilter == 'ZONE') {
+      runners = runners.take(6).toList();
+    }
+
+    return runners;
+  }
+
+  /// Check if current user is visible in the displayed list
+  bool get _isCurrentUserVisible {
+    return _filteredRunners.any((r) => r.id == _currentUserId);
+  }
+
+  /// Get current user's rank (1-based)
+  int get _currentUserRank {
+    final allRanked = _filteredRunners;
+    final index = allRanked.indexWhere((r) => r.id == _currentUserId);
+    return index >= 0 ? index + 1 : -1;
+  }
+
+  /// Get current user's data
+  LeaderboardRunner? get _currentUserData {
+    try {
+      return _allRunners.firstWhere((r) => r.id == _currentUserId);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -198,9 +239,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildHeader(),
+              const SizedBox(height: 16),
+              _buildTeamFilterTabs(),
+              const SizedBox(height: 12),
+              _buildScopeFilterTabs(),
               const SizedBox(height: 20),
-              _buildFilterTabs(),
-              const SizedBox(height: 24),
               Expanded(
                 child: runners.isEmpty
                     ? _buildEmptyState()
@@ -208,50 +251,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                         physics: const BouncingScrollPhysics(),
                         slivers: [
                           // Top 3 Podium
-                          if (runners.length >= 1)
-                            SliverToBoxAdapter(
-                              child: _buildPodium(runners),
-                            ),
+                          if (runners.isNotEmpty)
+                            SliverToBoxAdapter(child: _buildPodium(runners)),
                           // Divider
                           if (runners.length > 3)
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Container(
-                                        height: 1,
-                                        color: Colors.white.withOpacity(0.05),
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                      ),
-                                      child: Text(
-                                        'ALL RUNNERS',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white24,
-                                          letterSpacing: 2.0,
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Container(
-                                        height: 1,
-                                        color: Colors.white.withOpacity(0.05),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            SliverToBoxAdapter(child: _buildDivider()),
                           // Rank List (4th onwards)
                           SliverPadding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -274,19 +278,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                               ),
                             ),
                           ),
-                          // Bottom spacing
-                          const SliverToBoxAdapter(
-                            child: SizedBox(height: 100),
-                          ),
+                          // Bottom spacing for sticky footer
+                          const SliverToBoxAdapter(child: SizedBox(height: 80)),
                         ],
                       ),
               ),
+
+              // Sticky Footer: My Rank (when user outside visible list)
+              if (!_isCurrentUserVisible && _currentUserData != null)
+                _buildMyRankFooter(),
             ],
           ),
         ),
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // HEADER
+  // ---------------------------------------------------------------------------
 
   Widget _buildHeader() {
     return Padding(
@@ -299,11 +309,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             children: [
               Text(
                 'SEASON RANKINGS',
-                style: GoogleFonts.sora(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
+                style: GoogleFonts.bebasNeue(
+                  fontSize: 28,
                   color: Colors.white,
-                  letterSpacing: 0.5,
+                  letterSpacing: 1.5,
                 ),
               ),
               const SizedBox(height: 2),
@@ -335,7 +344,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
-  Widget _buildFilterTabs() {
+  // ---------------------------------------------------------------------------
+  // TEAM FILTER TABS: [ALL] / [FLAME] / [WAVE] / [CHAOS]
+  // ---------------------------------------------------------------------------
+
+  Widget _buildTeamFilterTabs() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.all(4),
@@ -346,22 +359,22 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       ),
       child: Row(
         children: [
-          _buildTab('ALL', 'ALL', null),
-          _buildTab('FLAME', 'RED', Team.red),
-          _buildTab('WAVE', 'BLUE', Team.blue),
-          _buildTab('CHAOS', 'PURPLE', Team.purple),
+          _buildTeamTab('ALL', 'ALL', null),
+          _buildTeamTab('FLAME', 'RED', Team.red),
+          _buildTeamTab('WAVE', 'BLUE', Team.blue),
+          _buildTeamTab('CHAOS', 'PURPLE', Team.purple),
         ],
       ),
     );
   }
 
-  Widget _buildTab(String label, String value, Team? team) {
-    final isSelected = _filter == value;
+  Widget _buildTeamTab(String label, String value, Team? team) {
+    final isSelected = _teamFilter == value;
     final Color activeColor = team?.color ?? Colors.white;
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _filter = value),
+        onTap: () => setState(() => _teamFilter = value),
         child: AnimatedContainer(
           duration: AppTheme.fastDuration,
           curve: AppTheme.defaultCurve,
@@ -390,11 +403,75 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // SCOPE FILTER TABS: [ALL] / [City] / [Zone]
+  // ---------------------------------------------------------------------------
+
+  Widget _buildScopeFilterTabs() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          _buildScopeChip('ALL', 'ALL'),
+          const SizedBox(width: 8),
+          _buildScopeChip('City', 'CITY'),
+          const SizedBox(width: 8),
+          _buildScopeChip('Zone', 'ZONE'),
+          const Spacer(),
+          // Runner count
+          Text(
+            '${_filteredRunners.length} runners',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: Colors.white24,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScopeChip(String label, String value) {
+    final isSelected = _scopeFilter == value;
+
+    return GestureDetector(
+      onTap: () => setState(() => _scopeFilter = value),
+      child: AnimatedContainer(
+        duration: AppTheme.fastDuration,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withOpacity(0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Colors.white.withOpacity(0.2)
+                : Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: isSelected ? Colors.white : Colors.white38,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // PODIUM (Top 3)
+  // ---------------------------------------------------------------------------
+
   Widget _buildPodium(List<LeaderboardRunner> runners) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: SizedBox(
-        height: 260,
+        height: 250,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -404,15 +481,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             else
               const Expanded(child: SizedBox()),
 
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
 
             // 1st Place
-            Expanded(
-              flex: 1,
-              child: _buildPodiumCard(runners[0], 1),
-            ),
+            Expanded(flex: 1, child: _buildPodiumCard(runners[0], 1)),
 
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
 
             // 3rd Place
             if (runners.length > 2)
@@ -428,22 +502,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   Widget _buildPodiumCard(LeaderboardRunner runner, int rank) {
     final isFirst = rank == 1;
     final isPurple = runner.team == Team.purple;
+    final showPurpleGlow = isPurple && _teamFilter == 'ALL';
     final teamColor = runner.team.color;
 
-    // Medal colors
     final medalColor = rank == 1
         ? const Color(0xFFFFD700)
         : rank == 2
-            ? const Color(0xFFC0C0C0)
-            : const Color(0xFFCD7F32);
+        ? const Color(0xFFC0C0C0)
+        : const Color(0xFFCD7F32);
 
-    // Heights based on rank
-    final cardHeight = isFirst ? 240.0 : (rank == 2 ? 210.0 : 190.0);
+    final cardHeight = isFirst ? 230.0 : (rank == 2 ? 200.0 : 180.0);
 
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
-        final pulseOpacity = isPurple
+        final pulseOpacity = showPurpleGlow
             ? 0.3 + (_pulseController.value * 0.2)
             : 0.0;
 
@@ -453,30 +526,32 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             color: AppTheme.surfaceColor,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: teamColor.withOpacity(isFirst ? 0.5 : 0.3),
-              width: isFirst ? 1.5 : 1,
+              color: showPurpleGlow
+                  ? teamColor.withOpacity(0.6)
+                  : teamColor.withOpacity(isFirst ? 0.4 : 0.2),
+              width: showPurpleGlow ? 2 : (isFirst ? 1.5 : 1),
             ),
             boxShadow: [
-              if (isPurple)
+              if (showPurpleGlow)
                 BoxShadow(
                   color: teamColor.withOpacity(pulseOpacity),
-                  blurRadius: 20,
-                  spreadRadius: -5,
+                  blurRadius: 24,
+                  spreadRadius: -4,
                 ),
               BoxShadow(
                 color: Colors.black.withOpacity(0.3),
                 blurRadius: 20,
-                offset: const Offset(0, 10),
+                offset: const Offset(0, 8),
               ),
             ],
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Medal/Rank Badge
+              // Medal Badge
               Container(
-                width: isFirst ? 36 : 28,
-                height: isFirst ? 36 : 28,
+                width: isFirst ? 34 : 26,
+                height: isFirst ? 34 : 26,
                 decoration: BoxDecoration(
                   color: medalColor.withOpacity(0.15),
                   shape: BoxShape.circle,
@@ -489,7 +564,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   child: Text(
                     '$rank',
                     style: GoogleFonts.sora(
-                      fontSize: isFirst ? 16 : 12,
+                      fontSize: isFirst ? 15 : 11,
                       fontWeight: FontWeight.w700,
                       color: medalColor,
                     ),
@@ -497,12 +572,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ),
               ),
 
-              SizedBox(height: isFirst ? 12 : 8),
+              SizedBox(height: isFirst ? 10 : 6),
 
-              // Sponsor Avatar
+              // Avatar
               Container(
-                width: isFirst ? 56 : 44,
-                height: isFirst ? 56 : 44,
+                width: isFirst ? 52 : 42,
+                height: isFirst ? 52 : 42,
                 decoration: BoxDecoration(
                   color: teamColor.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -513,13 +588,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ),
                 child: Center(
                   child: Text(
-                    runner.sponsor,
-                    style: TextStyle(fontSize: isFirst ? 24 : 18),
+                    runner.avatar,
+                    style: TextStyle(fontSize: isFirst ? 22 : 17),
                   ),
                 ),
               ),
 
-              SizedBox(height: isFirst ? 12 : 8),
+              SizedBox(height: isFirst ? 10 : 6),
 
               // Name
               Padding(
@@ -530,7 +605,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    fontSize: isFirst ? 14 : 12,
+                    fontSize: isFirst ? 13 : 11,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
@@ -540,14 +615,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               const SizedBox(height: 2),
 
               // Crew Name
-              Text(
-                runner.crewName ?? 'No Crew',
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  color: teamColor.withOpacity(0.8),
-                  fontWeight: FontWeight.w500,
+              if (runner.crewName != null)
+                Text(
+                  runner.crewName!,
+                  style: GoogleFonts.inter(
+                    fontSize: 9,
+                    color: teamColor.withOpacity(0.7),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
 
               SizedBox(height: isFirst ? 8 : 4),
 
@@ -564,23 +640,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 child: Text(
                   '${runner.flipPoints} pts',
                   style: GoogleFonts.sora(
-                    fontSize: isFirst ? 14 : 11,
+                    fontSize: isFirst ? 13 : 10,
                     fontWeight: FontWeight.w700,
                     color: teamColor,
                   ),
                 ),
               ),
-
-              if (isFirst) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '${runner.totalDistanceKm.toStringAsFixed(1)} km',
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    color: Colors.white38,
-                  ),
-                ),
-              ],
             ],
           ),
         );
@@ -588,34 +653,72 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // RANK LIST (4th+)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'ALL RUNNERS',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.white24,
+                letterSpacing: 2.0,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRankTile(LeaderboardRunner runner, int rank) {
     final isCurrentUser = runner.id == _currentUserId;
     final isPurple = runner.team == Team.purple;
+    final showPurpleGlow = isPurple && _teamFilter == 'ALL';
     final teamColor = runner.team.color;
 
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
-        final pulseOpacity = isPurple ? 0.1 + (_pulseController.value * 0.1) : 0.0;
+        final pulseOpacity = showPurpleGlow
+            ? 0.08 + (_pulseController.value * 0.08)
+            : 0.0;
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: isCurrentUser
                 ? teamColor.withOpacity(0.08)
-                : AppTheme.surfaceColor.withOpacity(0.6),
+                : AppTheme.surfaceColor.withOpacity(0.5),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isCurrentUser
+              color: showPurpleGlow
                   ? teamColor.withOpacity(0.4)
+                  : isCurrentUser
+                  ? teamColor.withOpacity(0.3)
                   : Colors.white.withOpacity(0.05),
+              width: showPurpleGlow ? 1.5 : 1,
             ),
-            boxShadow: isPurple
+            boxShadow: showPurpleGlow
                 ? [
                     BoxShadow(
                       color: teamColor.withOpacity(pulseOpacity),
-                      blurRadius: 15,
-                      spreadRadius: -5,
+                      blurRadius: 16,
+                      spreadRadius: -4,
                     ),
                   ]
                 : null,
@@ -624,21 +727,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             children: [
               // Rank Number
               SizedBox(
-                width: 32,
+                width: 30,
                 child: Text(
                   '$rank',
                   style: GoogleFonts.sora(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: isCurrentUser ? teamColor : Colors.white38,
                   ),
                 ),
               ),
 
-              // Team Color Indicator
+              // Team Color Bar
               Container(
                 width: 3,
-                height: 32,
+                height: 30,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
                   color: teamColor,
@@ -646,10 +749,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ),
               ),
 
-              // Sponsor Avatar
+              // Avatar
               Container(
-                width: 40,
-                height: 40,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   color: teamColor.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -660,8 +763,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ),
                 child: Center(
                   child: Text(
-                    runner.sponsor,
-                    style: const TextStyle(fontSize: 18),
+                    runner.avatar,
+                    style: const TextStyle(fontSize: 17),
                   ),
                 ),
               ),
@@ -683,7 +786,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                             style: GoogleFonts.inter(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: isCurrentUser ? Colors.white : AppTheme.textPrimary,
+                              color: Colors.white,
                             ),
                           ),
                         ),
@@ -712,33 +815,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          runner.crewName ?? 'No Crew',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: teamColor.withOpacity(0.7),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 6),
-                          width: 3,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Text(
-                          '${runner.totalDistanceKm.toStringAsFixed(1)} km',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: Colors.white38,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      runner.crewName ?? 'No Crew',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: teamColor.withOpacity(0.6),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
@@ -773,6 +856,140 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // STICKY FOOTER: MY RANK
+  // ---------------------------------------------------------------------------
+
+  Widget _buildMyRankFooter() {
+    final user = _currentUserData!;
+    final teamColor = user.team.color;
+    final rank = _currentUserRank;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        border: Border(
+          top: BorderSide(color: teamColor.withOpacity(0.2), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // Rank
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: teamColor.withOpacity(0.15),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: teamColor.withOpacity(0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  rank > 0 ? '#$rank' : '—',
+                  style: GoogleFonts.sora(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: teamColor,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Avatar
+            Text(user.avatar, style: const TextStyle(fontSize: 20)),
+            const SizedBox(width: 10),
+
+            // Name
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        user.name,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: teamColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          'YOU',
+                          style: GoogleFonts.inter(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            color: teamColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    user.crewName ?? 'No Crew',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Points
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${user.flipPoints}',
+                  style: GoogleFonts.sora(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: teamColor,
+                  ),
+                ),
+                Text(
+                  'pts',
+                  style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // EMPTY STATE
+  // ---------------------------------------------------------------------------
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -786,18 +1003,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           const SizedBox(height: 16),
           Text(
             'No runners found',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              color: Colors.white38,
-            ),
+            style: GoogleFonts.inter(fontSize: 16, color: Colors.white38),
           ),
           const SizedBox(height: 8),
           Text(
             'Start running to appear on the leaderboard',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: Colors.white24,
-            ),
+            style: GoogleFonts.inter(fontSize: 12, color: Colors.white24),
           ),
         ],
       ),
@@ -805,15 +1016,20 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 }
 
-/// Data model for leaderboard runners
-/// Ranked by flipPoints (not distance)
+// ---------------------------------------------------------------------------
+// DATA MODEL
+// ---------------------------------------------------------------------------
+
+/// Leaderboard runner data model
+/// Ranked by flipPoints (season cumulative Flip Points)
+/// In production: fetched via Supabase RPC get_leaderboard()
 class LeaderboardRunner {
   final String id;
   final String name;
   final Team team;
   final int flipPoints;
   final double totalDistanceKm;
-  final String sponsor; // Emoji avatar
+  final String avatar; // Emoji avatar (overridden by crew image when in crew)
   final String? crewName;
 
   const LeaderboardRunner({
@@ -822,7 +1038,7 @@ class LeaderboardRunner {
     required this.team,
     required this.flipPoints,
     required this.totalDistanceKm,
-    required this.sponsor,
+    required this.avatar,
     this.crewName,
   });
 }

@@ -12,32 +12,18 @@ class HexModel {
   final LatLng center;
   Team? lastRunnerTeam; // null = neutral (no one ran here yet)
 
-  HexModel({
-    required this.id,
-    required this.center,
-    this.lastRunnerTeam,
-  });
+  HexModel({required this.id, required this.center, this.lastRunnerTeam});
 
   /// Check if this hex has been run through
   bool get isNeutral => lastRunnerTeam == null;
 
-  /// Check if a runner would change this hex's color
-  bool wouldChangeColor(Team runnerTeam, bool isPurpleRunner) {
-    if (isPurpleRunner) {
-      // Purple runner changes color if not already purple
-      return lastRunnerTeam != Team.purple;
-    }
+  bool wouldChangeColor(Team runnerTeam) {
     return lastRunnerTeam != runnerTeam;
   }
 
-  /// Update the hex with the runner's color
-  /// Returns true if the color actually changed (flip)
-  bool setRunnerColor(Team runnerTeam, {bool isPurpleRunner = false}) {
-    final Team newTeam = isPurpleRunner ? Team.purple : runnerTeam;
-
-    if (lastRunnerTeam == newTeam) return false;
-
-    lastRunnerTeam = newTeam;
+  bool setRunnerColor(Team runnerTeam) {
+    if (lastRunnerTeam == runnerTeam) return false;
+    lastRunnerTeam = runnerTeam;
     return true;
   }
 

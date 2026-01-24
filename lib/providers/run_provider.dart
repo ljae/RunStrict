@@ -73,7 +73,7 @@ class RunProvider with ChangeNotifier {
   /// Current speed in km/h or mph
   double get currentSpeed {
     if (!isRunning) return 0.0;
-    final paceMinPerKm = _activeRun?.averagePaceMinPerKm ?? 0;
+    final paceMinPerKm = _activeRun?.paceMinPerKm ?? 0;
     if (paceMinPerKm <= 0 || paceMinPerKm.isInfinite) return 0.0;
     final speedKmh = 60 / paceMinPerKm;
     return _isMetric ? speedKmh : speedKmh * 0.621371;
@@ -111,7 +111,7 @@ class RunProvider with ChangeNotifier {
   /// Formatted pace
   String get formattedPace {
     if (_activeRun == null) return '-:--';
-    final pace = _activeRun!.averagePaceMinPerKm;
+    final pace = _activeRun!.paceMinPerKm;
     if (pace == 0 || pace.isInfinite || pace.isNaN) return '-:--';
     final m = pace.floor();
     final s = ((pace - m) * 60).round();
@@ -143,10 +143,7 @@ class RunProvider with ChangeNotifier {
   }
 
   /// Start a new run
-  Future<void> startRun({
-    required Team team,
-    bool isPurpleRunner = false,
-  }) async {
+  Future<void> startRun({required Team team}) async {
     if (isRunning) {
       throw StateError('A run is already in progress');
     }
@@ -172,12 +169,10 @@ class RunProvider with ChangeNotifier {
         },
       );
 
-      // Start run tracking
       _runTracker.startNewRun(
         _locationService.locationStream,
         runId,
         team: team,
-        isPurpleRunner: isPurpleRunner,
       );
 
       // Start timer
@@ -216,22 +211,10 @@ class RunProvider with ChangeNotifier {
     }
   }
 
-  bool _handleHexCapture(String hexId, Team runnerTeam, bool isPurpleRunner) {
-    final colorChanged = HexDataProvider().updateHexColor(
-      hexId,
-      runnerTeam,
-      isPurpleRunner: isPurpleRunner,
-    );
+  bool _handleHexCapture(String hexId, Team runnerTeam) {
+    final colorChanged = HexDataProvider().updateHexColor(hexId, runnerTeam);
     if (colorChanged) {
-      debugPrint('RunProvider: Hex $hexId was flipped!');
-
-      final pointsToAdd = isPurpleRunner ? 2 : 1;
-      _pointsService?.addRunPoints(pointsToAdd);
-      debugPrint(
-        'RunProvider: Added $pointsToAdd flip point(s). '
-        'Total: ${_pointsService?.currentPoints}',
-      );
-
+      _pointsService?.addRunPoints(1);
       notifyListeners();
     }
     return colorChanged;
