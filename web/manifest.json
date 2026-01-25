@@ -1,11 +1,11 @@
 {
-    "name": "neon_runner",
-    "short_name": "neon_runner",
+    "name": "RunStrict - The 280-Day Journey",
+    "short_name": "RunStrict",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F172A",
+    "theme_color": "#FF003C",
+    "description": "Location-based running game with hexagonal territory control",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
