@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/h3_config.dart';
@@ -5,13 +6,7 @@ import '../theme/app_theme.dart';
 import '../models/team.dart';
 
 /// Leaderboard Screen - Season Rankings by Flip Points
-/// Per DEVELOPMENT_SPEC §3.2.5 & §2.6:
-/// - Team Tabs: [ALL] / [RED] / [BLUE] / [PURPLE]
-/// - Scope Tabs: [ALL] / [City] / [Zone]
-/// - Top rankings for selected scope
-/// - Sticky Footer: "My Rank" (if user outside top displayed)
-/// - Purple Users: Glowing border in [ALL] tab
-/// - Per User: Avatar, Name, Flip Points
+/// Redesigned: "Premium Athletic Minimal"
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 
@@ -20,21 +15,19 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   String _teamFilter = 'ALL';
   GeographicScope _scopeFilter = GeographicScope.all;
   late AnimationController _pulseController;
+  late AnimationController _entranceController;
 
   // Mock current user ID and hex for highlighting and scope filtering
   static const String _currentUserId = 'user_1';
-  // Mock user's current hex ID (Res 9) - In production, fetched from user state
-  // Used for scope filtering when integrated with Supabase RPC
+  // Mock user's current hex ID (Res 9)
   // ignore: unused_field
   static const String _currentUserHexId = '89283082803ffff';
 
-  // Mock Data - In production, fetched via Supabase RPC: get_leaderboard_by_scope()
-  // Hex IDs use Seoul area H3 indices for demonstration
-  // Zone (Res 8) = ~0.73 km², City (Res 6) = ~36 km²
+  // Mock Data
   final List<LeaderboardRunner> _allRunners = [
     LeaderboardRunner(
       id: 'user_1',
@@ -44,9 +37,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 154.2,
       avatar: '🦊',
       crewName: 'Phoenix Squad',
-      lastHexId: '89283082803ffff', // Gangnam area
-      zoneHexId: '88283082807ffff', // Same zone as current user
-      cityHexId: '86283080fffffff', // Same city as current user
+      lastHexId: '89283082803ffff',
+      zoneHexId: '88283082807ffff',
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_2',
@@ -57,8 +50,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🐬',
       crewName: 'Tidal Force',
       lastHexId: '89283082813ffff',
-      zoneHexId: '88283082817ffff', // Same zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: '88283082817ffff',
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_3',
@@ -69,8 +62,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🔥',
       crewName: 'Phoenix Squad',
       lastHexId: '89283082823ffff',
-      zoneHexId: '88283082827ffff', // Same zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: '88283082827ffff',
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_4',
@@ -81,8 +74,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🌊',
       crewName: 'Ocean Runners',
       lastHexId: '89283082833ffff',
-      zoneHexId: '88283082837ffff', // Same zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: '88283082837ffff',
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_5',
@@ -93,8 +86,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '💀',
       crewName: 'Void Walkers',
       lastHexId: '89283082843ffff',
-      zoneHexId: '88283082847ffff', // Same zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: '88283082847ffff',
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_6',
@@ -105,8 +98,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🦉',
       crewName: 'Night Runners',
       lastHexId: '89283082853ffff',
-      zoneHexId: '88283082857ffff', // Same zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: '88283082857ffff',
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_7',
@@ -117,8 +110,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '⚡',
       crewName: 'Thunder Crew',
       lastHexId: '89283082863ffff',
-      zoneHexId: null, // Different zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: null,
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_8',
@@ -129,8 +122,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🌀',
       crewName: 'Void Walkers',
       lastHexId: '89283082873ffff',
-      zoneHexId: null, // Different zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: null,
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_9',
@@ -141,8 +134,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🌟',
       crewName: 'Blaze Squad',
       lastHexId: '89283082883ffff',
-      zoneHexId: null, // Different zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: null,
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_10',
@@ -153,8 +146,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       avatar: '🐋',
       crewName: 'Ocean Runners',
       lastHexId: '89283082893ffff',
-      zoneHexId: null, // Different zone
-      cityHexId: '86283080fffffff', // Same city
+      zoneHexId: null,
+      cityHexId: '86283080fffffff',
     ),
     LeaderboardRunner(
       id: 'user_11',
@@ -164,7 +157,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 105.0,
       avatar: '🦅',
       crewName: 'Phoenix Squad',
-      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_12',
@@ -174,7 +166,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 98.6,
       avatar: '🐙',
       crewName: 'Tidal Force',
-      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_13',
@@ -184,7 +175,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 32.1,
       avatar: '👁️',
       crewName: 'Shadow Protocol',
-      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_14',
@@ -194,7 +184,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 95.2,
       avatar: '✨',
       crewName: 'Blaze Squad',
-      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_15',
@@ -204,7 +193,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 92.1,
       avatar: '🌊',
       crewName: 'Thunder Crew',
-      // No hex data - user from different region
     ),
   ];
 
@@ -221,44 +209,33 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       runners = runners.where((r) => r.team == teamFilter).toList();
     }
 
-    // Geographic scope filter using H3 parent cell hierarchy
-    // In production, this is handled server-side via Supabase RPC
+    // Geographic scope filter
     switch (_scopeFilter) {
       case GeographicScope.zone:
-        // Filter by Res 8 parent (neighborhood)
-        // Mock: Users with matching zoneHexId
         runners = runners.where((r) => r.zoneHexId != null).toList();
-        // For MVP, show fewer users in Zone view
         runners = runners.take(6).toList();
         break;
       case GeographicScope.city:
-        // Filter by Res 6 parent (district)
-        // Mock: Users with matching cityHexId
         runners = runners.where((r) => r.cityHexId != null).toList();
-        // For MVP, show moderate number in City view
         runners = runners.take(10).toList();
         break;
       case GeographicScope.all:
-        // No geographic filter - show all users
         break;
     }
 
     return runners;
   }
 
-  /// Check if current user is visible in the displayed list
   bool get _isCurrentUserVisible {
     return _filteredRunners.any((r) => r.id == _currentUserId);
   }
 
-  /// Get current user's rank (1-based)
   int get _currentUserRank {
     final allRanked = _filteredRunners;
     final index = allRanked.indexWhere((r) => r.id == _currentUserId);
     return index >= 0 ? index + 1 : -1;
   }
 
-  /// Get current user's data
   LeaderboardRunner? get _currentUserData {
     try {
       return _allRunners.firstWhere((r) => r.id == _currentUserId);
@@ -274,11 +251,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
+
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _entranceController.dispose();
     super.dispose();
   }
 
@@ -287,62 +270,72 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final runners = _filteredRunners;
 
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      color: AppTheme.backgroundStart,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          bottom: false,
+          child: Stack(
             children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
-              _buildTeamFilterTabs(),
-              const SizedBox(height: 12),
-              _buildScopeFilterTabs(),
-              const SizedBox(height: 20),
-              Expanded(
-                child: runners.isEmpty
-                    ? _buildEmptyState()
-                    : CustomScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        slivers: [
-                          // Top 3 Podium
-                          if (runners.isNotEmpty)
-                            SliverToBoxAdapter(child: _buildPodium(runners)),
-                          // Divider
-                          if (runners.length > 3)
-                            SliverToBoxAdapter(child: _buildDivider()),
-                          // Rank List (4th onwards)
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final listIndex = index + 3;
-                                  if (listIndex >= runners.length) return null;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: _buildRankTile(
-                                      runners[listIndex],
-                                      listIndex + 1,
-                                    ),
-                                  );
-                                },
-                                childCount: runners.length > 3
-                                    ? runners.length - 3
-                                    : 0,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(),
+                  _buildConsolidatedFilterBar(),
+                  Expanded(
+                    child: runners.isEmpty
+                        ? _buildEmptyState()
+                        : CustomScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            slivers: [
+                              const SliverToBoxAdapter(
+                                child: SizedBox(height: 20),
                               ),
-                            ),
+                              // Top 3 Podium
+                              if (runners.isNotEmpty)
+                                SliverToBoxAdapter(
+                                  child: _buildPodium(runners),
+                                ),
+                              // Rank List (4th onwards)
+                              if (runners.length > 3)
+                                SliverPadding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    20,
+                                    20,
+                                    100,
+                                  ),
+                                  sliver: SliverList(
+                                    delegate: SliverChildBuilderDelegate((
+                                      context,
+                                      index,
+                                    ) {
+                                      final listIndex = index + 3;
+                                      if (listIndex >= runners.length) {
+                                        return null;
+                                      }
+                                      return _buildRankTile(
+                                        runners[listIndex],
+                                        listIndex + 1,
+                                        index, // For stagger delay
+                                      );
+                                    }, childCount: runners.length - 3),
+                                  ),
+                                ),
+                            ],
                           ),
-                          // Bottom spacing for sticky footer
-                          const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                        ],
-                      ),
+                  ),
+                ],
               ),
 
-              // Sticky Footer: My Rank (when user outside visible list)
+              // Sticky Footer: My Rank
               if (!_isCurrentUserVisible && _currentUserData != null)
-                _buildMyRankFooter(),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildMyRankFooter(),
+                ),
             ],
           ),
         ),
@@ -356,7 +349,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -368,13 +361,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 style: GoogleFonts.bebasNeue(
                   fontSize: 28,
                   color: Colors.white,
-                  letterSpacing: 1.5,
+                  letterSpacing: 2.0,
                 ),
               ),
-              const SizedBox(height: 2),
               Text(
                 'Ranked by flip points',
-                style: GoogleFonts.inter(
+                style: GoogleFonts.sora(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
                   fontWeight: FontWeight.w400,
@@ -382,76 +374,55 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               ),
             ],
           ),
-          Container(
-            padding: const EdgeInsets.all(10),
+          // Optional: Add an icon or action here if needed
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CONSOLIDATED FILTER BAR
+  // ---------------------------------------------------------------------------
+
+  Widget _buildConsolidatedFilterBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              color: AppTheme.surfaceColor.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
-            child: Icon(
-              Icons.insights_rounded,
-              color: AppTheme.electricBlue,
-              size: 20,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+            child: Row(
+              children: [
+                // Team Filters
+                _buildTeamFilterIcon(Team.red, 'RED'),
+                const SizedBox(width: 4),
+                _buildTeamFilterIcon(Team.blue, 'BLUE'),
+                const SizedBox(width: 4),
+                _buildTeamFilterIcon(Team.purple, 'PURPLE'),
+                const SizedBox(width: 4),
+                _buildAllTeamFilter(),
 
-  // ---------------------------------------------------------------------------
-  // TEAM FILTER TABS: [ALL] / [FLAME] / [WAVE] / [CHAOS]
-  // ---------------------------------------------------------------------------
+                // Divider
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Container(
+                    width: 1,
+                    height: 20,
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
 
-  Widget _buildTeamFilterTabs() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          _buildTeamTab('ALL', 'ALL', null),
-          _buildTeamTab('FLAME', 'RED', Team.red),
-          _buildTeamTab('WAVE', 'BLUE', Team.blue),
-          _buildTeamTab('CHAOS', 'PURPLE', Team.purple),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTeamTab(String label, String value, Team? team) {
-    final isSelected = _teamFilter == value;
-    final Color activeColor = team?.color ?? Colors.white;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _teamFilter = value),
-        child: AnimatedContainer(
-          duration: AppTheme.fastDuration,
-          curve: AppTheme.defaultCurve,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? activeColor.withOpacity(0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: isSelected
-                ? Border.all(color: activeColor.withOpacity(0.3))
-                : null,
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: isSelected ? activeColor : AppTheme.textSecondary,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-              letterSpacing: 0.5,
+                // Scope Filter
+                Expanded(child: _buildScopeDropdown()),
+              ],
             ),
           ),
         ),
@@ -459,61 +430,93 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // SCOPE FILTER TABS: [ALL] / [City] / [Zone]
-  // ---------------------------------------------------------------------------
-
-  Widget _buildScopeFilterTabs() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          _buildScopeChip(GeographicScope.all),
-          const SizedBox(width: 8),
-          _buildScopeChip(GeographicScope.city),
-          const SizedBox(width: 8),
-          _buildScopeChip(GeographicScope.zone),
-          const Spacer(),
-          // Runner count with scope description
-          Text(
-            '${_filteredRunners.length} in ${_scopeFilter.description}',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: Colors.white24,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+  Widget _buildTeamFilterIcon(Team team, String filterValue) {
+    final isSelected = _teamFilter == filterValue;
+    return GestureDetector(
+      onTap: () => setState(() => _teamFilter = filterValue),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isSelected
+              ? team.color.withValues(alpha: 0.2)
+              : Colors.transparent,
+          border: isSelected
+              ? Border.all(color: team.color, width: 1.5)
+              : Border.all(color: Colors.transparent),
+        ),
+        child: Center(
+          child: Text(team.emoji, style: const TextStyle(fontSize: 16)),
+        ),
       ),
     );
   }
 
-  Widget _buildScopeChip(GeographicScope scope) {
-    final isSelected = _scopeFilter == scope;
-
+  Widget _buildAllTeamFilter() {
+    final isSelected = _teamFilter == 'ALL';
     return GestureDetector(
-      onTap: () => setState(() => _scopeFilter = scope),
+      onTap: () => setState(() => _teamFilter = 'ALL'),
       child: AnimatedContainer(
-        duration: AppTheme.fastDuration,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
           color: isSelected
-              ? Colors.white.withOpacity(0.1)
+              ? Colors.white.withValues(alpha: 0.1)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white.withOpacity(0.08),
-          ),
         ),
         child: Text(
-          scope.label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            color: isSelected ? Colors.white : Colors.white38,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+          'ALL',
+          style: GoogleFonts.bebasNeue(
+            fontSize: 16,
+            color: isSelected ? Colors.white : AppTheme.textSecondary,
+            letterSpacing: 1.0,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScopeDropdown() {
+    return GestureDetector(
+      onTap: () {
+        // Cycle through scopes for simplicity in this UI
+        setState(() {
+          if (_scopeFilter == GeographicScope.all) {
+            _scopeFilter = GeographicScope.city;
+          } else if (_scopeFilter == GeographicScope.city) {
+            _scopeFilter = GeographicScope.zone;
+          } else {
+            _scopeFilter = GeographicScope.all;
+          }
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(
+              _scopeFilter.label.toUpperCase(),
+              style: GoogleFonts.sora(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              color: Colors.white.withValues(alpha: 0.5),
+              size: 18,
+            ),
+          ],
         ),
       ),
     );
@@ -524,188 +527,140 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // ---------------------------------------------------------------------------
 
   Widget _buildPodium(List<LeaderboardRunner> runners) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: SizedBox(
-        height: 250,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            // 2nd Place
-            if (runners.length > 1)
-              Expanded(child: _buildPodiumCard(runners[1], 2))
-            else
-              const Expanded(child: SizedBox()),
+    return SizedBox(
+      height: 280,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          // 2nd Place (Left)
+          if (runners.length > 1)
+            Positioned(
+              left: 20,
+              bottom: 0,
+              child: _buildPodiumCard(runners[1], 2),
+            ),
 
-            const SizedBox(width: 10),
+          // 3rd Place (Right)
+          if (runners.length > 2)
+            Positioned(
+              right: 20,
+              bottom: 0,
+              child: _buildPodiumCard(runners[2], 3),
+            ),
 
-            // 1st Place
-            Expanded(flex: 1, child: _buildPodiumCard(runners[0], 1)),
-
-            const SizedBox(width: 10),
-
-            // 3rd Place
-            if (runners.length > 2)
-              Expanded(child: _buildPodiumCard(runners[2], 3))
-            else
-              const Expanded(child: SizedBox()),
-          ],
-        ),
+          // 1st Place (Center - Z-index highest)
+          Positioned(bottom: 20, child: _buildPodiumCard(runners[0], 1)),
+        ],
       ),
     );
   }
 
   Widget _buildPodiumCard(LeaderboardRunner runner, int rank) {
     final isFirst = rank == 1;
-    final isPurple = runner.team == Team.purple;
-    final showPurpleGlow = isPurple && _teamFilter == 'ALL';
+    final width = isFirst ? 140.0 : 110.0;
+    final height = isFirst ? 240.0 : 200.0; // Increased to prevent overflow
     final teamColor = runner.team.color;
 
-    final medalColor = rank == 1
-        ? const Color(0xFFFFD700)
-        : rank == 2
-        ? const Color(0xFFC0C0C0)
-        : const Color(0xFFCD7F32);
-
-    final cardHeight = isFirst ? 230.0 : (rank == 2 ? 200.0 : 180.0);
-
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final pulseOpacity = showPurpleGlow
-            ? 0.3 + (_pulseController.value * 0.2)
-            : 0.0;
-
-        return Container(
-          height: cardHeight,
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: showPurpleGlow
-                  ? teamColor.withOpacity(0.6)
-                  : teamColor.withOpacity(isFirst ? 0.4 : 0.2),
-              width: showPurpleGlow ? 2 : (isFirst ? 1.5 : 1),
-            ),
-            boxShadow: [
-              if (showPurpleGlow)
-                BoxShadow(
-                  color: teamColor.withOpacity(pulseOpacity),
-                  blurRadius: 24,
-                  spreadRadius: -4,
-                ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
+    return ScaleTransition(
+      scale: CurvedAnimation(
+        parent: _entranceController,
+        curve: Interval(
+          isFirst ? 0.0 : 0.2,
+          isFirst ? 0.6 : 0.8,
+          curve: Curves.elasticOut,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: width,
+            height: height,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceColor.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isFirst
+                    ? teamColor.withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.05),
+                width: 1,
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Medal Badge
-              Container(
-                width: isFirst ? 34 : 26,
-                height: isFirst ? 34 : 26,
-                decoration: BoxDecoration(
-                  color: medalColor.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: medalColor.withOpacity(0.5),
-                    width: 1.5,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+                if (isFirst)
+                  BoxShadow(
+                    color: teamColor.withValues(alpha: 0.1),
+                    blurRadius: 30,
+                    spreadRadius: -5,
+                  ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Rank Number
+                Text(
+                  '$rank',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: isFirst ? 64 : 48,
+                    height: 1.0,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                 ),
-                child: Center(
+
+                const SizedBox(height: 4),
+
+                // Avatar
+                Text(
+                  runner.avatar,
+                  style: TextStyle(fontSize: isFirst ? 48 : 36),
+                ),
+
+                const SizedBox(height: 4),
+
+                // Name
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    '$rank',
+                    runner.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.sora(
-                      fontSize: isFirst ? 15 : 11,
-                      fontWeight: FontWeight.w700,
-                      color: medalColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-              ),
 
-              SizedBox(height: isFirst ? 10 : 6),
-
-              // Avatar
-              Container(
-                width: isFirst ? 52 : 42,
-                height: isFirst ? 52 : 42,
-                decoration: BoxDecoration(
-                  color: teamColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: teamColor.withOpacity(0.4),
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    runner.avatar,
-                    style: TextStyle(fontSize: isFirst ? 22 : 17),
-                  ),
-                ),
-              ),
-
-              SizedBox(height: isFirst ? 10 : 6),
-
-              // Name
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  runner.name,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: isFirst ? 13 : 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 2),
-
-              // Crew Name
-              if (runner.crewName != null)
+                // Points
                 Text(
-                  runner.crewName!,
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    color: teamColor.withOpacity(0.7),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-
-              SizedBox(height: isFirst ? 8 : 4),
-
-              // Flip Points
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: teamColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${runner.flipPoints} pts',
+                  '${runner.flipPoints}',
                   style: GoogleFonts.sora(
-                    fontSize: isFirst ? 13 : 10,
+                    fontSize: isFirst ? 28 : 20,
                     fontWeight: FontWeight.w700,
                     color: teamColor,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -713,207 +668,158 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // RANK LIST (4th+)
   // ---------------------------------------------------------------------------
 
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'ALL RUNNERS',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.white24,
-                letterSpacing: 2.0,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRankTile(LeaderboardRunner runner, int rank) {
+  Widget _buildRankTile(LeaderboardRunner runner, int rank, int index) {
     final isCurrentUser = runner.id == _currentUserId;
+    final teamColor = runner.team.color;
     final isPurple = runner.team == Team.purple;
     final showPurpleGlow = isPurple && _teamFilter == 'ALL';
-    final teamColor = runner.team.color;
 
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final pulseOpacity = showPurpleGlow
-            ? 0.08 + (_pulseController.value * 0.08)
-            : 0.0;
+    // Staggered entrance
+    final startInterval = 0.4 + (index * 0.05).clamp(0.0, 0.4);
+    final endInterval = (startInterval + 0.4).clamp(0.0, 1.0);
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: isCurrentUser
-                ? teamColor.withOpacity(0.08)
-                : AppTheme.surfaceColor.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: showPurpleGlow
-                  ? teamColor.withOpacity(0.4)
-                  : isCurrentUser
-                  ? teamColor.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.05),
-              width: showPurpleGlow ? 1.5 : 1,
+    return SlideTransition(
+      position: Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
+          .animate(
+            CurvedAnimation(
+              parent: _entranceController,
+              curve: Interval(
+                startInterval,
+                endInterval,
+                curve: Curves.easeOutQuad,
+              ),
             ),
-            boxShadow: showPurpleGlow
-                ? [
-                    BoxShadow(
-                      color: teamColor.withOpacity(pulseOpacity),
-                      blurRadius: 16,
-                      spreadRadius: -4,
-                    ),
-                  ]
-                : null,
           ),
-          child: Row(
-            children: [
-              // Rank Number
-              SizedBox(
-                width: 30,
-                child: Text(
-                  '$rank',
-                  style: GoogleFonts.sora(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: isCurrentUser ? teamColor : Colors.white38,
-                  ),
-                ),
-              ),
+      child: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: _entranceController,
+          curve: Interval(startInterval, endInterval, curve: Curves.easeOut),
+        ),
+        child: AnimatedBuilder(
+          animation: _pulseController,
+          builder: (context, child) {
+            final glowOpacity = showPurpleGlow
+                ? 0.1 + (_pulseController.value * 0.15)
+                : 0.0;
 
-              // Team Color Bar
-              Container(
-                width: 3,
-                height: 30,
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: teamColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-
-              // Avatar
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: teamColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: teamColor.withOpacity(0.3),
-                    width: 1.5,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    runner.avatar,
-                    style: const TextStyle(fontSize: 17),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // Name & Crew
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            runner.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isCurrentUser
+                    ? teamColor.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: showPurpleGlow
+                    ? Border.all(
+                        color: teamColor.withValues(alpha: 0.4),
+                        width: 1,
+                      )
+                    : isCurrentUser
+                    ? Border.all(
+                        color: teamColor.withValues(alpha: 0.2),
+                        width: 1,
+                      )
+                    : null,
+                boxShadow: showPurpleGlow
+                    ? [
+                        BoxShadow(
+                          color: teamColor.withValues(alpha: glowOpacity),
+                          blurRadius: 12,
+                          spreadRadius: 2,
                         ),
-                        if (isCurrentUser) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: teamColor.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'YOU',
-                              style: GoogleFonts.inter(
-                                fontSize: 8,
-                                fontWeight: FontWeight.w700,
-                                color: teamColor,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      runner.crewName ?? 'No Crew',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: teamColor.withOpacity(0.6),
-                        fontWeight: FontWeight.w500,
+                      ]
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  // Rank
+                  SizedBox(
+                    width: 32,
+                    child: Text(
+                      '$rank',
+                      style: GoogleFonts.sora(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: isCurrentUser
+                            ? teamColor
+                            : AppTheme.textSecondary,
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
 
-              // Flip Points
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
+                  // Avatar
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      runner.avatar,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Name
+                  Expanded(
+                    child: Text(
+                      runner.name,
+                      style: GoogleFonts.sora(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  // Points
                   Text(
                     '${runner.flipPoints}',
                     style: GoogleFonts.sora(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: isCurrentUser ? teamColor : Colors.white,
+                      color: Colors.white,
                     ),
                   ),
-                  Text(
-                    'pts',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      color: Colors.white38,
-                      fontWeight: FontWeight.w500,
+
+                  const SizedBox(width: 8),
+
+                  // Team Dot
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: teamColor,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: teamColor.withValues(alpha: 0.5),
+                          blurRadius: 4,
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // STICKY FOOTER: MY RANK
+  // STICKY FOOTER
   // ---------------------------------------------------------------------------
 
   Widget _buildMyRankFooter() {
@@ -921,130 +827,61 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final teamColor = user.team.color;
     final rank = _currentUserRank;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(
-          top: BorderSide(color: teamColor.withOpacity(0.2), width: 1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withValues(alpha: 0.8),
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            ),
           ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            // Rank
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: teamColor.withOpacity(0.15),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: teamColor.withOpacity(0.4),
-                  width: 1.5,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  rank > 0 ? '#$rank' : '—',
-                  style: GoogleFonts.sora(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: teamColor,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-
-            // Avatar
-            Text(user.avatar, style: const TextStyle(fontSize: 20)),
-            const SizedBox(width: 10),
-
-            // Name
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        user.name,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: teamColor.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text(
-                          'YOU',
-                          style: GoogleFonts.inter(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                            color: teamColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    user.crewName ?? 'No Crew',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Points
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
+          child: SafeArea(
+            top: false,
+            child: Row(
               children: [
+                Text(
+                  'YOUR RANK',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 24,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  rank > 0 ? '#$rank' : '—',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 24,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 24),
                 Text(
                   '${user.flipPoints}',
                   style: GoogleFonts.sora(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.w700,
                     color: teamColor,
                   ),
                 ),
+                const SizedBox(width: 4),
                 Text(
                   'pts',
-                  style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
+                  style: GoogleFonts.sora(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // EMPTY STATE
-  // ---------------------------------------------------------------------------
 
   Widget _buildEmptyState() {
     return Center(
@@ -1054,17 +891,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           Icon(
             Icons.emoji_events_outlined,
             size: 64,
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
           Text(
             'No runners found',
-            style: GoogleFonts.inter(fontSize: 16, color: Colors.white38),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start running to appear on the leaderboard',
-            style: GoogleFonts.inter(fontSize: 12, color: Colors.white24),
+            style: GoogleFonts.sora(
+              fontSize: 16,
+              color: AppTheme.textSecondary,
+            ),
           ),
         ],
       ),
@@ -1076,26 +911,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 // DATA MODEL
 // ---------------------------------------------------------------------------
 
-/// Leaderboard runner data model
-/// Ranked by flipPoints (season cumulative Flip Points)
-/// In production: fetched via Supabase RPC get_leaderboard_by_scope()
 class LeaderboardRunner {
   final String id;
   final String name;
   final Team team;
   final int flipPoints;
   final double totalDistanceKm;
-  final String avatar; // Emoji avatar (overridden by crew image when in crew)
+  final String avatar;
   final String? crewName;
-
-  /// User's last known hex ID at base resolution (Res 9)
-  /// Used for geographic scope filtering
   final String? lastHexId;
-
-  /// Pre-computed zone hex ID (Res 8 parent)
   final String? zoneHexId;
-
-  /// Pre-computed city hex ID (Res 6 parent)
   final String? cityHexId;
 
   const LeaderboardRunner({
