@@ -767,10 +767,21 @@ class _CrewScreenState extends State<CrewScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameController.text.isNotEmpty && user != null) {
-                provider.createCrew(nameController.text, user.team, user);
-                Navigator.pop(ctx);
+                final success = await provider.createCrew(
+                  name: nameController.text,
+                  team: user.team,
+                  user: user,
+                  pin: pinController.text.isEmpty ? null : pinController.text,
+                );
+                if (success && provider.myCrew != null && ctx.mounted) {
+                  // Sync user's crewId with AppStateProvider
+                  context.read<AppStateProvider>().updateCrewId(
+                    provider.myCrew!.id,
+                  );
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
               }
             },
             style: TextButton.styleFrom(
@@ -802,6 +813,9 @@ class _CrewScreenState extends State<CrewScreen> {
   }
 
   void _showCrewSettings(BuildContext context) {
+    final user = context.read<AppStateProvider>().currentUser;
+    final provider = context.read<CrewProvider>();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
@@ -828,9 +842,15 @@ class _CrewScreenState extends State<CrewScreen> {
                 'Leave Crew',
                 style: GoogleFonts.inter(color: Colors.redAccent),
               ),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                // In production: provider.leaveCrew(user)
+                if (user != null) {
+                  final success = await provider.leaveCrew(user);
+                  if (success && context.mounted) {
+                    // Clear user's crewId in AppStateProvider
+                    context.read<AppStateProvider>().updateCrewId(null);
+                  }
+                }
               },
             ),
           ],
@@ -1097,10 +1117,21 @@ class _JoinCrewSheetState extends State<_JoinCrewSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         if (_pinController.text.length == 4 && user != null) {
-                          widget.provider.joinCrew(_pendingJoinCrewId!, user);
-                          Navigator.pop(context);
+                          final success = await widget.provider.joinCrew(
+                            crewId: _pendingJoinCrewId!,
+                            user: user,
+                            pin: _pinController.text,
+                          );
+                          if (success &&
+                              widget.provider.myCrew != null &&
+                              context.mounted) {
+                            context.read<AppStateProvider>().updateCrewId(
+                              widget.provider.myCrew!.id,
+                            );
+                          }
+                          if (context.mounted) Navigator.pop(context);
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -1126,7 +1157,11 @@ class _JoinCrewSheetState extends State<_JoinCrewSheet> {
     );
   }
 
-  void _handleJoin(BuildContext context, dynamic crew, dynamic user) {
+  Future<void> _handleJoin(
+    BuildContext context,
+    dynamic crew,
+    dynamic user,
+  ) async {
     if (crew.pin != null && crew.pin!.isNotEmpty) {
       // Show PIN entry
       setState(() {
@@ -1134,10 +1169,18 @@ class _JoinCrewSheetState extends State<_JoinCrewSheet> {
         _pinController.clear();
       });
     } else {
-      // Direct join
+      // Direct join (no PIN required)
       if (user != null) {
-        widget.provider.joinCrew(crew.id, user);
-        Navigator.pop(context);
+        final success = await widget.provider.joinCrew(
+          crewId: crew.id,
+          user: user,
+        );
+        if (success && widget.provider.myCrew != null && context.mounted) {
+          context.read<AppStateProvider>().updateCrewId(
+            widget.provider.myCrew!.id,
+          );
+        }
+        if (context.mounted) Navigator.pop(context);
       }
     }
   }

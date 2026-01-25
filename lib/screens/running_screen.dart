@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +8,7 @@ import '../providers/app_state_provider.dart';
 import '../models/team.dart';
 import '../widgets/route_map.dart';
 import '../widgets/energy_hold_button.dart';
+import '../widgets/daily_limit_feedback.dart';
 
 class RunningScreen extends StatefulWidget {
   const RunningScreen({super.key});
@@ -24,6 +26,8 @@ class _RunningScreenState extends State<RunningScreen>
   // UI State
   bool _isInitializing = false;
   String? _errorMessage;
+  bool _showDailyLimitFeedback = false;
+  StreamSubscription? _eventSubscription;
 
   @override
   void initState() {
@@ -38,11 +42,27 @@ class _RunningScreenState extends State<RunningScreen>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    // Listen for run events (cooldown hit, etc)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _eventSubscription = context.read<RunProvider>().eventStream.listen((
+        event,
+      ) {
+        if (event == RunEvent.cooldownHit) {
+          if (mounted) {
+            setState(() {
+              _showDailyLimitFeedback = true;
+            });
+          }
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _eventSubscription?.cancel();
     super.dispose();
   }
 
@@ -144,6 +164,25 @@ class _RunningScreenState extends State<RunningScreen>
                 ],
               ),
             ),
+
+            // Daily Limit Feedback (Transient Overlay)
+            if (_showDailyLimitFeedback)
+              Positioned(
+                top: 90, // Just below the top bar
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: DailyLimitFeedback(
+                    onDismiss: () {
+                      if (mounted) {
+                        setState(() {
+                          _showDailyLimitFeedback = false;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
 
             // Error Message
             if (_errorMessage != null)

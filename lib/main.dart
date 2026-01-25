@@ -16,6 +16,11 @@ import 'services/run_tracker.dart';
 import 'services/in_memory_storage_service.dart';
 import 'services/points_service.dart';
 import 'services/supabase_service.dart';
+import 'services/flip_cooldown_service.dart';
+import 'storage/local_storage.dart';
+
+/// Global LocalStorage instance for flip cooldown persistence
+late final LocalStorage _localStorage;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +30,10 @@ void main() async {
 
   // Initialize HexService
   await HexService().initialize();
+
+  // Initialize LocalStorage for flip cooldown persistence
+  _localStorage = LocalStorage();
+  await _localStorage.initialize();
 
   // Set Mapbox access token
   MapboxOptions.setAccessToken(MapboxConfig.accessToken);
@@ -42,6 +51,37 @@ void main() async {
   runApp(const RunnerApp());
 }
 
+/// Create and initialize FlipCooldownService with LocalStorage callbacks
+FlipCooldownService _createFlipCooldownService() {
+  final service = FlipCooldownService(
+    cooldownDuration: const Duration(minutes: 10),
+  );
+  // For MVP, we use a fixed user ID - in production this comes from auth
+  const userId = 'local_user';
+
+  service.initialize(
+    userId: userId,
+    onFlipRecorded: (hexId, timestamp) async {
+      await _localStorage.recordFlipWithTimestamp(
+        userId: userId,
+        hexId: hexId,
+        timestamp: timestamp,
+      );
+    },
+    loadRecentFlips: () async {
+      return await _localStorage.getRecentFlips(
+        userId: userId,
+        maxAge: FlipCooldownService.defaultCooldown,
+      );
+    },
+    cleanupOldFlips: (maxAge) async {
+      await _localStorage.cleanupOldFlips(maxAge: maxAge);
+    },
+  );
+
+  return service;
+}
+
 class RunnerApp extends StatelessWidget {
   const RunnerApp({super.key});
 
@@ -52,8 +92,17 @@ class RunnerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppStateProvider()),
         ChangeNotifierProvider(create: (_) => HexDataProvider()),
         ChangeNotifierProvider(create: (_) => PointsService(initialPoints: 0)),
-        ChangeNotifierProxyProvider<PointsService, RunProvider>(
+        ChangeNotifierProvider(create: (_) => _createFlipCooldownService()),
+        ChangeNotifierProxyProvider2<
+          PointsService,
+          FlipCooldownService,
+          RunProvider
+        >(
           create: (context) {
+            final flipCooldownService = context.read<FlipCooldownService>();
+            // Connect FlipCooldownService to HexDataProvider singleton
+            HexDataProvider().setFlipCooldownService(flipCooldownService);
+
             final provider = RunProvider(
               locationService: LocationService(),
               runTracker: RunTracker(),
@@ -63,8 +112,10 @@ class RunnerApp extends StatelessWidget {
             provider.initialize();
             return provider;
           },
-          update: (context, pointsService, previous) {
+          update: (context, pointsService, flipCooldownService, previous) {
             previous?.updatePointsService(pointsService);
+            // Ensure FlipCooldownService stays connected
+            HexDataProvider().setFlipCooldownService(flipCooldownService);
             return previous!;
           },
         ),

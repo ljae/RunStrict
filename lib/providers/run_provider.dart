@@ -12,6 +12,8 @@ import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
 
+enum RunEvent { pointEarned, cooldownHit }
+
 /// Provider for managing run state and coordinating services.
 ///
 /// Two states only:
@@ -35,6 +37,10 @@ class RunProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   StreamSubscription<LocationPoint>? _locationSubscription;
+
+  // Event stream for transient UI feedback
+  final _eventController = StreamController<RunEvent>.broadcast();
+  Stream<RunEvent> get eventStream => _eventController.stream;
 
   // Route version counter - increments on each new point
   int _routeVersion = 0;
@@ -212,12 +218,29 @@ class RunProvider with ChangeNotifier {
   }
 
   bool _handleHexCapture(String hexId, Team runnerTeam) {
-    final colorChanged = HexDataProvider().updateHexColor(hexId, runnerTeam);
-    if (colorChanged) {
+    final result = HexDataProvider().updateHexColor(hexId, runnerTeam);
+    debugPrint(
+      'RunProvider._handleHexCapture: hexId=$hexId, result=$result, '
+      'pointsService=${_pointsService != null ? "OK" : "NULL"}',
+    );
+
+    if (result == HexUpdateResult.flipped) {
+      final oldPoints = _pointsService?.currentPoints ?? 0;
       _pointsService?.addRunPoints(1);
+      final newPoints = _pointsService?.currentPoints ?? 0;
+      debugPrint(
+        'POINTS ADDED: $oldPoints -> $newPoints (pointsService=$_pointsService)',
+      );
+      _eventController.add(RunEvent.pointEarned);
       notifyListeners();
+      return true;
+    } else if (result == HexUpdateResult.cooldownActive) {
+      _eventController.add(RunEvent.cooldownHit);
+      notifyListeners(); // Update UI for color change even if no points
+      return false;
     }
-    return colorChanged;
+
+    return false;
   }
 
   void _startTimer() {
@@ -331,6 +354,7 @@ class RunProvider with ChangeNotifier {
     _locationService.dispose();
     _runTracker.dispose();
     _storageService.close();
+    _eventController.close();
     super.dispose();
   }
 }

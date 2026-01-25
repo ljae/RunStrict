@@ -21,10 +21,14 @@ class UserModel {
 
   bool get isPurple => team == Team.purple;
 
+  /// Copy with optional field updates.
+  ///
+  /// Use [clearCrewId: true] to explicitly set crewId to null.
   UserModel copyWith({
     String? name,
     Team? team,
     String? crewId,
+    bool clearCrewId = false,
     String? avatar,
     int? seasonPoints,
     String? manifesto,
@@ -33,7 +37,7 @@ class UserModel {
       id: id,
       name: name ?? this.name,
       team: team ?? this.team,
-      crewId: crewId ?? this.crewId,
+      crewId: clearCrewId ? null : (crewId ?? this.crewId),
       avatar: avatar ?? this.avatar,
       seasonPoints: seasonPoints ?? this.seasonPoints,
       manifesto: manifesto ?? this.manifesto,

@@ -1,13 +1,13 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import '../config/h3_config.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hexagon_map.dart';
-import '../models/hex_model.dart';
-import '../models/team.dart';
 import '../models/location_point.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/hex_data_provider.dart';
@@ -24,11 +24,11 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   mapbox.MapboxMap? _mapController;
-  int _selectedZoomIndex = 0; // Default to ZONE (shows user location)
+  GeographicScope _selectedScope = GeographicScope.zone; // Default to ZONE
   HexAggregatedStats? _hexStats;
 
-  // ZONE (index 0) shows user location, CITY and ALL show stats only
-  bool get _showUserLocation => _selectedZoomIndex == 0;
+  // ZONE shows user location, CITY and ALL show stats overlay only
+  bool get _showUserLocation => _selectedScope == GeographicScope.zone;
 
   Future<void> _onMapCreated(mapbox.MapboxMap controller) async {
     _mapController = controller;
@@ -80,7 +80,7 @@ class _MapScreenState extends State<MapScreen> {
             center: mapbox.Point(
               coordinates: mapbox.Position(initialLng, initialLat),
             ),
-            zoom: _getZoomLevelForIndex(_selectedZoomIndex),
+            zoom: _selectedScope.zoomLevel,
           ),
         );
       } catch (e) {
@@ -129,7 +129,7 @@ class _MapScreenState extends State<MapScreen> {
                   position.latitude,
                 ),
               ),
-              zoom: _getZoomLevelForIndex(_selectedZoomIndex),
+              zoom: _selectedScope.zoomLevel,
             ),
             mapbox.MapAnimationOptions(duration: 500, startDelay: 0),
           );
@@ -143,7 +143,7 @@ class _MapScreenState extends State<MapScreen> {
                   position.latitude,
                 ),
               ),
-              zoom: _getZoomLevelForIndex(_selectedZoomIndex),
+              zoom: _selectedScope.zoomLevel,
             ),
           );
         }
@@ -155,11 +155,12 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onZoomChanged(int index) {
     if (!mounted) return;
-    setState(() => _selectedZoomIndex = index);
+    final newScope = GeographicScope.fromIndex(index);
+    setState(() => _selectedScope = newScope);
     // Use easeTo for smooth zoom transitions between ZONE/CITY/ALL
     try {
       _mapController?.easeTo(
-        mapbox.CameraOptions(zoom: _getZoomLevelForIndex(index)),
+        mapbox.CameraOptions(zoom: newScope.zoomLevel),
         mapbox.MapAnimationOptions(duration: 300, startDelay: 0),
       );
     } catch (e) {
@@ -167,24 +168,11 @@ class _MapScreenState extends State<MapScreen> {
       debugPrint('easeTo zoom failed, falling back: $e');
       try {
         _mapController?.setCamera(
-          mapbox.CameraOptions(zoom: _getZoomLevelForIndex(index)),
+          mapbox.CameraOptions(zoom: newScope.zoomLevel),
         );
       } catch (e2) {
         debugPrint('setCamera zoom fallback failed: $e2');
       }
-    }
-  }
-
-  double _getZoomLevelForIndex(int index) {
-    switch (index) {
-      case 0:
-        return 15.0; // ZONE
-      case 1:
-        return 12.0; // CITY
-      case 2:
-        return 11.0; // ALL
-      default:
-        return 12.0;
     }
   }
 
@@ -209,7 +197,19 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
 
-              // Location FAB (upper right, below AppBar)
+              // Stats Overlay for CITY and ALL views only (not ZONE)
+              if (!_showUserLocation && _hexStats != null)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 76,
+                  left: 16,
+                  right: 16,
+                  child: _TeamStatsOverlay(
+                    stats: _hexStats!,
+                    scope: _selectedScope,
+                  ),
+                ),
+
+              // Location FAB (upper right, below AppBar) - only in ZONE view
               if (_showUserLocation)
                 Positioned(
                   top: MediaQuery.of(context).padding.top + 76,
@@ -226,15 +226,6 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                 ),
 
-              // Stats Overlay for CITY and ALL views
-              if (!_showUserLocation && _hexStats != null)
-                Positioned(
-                  top: MediaQuery.of(context).padding.top + 76,
-                  left: 16,
-                  right: 16,
-                  child: _TeamStatsOverlay(stats: _hexStats!),
-                ),
-
               // Bottom Controls (right above bottom nav bar)
               Positioned(
                 bottom: 12,
@@ -248,9 +239,9 @@ class _MapScreenState extends State<MapScreen> {
                       const _CallToActionCard(),
                       const SizedBox(height: 10),
                     ],
-                    // Zoom level selector
+                    // Zoom level selector (ZONE / CITY / ALL)
                     _ZoomLevelSelector(
-                      selectedIndex: _selectedZoomIndex,
+                      selectedIndex: _selectedScope.scopeIndex,
                       onChanged: _onZoomChanged,
                     ),
                   ],
@@ -296,132 +287,190 @@ class _HexMapCard extends StatelessWidget {
   }
 }
 
-/// Team stats overlay for CITY and ALL zoom levels
+/// Team stats overlay for ALL zoom levels
 class _TeamStatsOverlay extends StatelessWidget {
   final HexAggregatedStats stats;
+  final GeographicScope scope;
 
-  const _TeamStatsOverlay({required this.stats});
+  const _TeamStatsOverlay({required this.stats, required this.scope});
 
   @override
   Widget build(BuildContext context) {
     final total = stats.totalHexes;
     if (total == 0) return const SizedBox.shrink();
 
+    // Calculate percentages for claimed territories
     final redPercent = (stats.redCount / total * 100).round();
     final bluePercent = (stats.blueCount / total * 100).round();
     final purplePercent = (stats.purpleCount / total * 100).round();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Territory distribution bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: SizedBox(
-              height: 4,
-              child: Row(
-                children: [
-                  if (stats.redCount > 0)
-                    Expanded(
-                      flex: stats.redCount,
-                      child: Container(color: AppTheme.athleticRed),
-                    ),
-                  if (stats.blueCount > 0)
-                    Expanded(
-                      flex: stats.blueCount,
-                      child: Container(color: AppTheme.electricBlue),
-                    ),
-                  if (stats.purpleCount > 0)
-                    Expanded(
-                      flex: stats.purpleCount,
-                      child: Container(color: const Color(0xFF8B5CF6)),
-                    ),
-                  if (stats.neutralCount > 0)
-                    Expanded(
-                      flex: stats.neutralCount,
-                      child: Container(color: Colors.grey.shade700),
-                    ),
-                ],
-              ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            // More transparent floating panel
+            color: Colors.black.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 0.5,
             ),
           ),
-          const SizedBox(height: 10),
-          // Inline team percentages + total hex count
-          Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppTheme.athleticRed,
-                  shape: BoxShape.circle,
+              // Row 1: Scope badge + Total count
+              Row(
+                children: [
+                  Text(
+                    scope.label.toUpperCase(),
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: 16,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$total',
+                    style: GoogleFonts.sora(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    ' hexes',
+                    style: GoogleFonts.sora(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Row 2: Proportional Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: SizedBox(
+                  height: 6,
+                  child: Row(
+                    children: [
+                      if (stats.redCount > 0)
+                        Expanded(
+                          flex: stats.redCount,
+                          child: Container(color: AppTheme.athleticRed),
+                        ),
+                      if (stats.blueCount > 0)
+                        Expanded(
+                          flex: stats.blueCount,
+                          child: Container(color: AppTheme.electricBlue),
+                        ),
+                      if (stats.purpleCount > 0)
+                        Expanded(
+                          flex: stats.purpleCount,
+                          child: Container(color: AppTheme.chaosPurple),
+                        ),
+                      if (stats.neutralCount > 0)
+                        Expanded(
+                          flex: stats.neutralCount,
+                          child: Container(
+                            color: Colors.white.withValues(alpha: 0.15),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 5),
-              Text(
-                '$redPercent%',
-                style: GoogleFonts.sora(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.athleticRed,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppTheme.electricBlue,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                '$bluePercent%',
-                style: GoogleFonts.sora(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.electricBlue,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF8B5CF6),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                '$purplePercent%',
-                style: GoogleFonts.sora(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF8B5CF6),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '$total hexes',
-                style: GoogleFonts.sora(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.textSecondary,
+              const SizedBox(height: 10),
+
+              // Row 3: Team Stats (compact inline)
+              // Use FittedBox to scale down when numbers are large
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildCompactStat(
+                      stats.redCount,
+                      redPercent,
+                      AppTheme.athleticRed,
+                    ),
+                    const SizedBox(width: 10),
+                    _buildCompactStat(
+                      stats.blueCount,
+                      bluePercent,
+                      AppTheme.electricBlue,
+                    ),
+                    const SizedBox(width: 10),
+                    _buildCompactStat(
+                      stats.purpleCount,
+                      purplePercent,
+                      AppTheme.chaosPurple,
+                    ),
+                    const SizedBox(width: 12),
+                    // Neutral shown smaller
+                    Text(
+                      '${stats.neutralCount}',
+                      style: GoogleFonts.sora(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    Text(
+                      ' unclaimed',
+                      style: GoogleFonts.sora(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  /// Compact team stat: colored dot + count (percent%)
+  Widget _buildCompactStat(int count, int percent, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$count',
+          style: GoogleFonts.sora(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 3),
+        Text(
+          '($percent%)',
+          style: GoogleFonts.sora(
+            fontSize: 11,
+            fontWeight: FontWeight.w400,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
     );
   }
 }

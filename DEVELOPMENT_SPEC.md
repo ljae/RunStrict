@@ -142,12 +142,26 @@ A location-based running game that gamifies territory control through hexagonal 
 
 #### 2.4.1 Hex Grid Configuration
 
+**Base Gameplay Resolution:**
+
 | Property | Value |
 |----------|-------|
-| H3 Resolution | 8 |
-| Avg Hex Edge Length | ~461m |
-| Avg Hex Area | ~0.74 km² |
-| Target Coverage | Neighborhood level (~500m radius) |
+| H3 Resolution | **9** (Base) |
+| Avg Hex Edge Length | ~174m |
+| Avg Hex Area | ~0.10 km² |
+| Target Coverage | Block level (~170m radius) |
+
+> All flip points are calculated at Resolution 9. This ensures equal point value for every hex regardless of geographic location.
+
+**Geographic Scope Resolutions (for MapScreen & Leaderboard):**
+
+| Scope | H3 Resolution | Avg Edge | Avg Area | Purpose |
+|-------|---------------|----------|----------|---------|
+| ZONE | 8 (Parent of 9) | ~461m | ~0.73 km² | Neighborhood leaderboard |
+| CITY | 6 (Parent of 9) | ~3.2km | ~36 km² | District leaderboard |
+| ALL | 4 (Parent of 9) | ~22.6km | ~1,770 km² | Metro/Regional leaderboard |
+
+> H3 uses Aperture 7: each parent hex contains ~7 children. Scope filtering uses `cellToParent()` to group users by their parent hex at the scope resolution.
 
 #### 2.4.2 Capture Rules
 
@@ -1287,12 +1301,25 @@ lib/
 
 ### C. Leaderboard Geographic Scope
 
-> **Implementation Note**: City/Zone boundaries are determined by the number of hexagons visible on the MapScreen at different zoom levels. The exact mapping of zoom levels to geographic scopes requires a technical proposal during implementation.
+Geographic scope filtering uses H3's hierarchical parent cell system. Users are grouped by their parent hex ID at the scope's resolution level.
 
-Proposed approach (to be refined):
-- **ALL**: No geographic filter — server-wide ranking
-- **City**: H3 resolution 4–5 parent cell grouping (or admin boundaries)
-- **Zone**: H3 resolution 6–7 parent cell grouping (or district boundaries)
+**Implementation (lib/config/h3_config.dart):**
+
+| Scope | H3 Resolution | Map Zoom | Filter Logic |
+|-------|---------------|----------|--------------|
+| **ZONE** | 8 | 15.0 | `cellToParent(userHex, 8)` — Neighborhood (~461m) |
+| **CITY** | 6 | 12.0 | `cellToParent(userHex, 6)` — District (~3.2km) |
+| **ALL** | 4 | 10.0 | No filter — server-wide ranking |
+
+**Client Flow:**
+1. Get user's current base hex (Resolution 9)
+2. Convert to scope resolution via `getScopeHexId(baseHex, scope)`
+3. Query Supabase RPC with scope hex ID to filter rankings
+
+**Approximate Coverage:**
+- ZONE (Res 8): ~7 base hexes, neighborhood-level competition
+- CITY (Res 6): ~343 base hexes, district-level competition
+- ALL (Res 4): ~16,807 base hexes, metro-wide competition
 
 ### D. Slogans
 

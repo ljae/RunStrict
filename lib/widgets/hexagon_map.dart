@@ -378,19 +378,25 @@ class _HexagonMapState extends State<HexagonMap> {
       // Only adjust k-ring radius to show more/fewer hexagons based on viewport
       const int resolution = _fixedResolution;
 
-      // Calculate k-ring radius based on zoom to cover visible area
-      // Lower zoom = larger area visible = need more hexagons
+      // Calculate k-ring radius based on zoom to cover visible viewport
+      // Aligned with GeographicScope zoom levels from h3_config.dart:
+      // - ZONE: zoom 15.0 → neighborhood view
+      // - CITY: zoom 12.0 → district view
+      // - ALL: zoom 10.0 → metro view
+      //
+      // k-ring formula: hexes = 1 + 3*k*(k+1)
+      // Gap designed for clear visual differentiation between scopes
       int kRing;
-      if (zoom >= 15) {
-        kRing = 8; // Close zoom, fewer hexagons needed
-      } else if (zoom >= 13) {
-        kRing = 15; // Medium zoom
-      } else if (zoom >= 11) {
-        kRing = 25; // Zoomed out, more hexagons
-      } else if (zoom >= 9) {
-        kRing = 40; // Very zoomed out
+      if (zoom >= 14) {
+        kRing = 5; // ZONE view: ~91 hexes (neighborhood)
+      } else if (zoom >= 12) {
+        kRing = 10; // CITY view: ~331 hexes (district)
+      } else if (zoom >= 10) {
+        kRing = 35; // ALL view: ~3,711 hexes (metro area) - 10x CITY gap
+      } else if (zoom >= 8) {
+        kRing = 50; // Very zoomed out: ~7,651 hexes
       } else {
-        kRing = 60; // Maximum area coverage
+        kRing = 70; // Maximum coverage: ~14,911 hexes
       }
 
       // Safely extract coordinates

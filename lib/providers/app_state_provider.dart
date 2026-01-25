@@ -52,6 +52,19 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
+  /// Update user's crew membership
+  ///
+  /// Pass [crewId] to set the crew, or null to leave the crew.
+  void updateCrewId(String? crewId) {
+    if (_currentUser != null) {
+      _currentUser = _currentUser!.copyWith(
+        crewId: crewId,
+        clearCrewId: crewId == null,
+      );
+      notifyListeners();
+    }
+  }
+
   /// Join Purple Crew (The Traitor's Gate)
   /// Warning: This resets season points to 0
   void defectToPurple() {

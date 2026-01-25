@@ -4,16 +4,32 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/hex_model.dart';
 import '../models/team.dart';
+import '../services/flip_cooldown_service.dart';
 import '../services/hex_service.dart';
 import '../utils/lru_cache.dart';
+
+enum HexUpdateResult {
+  flipped,
+  sameTeam,
+  alreadyCapturedSession,
+  cooldownActive, // Hex was flipped recently, in cooldown period
+  error,
+}
 
 /// Hex data provider for managing hex state (last runner color system)
 ///
 /// Privacy optimized: Only stores lastRunnerTeam, no timestamps or runner IDs.
 /// Memory optimized: Uses LRU cache to limit memory usage.
+///
+/// Daily flip dedup: Integrates with DailyFlipService to enforce the rule that
+/// a runner can only earn flip points from the same hex once per day.
 class HexDataProvider with ChangeNotifier {
-  /// Max hex entries to keep in memory (approximately 500 hexes = ~50KB)
-  static const int maxCacheSize = 500;
+  /// Max hex entries to keep in memory
+  /// - ZONE: ~91 hexes
+  /// - CITY: ~331 hexes
+  /// - ALL: ~3,781 hexes
+  /// With ~100 bytes per hex, 4000 hexes ≈ 400KB memory
+  static const int maxCacheSize = 4000;
 
   // LRU cache for memory efficiency
   final LruCache<String, HexModel> _hexCache = LruCache<String, HexModel>(
@@ -32,6 +48,15 @@ class HexDataProvider with ChangeNotifier {
   static final HexDataProvider _instance = HexDataProvider._internal();
   factory HexDataProvider() => _instance;
   HexDataProvider._internal();
+
+  /// Flip cooldown service for dedup tracking (injected)
+  FlipCooldownService? _flipCooldownService;
+
+  /// Set the flip cooldown service (called from Provider tree setup)
+  void setFlipCooldownService(FlipCooldownService service) {
+    _flipCooldownService = service;
+    debugPrint('HexDataProvider: FlipCooldownService connected');
+  }
 
   /// Get current user location
   LatLng? get userLocation => _userLocation;
@@ -117,8 +142,12 @@ class HexDataProvider with ChangeNotifier {
   final Map<String, Team> _capturedHexTeams = {};
 
   /// Update hex with runner's color
-  /// Returns true if the color actually changed (flipped) or first capture this session
-  bool updateHexColor(String hexId, Team runnerTeam) {
+  ///
+  /// Returns HexUpdateResult indicating the outcome of the update attempt.
+  ///
+  /// Daily flip rule: A runner can only earn flip points from the same hex
+  /// once per day. This prevents farming points by repeatedly flipping.
+  HexUpdateResult updateHexColor(String hexId, Team runnerTeam) {
     final newTeam = runnerTeam;
     final existing = _hexCache.get(hexId);
 
@@ -126,7 +155,21 @@ class HexDataProvider with ChangeNotifier {
     // This prevents double-counting when re-entering a hex
     if (_capturedHexesThisSession.contains(hexId)) {
       debugPrint('HEX ALREADY CAPTURED THIS SESSION: $hexId (no flip)');
-      return false;
+      return HexUpdateResult.alreadyCapturedSession;
+    }
+
+    // COOLDOWN CHECK: Is this hex in cooldown period?
+    if (_flipCooldownService != null &&
+        _flipCooldownService!.isInCooldown(hexId)) {
+      final remaining = _flipCooldownService!.getRemainingCooldown(hexId);
+      debugPrint(
+        'HEX IN COOLDOWN: $hexId (${remaining?.inSeconds}s remaining, no points)',
+      );
+      // Still mark as captured this session to prevent repeated checks
+      _capturedHexesThisSession.add(hexId);
+      // Still update the hex color visually, but don't count as a flip
+      _updateHexColorInCache(hexId, newTeam, existing);
+      return HexUpdateResult.cooldownActive; // In cooldown = no points
     }
 
     if (existing != null) {
@@ -138,13 +181,15 @@ class HexDataProvider with ChangeNotifier {
         _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: newTeam));
         _capturedHexesThisSession.add(hexId);
         _capturedHexTeams[hexId] = newTeam;
+        // Record the flip in daily service (async, fire-and-forget)
+        _recordFlipCooldown(hexId);
         notifyListeners();
-        return true; // Color changed (flipped)
+        return HexUpdateResult.flipped; // Color changed (flipped)
       }
       // Same team as current owner — no color change, no flip
       debugPrint('HEX SAME TEAM: $hexId already $newTeam (no flip)');
       _capturedHexesThisSession.add(hexId);
-      return false; // No color change = not a flip
+      return HexUpdateResult.sameTeam; // No color change = not a flip
     } else {
       // Hex not in cache - create it with the runner's color
       try {
@@ -155,13 +200,46 @@ class HexDataProvider with ChangeNotifier {
         );
         _capturedHexesThisSession.add(hexId);
         _capturedHexTeams[hexId] = newTeam;
+        // Record the flip in daily service (async, fire-and-forget)
+        _recordFlipCooldown(hexId);
         debugPrint('HEX CREATED & CAPTURED: $hexId -> $newTeam');
         notifyListeners();
-        return true; // New hex, counts as capture
+        return HexUpdateResult.flipped; // New hex, counts as capture
       } catch (e) {
         debugPrint('HexDataProvider: Failed to create hex $hexId: $e');
-        return false;
+        return HexUpdateResult.error;
       }
+    }
+  }
+
+  /// Update hex color in cache without counting as a flip
+  void _updateHexColorInCache(String hexId, Team newTeam, HexModel? existing) {
+    if (existing != null && existing.lastRunnerTeam != newTeam) {
+      _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: newTeam));
+      _capturedHexTeams[hexId] = newTeam;
+      notifyListeners();
+    } else if (existing == null) {
+      try {
+        final hexCenter = HexService().getHexCenter(hexId);
+        _hexCache.put(
+          hexId,
+          HexModel(id: hexId, center: hexCenter, lastRunnerTeam: newTeam),
+        );
+        _capturedHexTeams[hexId] = newTeam;
+        notifyListeners();
+      } catch (e) {
+        debugPrint('HexDataProvider: Failed to update hex color: $e');
+      }
+    }
+  }
+
+  /// Record a flip in the cooldown service (fire-and-forget async)
+  void _recordFlipCooldown(String hexId) {
+    if (_flipCooldownService != null) {
+      _flipCooldownService!.recordFlip(hexId).catchError((e) {
+        debugPrint('HexDataProvider: Failed to record flip cooldown: $e');
+        return false; // Return value for catchError
+      });
     }
   }
 

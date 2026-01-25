@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../config/h3_config.dart';
 import '../theme/app_theme.dart';
 import '../models/team.dart';
 
@@ -21,13 +22,19 @@ class LeaderboardScreen extends StatefulWidget {
 class _LeaderboardScreenState extends State<LeaderboardScreen>
     with SingleTickerProviderStateMixin {
   String _teamFilter = 'ALL';
-  String _scopeFilter = 'ALL';
+  GeographicScope _scopeFilter = GeographicScope.all;
   late AnimationController _pulseController;
 
-  // Mock current user ID for highlighting
+  // Mock current user ID and hex for highlighting and scope filtering
   static const String _currentUserId = 'user_1';
+  // Mock user's current hex ID (Res 9) - In production, fetched from user state
+  // Used for scope filtering when integrated with Supabase RPC
+  // ignore: unused_field
+  static const String _currentUserHexId = '89283082803ffff';
 
-  // Mock Data - In production, fetched via Supabase RPC: get_leaderboard()
+  // Mock Data - In production, fetched via Supabase RPC: get_leaderboard_by_scope()
+  // Hex IDs use Seoul area H3 indices for demonstration
+  // Zone (Res 8) = ~0.73 km², City (Res 6) = ~36 km²
   final List<LeaderboardRunner> _allRunners = [
     LeaderboardRunner(
       id: 'user_1',
@@ -37,6 +44,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 154.2,
       avatar: '🦊',
       crewName: 'Phoenix Squad',
+      lastHexId: '89283082803ffff', // Gangnam area
+      zoneHexId: '88283082807ffff', // Same zone as current user
+      cityHexId: '86283080fffffff', // Same city as current user
     ),
     LeaderboardRunner(
       id: 'user_2',
@@ -46,6 +56,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 148.5,
       avatar: '🐬',
       crewName: 'Tidal Force',
+      lastHexId: '89283082813ffff',
+      zoneHexId: '88283082817ffff', // Same zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_3',
@@ -55,6 +68,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 142.8,
       avatar: '🔥',
       crewName: 'Phoenix Squad',
+      lastHexId: '89283082823ffff',
+      zoneHexId: '88283082827ffff', // Same zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_4',
@@ -64,6 +80,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 135.0,
       avatar: '🌊',
       crewName: 'Ocean Runners',
+      lastHexId: '89283082833ffff',
+      zoneHexId: '88283082837ffff', // Same zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_5',
@@ -73,6 +92,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 68.2,
       avatar: '💀',
       crewName: 'Void Walkers',
+      lastHexId: '89283082843ffff',
+      zoneHexId: '88283082847ffff', // Same zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_6',
@@ -82,6 +104,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 128.4,
       avatar: '🦉',
       crewName: 'Night Runners',
+      lastHexId: '89283082853ffff',
+      zoneHexId: '88283082857ffff', // Same zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_7',
@@ -91,6 +116,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 122.1,
       avatar: '⚡',
       crewName: 'Thunder Crew',
+      lastHexId: '89283082863ffff',
+      zoneHexId: null, // Different zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_8',
@@ -100,6 +128,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 44.5,
       avatar: '🌀',
       crewName: 'Void Walkers',
+      lastHexId: '89283082873ffff',
+      zoneHexId: null, // Different zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_9',
@@ -109,6 +140,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 115.7,
       avatar: '🌟',
       crewName: 'Blaze Squad',
+      lastHexId: '89283082883ffff',
+      zoneHexId: null, // Different zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_10',
@@ -118,6 +152,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 109.3,
       avatar: '🐋',
       crewName: 'Ocean Runners',
+      lastHexId: '89283082893ffff',
+      zoneHexId: null, // Different zone
+      cityHexId: '86283080fffffff', // Same city
     ),
     LeaderboardRunner(
       id: 'user_11',
@@ -127,6 +164,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 105.0,
       avatar: '🦅',
       crewName: 'Phoenix Squad',
+      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_12',
@@ -136,6 +174,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 98.6,
       avatar: '🐙',
       crewName: 'Tidal Force',
+      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_13',
@@ -145,6 +184,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 32.1,
       avatar: '👁️',
       crewName: 'Shadow Protocol',
+      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_14',
@@ -154,6 +194,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 95.2,
       avatar: '✨',
       crewName: 'Blaze Squad',
+      // No hex data - user from different region
     ),
     LeaderboardRunner(
       id: 'user_15',
@@ -163,6 +204,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 92.1,
       avatar: '🌊',
       crewName: 'Thunder Crew',
+      // No hex data - user from different region
     ),
   ];
 
@@ -179,12 +221,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       runners = runners.where((r) => r.team == teamFilter).toList();
     }
 
-    // Scope filter (mock: reduce list for City/Zone)
-    // In production, this queries different geographic scopes via Supabase
-    if (_scopeFilter == 'CITY') {
-      runners = runners.take(10).toList();
-    } else if (_scopeFilter == 'ZONE') {
-      runners = runners.take(6).toList();
+    // Geographic scope filter using H3 parent cell hierarchy
+    // In production, this is handled server-side via Supabase RPC
+    switch (_scopeFilter) {
+      case GeographicScope.zone:
+        // Filter by Res 8 parent (neighborhood)
+        // Mock: Users with matching zoneHexId
+        runners = runners.where((r) => r.zoneHexId != null).toList();
+        // For MVP, show fewer users in Zone view
+        runners = runners.take(6).toList();
+        break;
+      case GeographicScope.city:
+        // Filter by Res 6 parent (district)
+        // Mock: Users with matching cityHexId
+        runners = runners.where((r) => r.cityHexId != null).toList();
+        // For MVP, show moderate number in City view
+        runners = runners.take(10).toList();
+        break;
+      case GeographicScope.all:
+        // No geographic filter - show all users
+        break;
     }
 
     return runners;
@@ -412,15 +468,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          _buildScopeChip('ALL', 'ALL'),
+          _buildScopeChip(GeographicScope.all),
           const SizedBox(width: 8),
-          _buildScopeChip('City', 'CITY'),
+          _buildScopeChip(GeographicScope.city),
           const SizedBox(width: 8),
-          _buildScopeChip('Zone', 'ZONE'),
+          _buildScopeChip(GeographicScope.zone),
           const Spacer(),
-          // Runner count
+          // Runner count with scope description
           Text(
-            '${_filteredRunners.length} runners',
+            '${_filteredRunners.length} in ${_scopeFilter.description}',
             style: GoogleFonts.inter(
               fontSize: 11,
               color: Colors.white24,
@@ -432,11 +488,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
-  Widget _buildScopeChip(String label, String value) {
-    final isSelected = _scopeFilter == value;
+  Widget _buildScopeChip(GeographicScope scope) {
+    final isSelected = _scopeFilter == scope;
 
     return GestureDetector(
-      onTap: () => setState(() => _scopeFilter = value),
+      onTap: () => setState(() => _scopeFilter = scope),
       child: AnimatedContainer(
         duration: AppTheme.fastDuration,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -452,7 +508,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           ),
         ),
         child: Text(
-          label,
+          scope.label,
           style: GoogleFonts.inter(
             fontSize: 12,
             color: isSelected ? Colors.white : Colors.white38,
@@ -1022,7 +1078,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
 /// Leaderboard runner data model
 /// Ranked by flipPoints (season cumulative Flip Points)
-/// In production: fetched via Supabase RPC get_leaderboard()
+/// In production: fetched via Supabase RPC get_leaderboard_by_scope()
 class LeaderboardRunner {
   final String id;
   final String name;
@@ -1032,6 +1088,16 @@ class LeaderboardRunner {
   final String avatar; // Emoji avatar (overridden by crew image when in crew)
   final String? crewName;
 
+  /// User's last known hex ID at base resolution (Res 9)
+  /// Used for geographic scope filtering
+  final String? lastHexId;
+
+  /// Pre-computed zone hex ID (Res 8 parent)
+  final String? zoneHexId;
+
+  /// Pre-computed city hex ID (Res 6 parent)
+  final String? cityHexId;
+
   const LeaderboardRunner({
     required this.id,
     required this.name,
@@ -1040,5 +1106,8 @@ class LeaderboardRunner {
     required this.totalDistanceKm,
     required this.avatar,
     this.crewName,
+    this.lastHexId,
+    this.zoneHexId,
+    this.cityHexId,
   });
 }
