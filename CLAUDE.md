@@ -17,6 +17,8 @@
 - Privacy optimized: No timestamps or runner IDs stored in hexes
 - Performance-optimized (no 3D rendering)
 - Serverless: No backend API server (Supabase RLS + Edge Functions)
+- **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync")
+- **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier)
 
 ### Core Philosophy
 | Surface Layer | Hidden Layer |
@@ -81,7 +83,7 @@ lib/
 │   ├── run_session.dart         # Active run session data
 │   ├── run_summary.dart         # Completed run (with hexPath)
 │   ├── daily_running_stat.dart  # Daily stats (Warm data)
-│   ├── daily_hex_flip_record.dart # Daily flip dedup tracking
+
 │   ├── location_point.dart      # GPS point model (active run)
 │   └── route_point.dart         # Compact route point (cold storage)
 ├── providers/
@@ -109,7 +111,7 @@ lib/
 │   ├── local_storage_service.dart # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
 │   ├── season_service.dart      # 280-day season countdown
-│   ├── crew_multiplier_service.dart # Simultaneous runner tracking (Realtime)
+│   ├── crew_multiplier_service.dart # Yesterday's check-in multiplier (daily batch)
 │   ├── running_score_service.dart # Pace validation for capture
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
@@ -145,7 +147,7 @@ enum Team {
   blue,   // Display: "WAVE" 🌊
   purple; // Display: "CHAOS" 💜
 
-  // No multiplier on Team — multiplier comes from simultaneous runners
+  // No multiplier on Team — multiplier comes from yesterday's active crew members
   String get displayName => switch (this) {
     red => 'FLAME',
     blue => 'WAVE',
@@ -161,12 +163,16 @@ class UserModel {
   String name;
   Team team;              // 'red' | 'blue' | 'purple'
   String avatar;          // Overridden by crew image when in crew
+  String? originalAvatar; // Preserved when joining crew, restored on leave
   String? crewId;
   int seasonPoints;       // Reset to 0 when defecting to Purple
   String? manifesto;      // 12-char declaration
+  String? homeHexStart;   // H3 index of run start location (self only)
+  String? homeHexEnd;     // H3 index of run end location (visible to others)
 }
 ```
 **Note**: Distance stats calculated from `daily_stats` table on-demand.
+**Home Hex**: Asymmetric visibility - `homeHexStart` for self, `homeHexEnd` for others.
 
 ### Hex Model (Supabase: hexes table)
 ```dart
@@ -174,9 +180,10 @@ class HexModel {
   String id;              // H3 hex index (resolution 8)
   LatLng center;
   Team? lastRunnerTeam;   // null = neutral
+  DateTime? lastFlippedAt; // Run's endTime when hex was flipped (conflict resolution)
 }
 ```
-**Important**: No timestamps, no runner IDs - privacy optimized.
+**Important**: Minimal timestamp for fairness (last_flipped_at), no runner IDs - privacy optimized.
 
 ### Crew Model (Supabase: crews table)
 ```dart
@@ -223,12 +230,13 @@ class RunSummary {
 
 ## Game Mechanics
 
-### Crew Economy: Simultaneous Runner Multiply
-- **Multiplier** = number of crew members running at the same time
+### Crew Economy: Yesterday's Check-in Multiplier
+- **Multiplier** = number of crew members who ran **yesterday**
+- Calculated daily at midnight GMT+2 via Edge Function
 - **Red/Blue Crew**: Max 12 members = up to 12x multiplier
 - **Purple Crew**: Max 24 members = up to 24x multiplier
-- All teams have **1x base** (no Purple 2x bonus)
-- Location is irrelevant — just active sessions count
+- **Solo runner or new user/crew** = 1x (default)
+- Fetched on app launch - no real-time tracking needed
 
 ### Purple Crew (The Protocol of Chaos)
 - **Unlock**: D-140 (halfway point)
@@ -238,18 +246,21 @@ class RunSummary {
 - **Rule**: Irreversible - cannot return to Red/Blue
 
 ### Hex Capture Rules
-- Must be running at valid pace (< 8:00 min/km)
+- Must be running at valid **moving average pace (last 10 sec)** (< 8:00 min/km)
 - Speed must be < 25 km/h (anti-spoofing)
 - GPS accuracy must be ≤ 50m
 - Any color change = Flip (including neutral → team color)
-- Same hex: once per day per runner for points
+- **NO daily flip limit** - same hex can be flipped multiple times per day
+- Conflict resolution: **Later run_endTime wins** (compared via last_flipped_at timestamp)
 - Capturable hexes pulse (2s, 1.2x scale, glow)
 
 ### Flip Points Calculation
 ```
-flip_points = 1 × active_crew_runners
+flip_points = 1 × yesterday_active_crew_members
 ```
-Checked via Supabase RPC: `has_flipped_today()` + `get_crew_multiplier()`
+Multiplier fetched on app launch via RPC: `get_crew_multiplier()`
+
+**Server Validation**: Points ≤ hex_count × multiplier (anti-cheat)
 
 ---
 
@@ -315,8 +326,7 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 - Use relative imports for internal files
 - Run `flutter analyze` before committing
 - Add `///` documentation for public APIs
-- Use Supabase RPC for complex queries
-- Use Supabase Realtime for live data (active runners, hex colors)
+- Use Supabase RPC for complex queries (multiplier, leaderboard)
 
 ### Don't
 - Don't use `print()` - use `debugPrint()`
@@ -332,19 +342,17 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 ## Supabase Schema (Key Tables)
 
 ```sql
-users        -- id, name, team, avatar, crew_id, season_points, manifesto
+users        -- id, name, team, avatar, original_avatar, crew_id, season_points, manifesto, home_hex_start, home_hex_end
 crews        -- id, name, team, member_ids[], pin, representative_image
-hexes        -- id (H3 index), last_runner_team
+hexes        -- id (H3 index), last_runner_team, last_flipped_at (conflict resolution)
 runs         -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
 daily_stats  -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
-daily_flips  -- user_id, date_key, hex_id (partitioned daily, 2-day retention)
-active_runs  -- user_id, crew_id, start_time, team (ephemeral presence)
+-- active_runs  DEPRECATED: No longer used (no Realtime)
 ```
 
 **Key RPC Functions:**
-- `get_crew_multiplier(crew_id)` → count of active runners
+- `get_crew_multiplier(crew_id)` → count of yesterday's active members
 - `get_leaderboard(limit)` → ranked users by season_points
-- `has_flipped_today(user_id, hex_id)` → boolean dedup check
 
 ---
 
@@ -356,6 +364,6 @@ active_runs  -- user_id, crew_id, start_time, team (ephemeral presence)
 | `geolocator` | GPS location tracking |
 | `mapbox_maps_flutter` | Map rendering |
 | `h3_flutter` | Hexagonal grid system |
-| `supabase_flutter` | Backend (Auth + DB + Realtime + Storage) |
+| `supabase_flutter` | Backend (Auth + DB + Storage) |
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |

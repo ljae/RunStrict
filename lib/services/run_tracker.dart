@@ -5,8 +5,10 @@ import 'package:latlong2/latlong.dart';
 import '../models/location_point.dart';
 import '../models/run_session.dart';
 import '../models/team.dart';
+import '../services/gps_validator.dart';
 import '../services/hex_service.dart';
 import '../services/running_score_service.dart';
+import '../services/accelerometer_service.dart';
 
 typedef HexCaptureCallback = bool Function(String hexId, Team runnerTeam);
 
@@ -14,20 +16,19 @@ typedef HexCaptureCallback = bool Function(String hexId, Team runnerTeam);
 typedef TierChangeCallback =
     void Function(ImpactTier oldTier, ImpactTier newTier);
 
+/// Result of stopping a run, including data for "The Final Sync"
+class RunStopResult {
+  final RunSession session;
+  final List<String> capturedHexIds;
+
+  const RunStopResult({required this.session, required this.capturedHexIds});
+}
+
 /// Service responsible for tracking runs, calculating distance,
 /// and applying anti-spoofing.
 ///
 /// Simple two-state lifecycle: start → stop.
 class RunTracker {
-  // Debug mode for simulator testing - set to true to allow higher speeds
-  static const bool _debugMode = true;
-  static const double _maxSpeedKmh = _debugMode
-      ? 100.0
-      : 25.0; // Anti-spoofing: max speed
-  static const double _maxTeleportMeters = _debugMode
-      ? 5000.0
-      : 1000.0; // Anti-spoofing: max jump
-
   // Must match HexagonMap._fixedResolution (9) so captured hex IDs
   // correspond to rendered hex IDs on the map.
   static const int _hexResolution = 9;
@@ -38,6 +39,12 @@ class RunTracker {
   LocationPoint? _lastValidPoint;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
+  // GPS validator for moving average pace (10-sec window)
+  final GpsValidator _gpsValidator = GpsValidator();
+
+  // Accelerometer service for anti-spoofing (singleton)
+  final AccelerometerService _accelerometerService = AccelerometerService();
+
   // Hex scoring integration
   final HexService _hexService = HexService();
   HexCaptureCallback? _onHexCapture;
@@ -47,11 +54,23 @@ class RunTracker {
   ImpactTier _currentTier = ImpactTier.starter;
   int _maxImpactTierIndex = 0;
 
+  /// List of hex IDs captured during this run (for batch upload at "The Final Sync")
+  final List<String> _capturedHexIds = [];
+
   /// Get the current active run session
   RunSession? get currentRun => _currentRun;
 
   /// Get current impact tier
   ImpactTier get currentTier => _currentTier;
+
+  /// Get the list of captured hex IDs (for batch upload)
+  List<String> get capturedHexIds => List.unmodifiable(_capturedHexIds);
+
+  /// Get current 10-second moving average pace (min/km)
+  double get movingAvgPaceMinPerKm => _gpsValidator.movingAvgPaceMinPerKm;
+
+  /// Check if current pace is valid for hex capture (< 8:00 min/km)
+  bool get canCaptureAtCurrentPace => _gpsValidator.canCaptureAtCurrentPace;
 
   /// Get current running score state
   RunningScoreState get scoreState => RunningScoreState(
@@ -94,6 +113,11 @@ class RunTracker {
     _crewMembersCoRunning = crewMembersCoRunning;
     _currentTier = ImpactTier.starter;
     _maxImpactTierIndex = 0;
+    _gpsValidator.reset();
+    _capturedHexIds.clear();
+
+    // Start accelerometer for anti-spoofing
+    _accelerometerService.startListening();
 
     _currentRun = RunSession(
       id: runId,
@@ -120,40 +144,56 @@ class RunTracker {
       _hexResolution,
     );
 
-    // First point - record it and attempt to capture starting hex
+    // First point - record it (no capture until we have moving avg pace)
     if (_lastValidPoint == null) {
       _lastValidPoint = point;
       _currentRun!.addPoint(point);
       _currentRun!.currentHexId = currentHexId;
       _currentRun!.distanceInCurrentHex = 0;
 
-      // Attempt to capture the starting hex
-      if (_runnerTeam != null) {
+      // Initialize validator with first point (no pace data yet)
+      _gpsValidator.validate(null, point);
+
+      debugPrint(
+        'First point recorded: hexId=$currentHexId (awaiting pace data)',
+      );
+      return;
+    }
+
+    // Validate point using GpsValidator (includes moving avg pace calculation)
+    final validationResult = _gpsValidator.validate(_lastValidPoint, point);
+
+    if (!validationResult.isValid) {
+      debugPrint(
+        'Invalid point (anti-spoofing): ${validationResult.rejectionReason}',
+      );
+      return;
+    }
+
+    // Get calculated distance from validator or compute it
+    final distanceMeters =
+        validationResult.calculatedDistance ??
+        _calculateDistance(_lastValidPoint!, point);
+
+    // Calculate time difference for accelerometer validation
+    final timeDiffSeconds =
+        point.timestamp.difference(_lastValidPoint!.timestamp).inMilliseconds /
+        1000.0;
+
+    // Validate against accelerometer (anti-spoofing layer 2)
+    // Only reject if we have accelerometer data AND GPS shows significant movement
+    if (timeDiffSeconds > 0 && distanceMeters > 5) {
+      final accelResult = _accelerometerService.validateGpsMovement(
+        distanceMeters,
+        timeDiffSeconds,
+      );
+      if (!accelResult.isValid) {
         debugPrint(
-          'First point: attempting capture of starting hex $currentHexId',
+          'Invalid point (accelerometer): ${accelResult.rejectionReason}',
         );
-        bool flipped = _onHexCapture?.call(currentHexId, _runnerTeam!) ?? false;
-
-        if (flipped) {
-          _currentRun!.recordFlip(currentHexId);
-          debugPrint(
-            'STARTING HEX CAPTURED! hexId=$currentHexId, '
-            'Total flips: ${_currentRun!.hexesColored}',
-          );
-        }
+        return;
       }
-      return;
     }
-
-    // Anti-spoofing checks
-    if (!_isValidPoint(point, _lastValidPoint!)) {
-      // ignore: avoid_print
-      print('Invalid point detected (anti-spoofing): $point');
-      return;
-    }
-
-    // Calculate distance from last valid point
-    final distanceMeters = _calculateDistance(_lastValidPoint!, point);
 
     // Update run session
     final newTotalDistance = _currentRun!.distanceMeters + distanceMeters;
@@ -175,16 +215,19 @@ class RunTracker {
     // Handle hex transition
     final previousHexId = _currentRun!.currentHexId;
 
+    // Use 10-second moving average pace for capture validation (spec §2.4.2)
+    final movingAvgPace = _gpsValidator.movingAvgPaceMinPerKm;
+    final canCapture = _gpsValidator.canCaptureAtCurrentPace;
+
     if (previousHexId != currentHexId) {
       // Transitioning to a new hex - attempt capture on entry
       debugPrint('Hex transition: $previousHexId -> $currentHexId');
 
       if (_runnerTeam != null) {
-        final pace = _currentRun!.paceMinPerKm;
-        final canCapture = RunningScoreService.canCapture(pace);
         debugPrint(
           'Hex ENTRY capture check: hexId=$currentHexId, '
-          'pace=${pace.toStringAsFixed(1)}, canCapture=$canCapture',
+          'movingAvgPace=${movingAvgPace.toStringAsFixed(1)} min/km, '
+          'canCapture=$canCapture',
         );
 
         if (canCapture) {
@@ -193,9 +236,11 @@ class RunTracker {
 
           if (flipped) {
             _currentRun!.recordFlip(currentHexId);
+            _capturedHexIds.add(currentHexId); // Batch for The Final Sync
             debugPrint(
               'HEX FLIPPED ON ENTRY! '
-              'Total flips: ${_currentRun!.hexesColored}',
+              'Total flips: ${_currentRun!.hexesColored}, '
+              'Batch size: ${_capturedHexIds.length}',
             );
           }
         }
@@ -210,18 +255,17 @@ class RunTracker {
       // Check for capture every 20m while staying in the same hex
       if (_runnerTeam != null &&
           _currentRun!.distanceInCurrentHex >= _captureCheckDistanceMeters) {
-        final pace = _currentRun!.paceMinPerKm;
-        final canCapture = RunningScoreService.canCapture(pace);
-
         if (canCapture) {
           bool flipped =
               _onHexCapture?.call(currentHexId, _runnerTeam!) ?? false;
 
           if (flipped) {
             _currentRun!.recordFlip(currentHexId);
+            _capturedHexIds.add(currentHexId); // Batch for The Final Sync
             debugPrint(
               'HEX FLIPPED ON STAY! '
-              'Total flips: ${_currentRun!.hexesColored}',
+              'Total flips: ${_currentRun!.hexesColored}, '
+              'Batch size: ${_capturedHexIds.length}',
             );
           }
 
@@ -237,36 +281,6 @@ class RunTracker {
     _currentRun!.currentHexId = currentHexId;
 
     _lastValidPoint = point;
-  }
-
-  /// Anti-spoofing: Validate if a location point is legitimate
-  bool _isValidPoint(LocationPoint current, LocationPoint last) {
-    // Skip anti-spoofing checks in debug mode for simulator testing
-    if (_debugMode) return true;
-
-    // Check 1: Speed filter
-    final timeDiffSeconds = current.timestamp
-        .difference(last.timestamp)
-        .inSeconds;
-    if (timeDiffSeconds == 0) return false;
-
-    final distanceMeters = _calculateDistance(last, current);
-    final speedKmh = (distanceMeters / timeDiffSeconds) * 3.6;
-
-    if (speedKmh > _maxSpeedKmh) {
-      // ignore: avoid_print
-      print('Speed too high: ${speedKmh.toStringAsFixed(2)} km/h');
-      return false;
-    }
-
-    // Check 2: Teleport detection
-    if (distanceMeters > _maxTeleportMeters) {
-      // ignore: avoid_print
-      print('Teleport detected: ${distanceMeters.toStringAsFixed(2)}m');
-      return false;
-    }
-
-    return true;
   }
 
   /// Calculate distance between two points using Haversine formula
@@ -293,24 +307,40 @@ class RunTracker {
     return degrees * pi / 180;
   }
 
-  /// Stop the current run session
-  RunSession? stopRun() {
+  /// Stop the current run session and return data for "The Final Sync"
+  ///
+  /// Returns [RunStopResult] containing:
+  /// - [session]: The completed run session
+  /// - [capturedHexIds]: List of hex IDs captured during this run (for batch upload)
+  RunStopResult? stopRun() {
     if (_currentRun == null) return null;
 
     // Complete the run
     _currentRun!.complete();
     _currentRun!.distanceInCurrentHex = 0;
 
-    final completedRun = _currentRun;
+    final completedRun = _currentRun!;
+    final hexIds = List<String>.from(_capturedHexIds);
 
+    debugPrint(
+      'Run stopped. Total flips: ${completedRun.hexesColored}, '
+      'Hex IDs for Final Sync: ${hexIds.length}',
+    );
+
+    // Reset state
     _locationSubscription?.cancel();
     _locationSubscription = null;
     _currentRun = null;
     _lastValidPoint = null;
     _currentTier = ImpactTier.starter;
     _maxImpactTierIndex = 0;
+    _gpsValidator.reset();
+    _capturedHexIds.clear();
 
-    return completedRun;
+    // Stop accelerometer
+    _accelerometerService.stopListening();
+
+    return RunStopResult(session: completedRun, capturedHexIds: hexIds);
   }
 
   /// Clean up resources

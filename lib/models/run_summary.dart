@@ -1,42 +1,63 @@
 import 'team.dart';
 
+/// RunSummary - Server upload payload for "The Final Sync"
+///
+/// Contains all data needed for batch upload at run completion:
+/// - Run metadata (id, endTime, distance, duration, pace)
+/// - Hex data (hexesColored count, hexPath for flip calculation)
+/// - Multiplier (yesterdayCrewCount for points calculation)
 class RunSummary {
   final String id;
-  final DateTime date;
+
+  /// Run completion time (used for conflict resolution: "Later run wins")
+  final DateTime endTime;
+
   final double distanceKm;
   final int durationSeconds;
   final double avgPaceMinPerKm;
   final int hexesColored;
   final Team teamAtRun;
+
+  /// Deduplicated H3 IDs of hexes passed during run
   final List<String> hexPath;
+
+  /// Yesterday's crew check-in count (applied multiplier for points calculation)
+  /// Default to 1 for solo runners or new users/crews
+  final int yesterdayCrewCount;
 
   const RunSummary({
     required this.id,
-    required this.date,
+    required this.endTime,
     required this.distanceKm,
     required this.durationSeconds,
     required this.avgPaceMinPerKm,
     required this.hexesColored,
     required this.teamAtRun,
     this.hexPath = const [],
+    this.yesterdayCrewCount = 1,
   });
 
   Duration get duration => Duration(seconds: durationSeconds);
 
+  /// Calculate flip points (for display only - server validates)
+  int get flipPoints => hexesColored * yesterdayCrewCount;
+
+  /// For local SQLite storage (milliseconds epoch)
   Map<String, dynamic> toMap() => {
     'id': id,
-    'date': date.millisecondsSinceEpoch,
+    'endTime': endTime.millisecondsSinceEpoch,
     'distanceKm': distanceKm,
     'durationSeconds': durationSeconds,
     'avgPaceMinPerKm': avgPaceMinPerKm,
     'hexesColored': hexesColored,
     'teamAtRun': teamAtRun.name,
     'hexPath': hexPath.join(','),
+    'yesterdayCrewCount': yesterdayCrewCount,
   };
 
   factory RunSummary.fromMap(Map<String, dynamic> map) => RunSummary(
     id: map['id'] as String,
-    date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
+    endTime: DateTime.fromMillisecondsSinceEpoch(map['endTime'] as int),
     distanceKm: (map['distanceKm'] as num).toDouble(),
     durationSeconds: (map['durationSeconds'] as num).toInt(),
     avgPaceMinPerKm: (map['avgPaceMinPerKm'] as num).toDouble(),
@@ -48,35 +69,31 @@ class RunSummary {
             .where((s) => s.isNotEmpty)
             .toList() ??
         [],
+    yesterdayCrewCount: (map['yesterdayCrewCount'] as num?)?.toInt() ?? 1,
   );
 
+  /// From Supabase row (snake_case)
   factory RunSummary.fromRow(Map<String, dynamic> row) => RunSummary(
     id: row['id'] as String,
-    date: DateTime.parse(row['start_time'] as String),
+    endTime: DateTime.parse(row['end_time'] as String),
     distanceKm: (row['distance_meters'] as num).toDouble() / 1000,
-    durationSeconds: _durationFromTimes(
-      row['start_time'] as String,
-      row['end_time'] as String?,
-    ),
+    durationSeconds: (row['duration_seconds'] as num?)?.toInt() ?? 0,
     avgPaceMinPerKm: (row['avg_pace_min_per_km'] as num?)?.toDouble() ?? 0,
     hexesColored: (row['hexes_colored'] as num?)?.toInt() ?? 0,
     teamAtRun: Team.values.byName(row['team_at_run'] as String),
     hexPath: List<String>.from(row['hex_path'] as List? ?? []),
+    yesterdayCrewCount: (row['yesterday_crew_count'] as num?)?.toInt() ?? 1,
   );
 
+  /// To Supabase row (snake_case) for finalize_run RPC
   Map<String, dynamic> toRow() => {
-    'start_time': date.toIso8601String(),
+    'end_time': endTime.toIso8601String(),
     'distance_meters': distanceKm * 1000,
+    'duration_seconds': durationSeconds,
     'avg_pace_min_per_km': avgPaceMinPerKm,
     'hexes_colored': hexesColored,
     'team_at_run': teamAtRun.name,
     'hex_path': hexPath,
+    'yesterday_crew_count': yesterdayCrewCount,
   };
-
-  static int _durationFromTimes(String start, String? end) {
-    if (end == null) return 0;
-    final startDt = DateTime.parse(start);
-    final endDt = DateTime.parse(end);
-    return endDt.difference(startDt).inSeconds;
-  }
 }

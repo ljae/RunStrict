@@ -33,6 +33,7 @@ class LocationPermissionException implements Exception {
 /// Service responsible for GPS tracking and location permissions
 class LocationService {
   StreamSubscription<Position>? _positionSubscription;
+  Timer? _pollingTimer;
   final StreamController<LocationPoint> _locationController =
       StreamController<LocationPoint>.broadcast();
 
@@ -41,6 +42,15 @@ class LocationService {
 
   bool _isTracking = false;
   bool get isTracking => _isTracking;
+
+  /// Polling rate in Hz (default: 0.5 = every 2 seconds)
+  double _pollingRateHz = 0.5;
+  double get pollingRateHz => _pollingRateHz;
+
+  /// Adaptive polling: higher rate when moving, lower when stationary
+  bool _adaptivePolling = true;
+  DateTime? _lastLocationTime;
+  double _lastSpeed = 0;
 
   /// Check and request location permissions
   Future<PermissionResult> requestPermissions() async {
@@ -100,8 +110,107 @@ class LocationService {
     );
   }
 
-  /// Start tracking GPS location
-  Future<void> startTracking() async {
+  /// Start tracking GPS location with adaptive polling
+  ///
+  /// [useAdaptivePolling] - When true, increases polling rate when moving fast
+  /// [basePollingRateHz] - Base polling rate (default 0.5Hz = every 2 seconds)
+  Future<void> startTracking({
+    bool useAdaptivePolling = true,
+    double basePollingRateHz = 0.5,
+  }) async {
+    if (_isTracking) return;
+
+    final permissionResult = await requestPermissions();
+    if (!permissionResult.granted) {
+      throw LocationPermissionException(
+        permissionResult.message,
+        canOpenSettings: permissionResult.canOpenSettings,
+      );
+    }
+
+    _isTracking = true;
+    _adaptivePolling = useAdaptivePolling;
+    _pollingRateHz = basePollingRateHz;
+
+    final pollingInterval = Duration(
+      milliseconds: (1000 / _pollingRateHz).round(),
+    );
+
+    _pollingTimer = Timer.periodic(pollingInterval, (_) async {
+      await _pollLocation();
+    });
+
+    await _pollLocation();
+  }
+
+  Future<void> _pollLocation() async {
+    if (!_isTracking) return;
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      final locationPoint = LocationPoint(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        timestamp: position.timestamp,
+        accuracy: position.accuracy,
+        speed: position.speed,
+        altitude: position.altitude,
+        heading: position.heading,
+      );
+
+      _lastLocationTime = position.timestamp;
+      _lastSpeed = position.speed;
+
+      _locationController.add(locationPoint);
+
+      if (_adaptivePolling) {
+        _adjustPollingRate(position.speed);
+      }
+    } catch (e) {
+      // Silently handle polling errors
+    }
+  }
+
+  void _adjustPollingRate(double speedMps) {
+    double newRateHz;
+
+    if (speedMps < 0.5) {
+      newRateHz = 0.25;
+    } else if (speedMps < 2.0) {
+      newRateHz = 0.5;
+    } else if (speedMps < 4.0) {
+      newRateHz = 1.0;
+    } else {
+      newRateHz = 2.0;
+    }
+
+    if ((newRateHz - _pollingRateHz).abs() > 0.1) {
+      _pollingRateHz = newRateHz;
+      _restartPollingTimer();
+    }
+  }
+
+  void _restartPollingTimer() {
+    _pollingTimer?.cancel();
+    if (!_isTracking) return;
+
+    final pollingInterval = Duration(
+      milliseconds: (1000 / _pollingRateHz).round(),
+    );
+    _pollingTimer = Timer.periodic(pollingInterval, (_) async {
+      await _pollLocation();
+    });
+  }
+
+  /// Start tracking with distance-based updates (original behavior)
+  Future<void> startTrackingDistanceBased({
+    int distanceFilterMeters = 5,
+  }) async {
     if (_isTracking) return;
 
     final permissionResult = await requestPermissions();
@@ -114,13 +223,11 @@ class LocationService {
 
     _isTracking = true;
 
-    // Configure location settings for high accuracy
-    const locationSettings = LocationSettings(
+    final locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 5, // Update every 5 meters
+      distanceFilter: distanceFilterMeters,
     );
 
-    // Subscribe to position stream
     _positionSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (Position position) {
@@ -136,10 +243,7 @@ class LocationService {
             _locationController.add(locationPoint);
           },
           onError: (error) {
-            // Log error for debugging
-            // TODO: Replace with proper logging in production
-            // ignore: avoid_print
-            print('Location error: $error');
+            // Ignore errors
           },
         );
   }
@@ -148,9 +252,13 @@ class LocationService {
   Future<void> stopTracking() async {
     if (!_isTracking) return;
 
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     _isTracking = false;
+    _lastLocationTime = null;
+    _lastSpeed = 0;
   }
 
   /// Get current location (one-time request)
@@ -185,6 +293,7 @@ class LocationService {
 
   /// Clean up resources
   void dispose() {
+    _pollingTimer?.cancel();
     _positionSubscription?.cancel();
     _locationController.close();
   }

@@ -6,6 +6,11 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/crew_provider.dart';
 import '../providers/app_state_provider.dart';
+import '../models/sponsor.dart';
+import '../models/crew_model.dart';
+import '../widgets/sponsor_selector.dart';
+import '../widgets/sponsor_logo_painter.dart';
+import '../widgets/crew_avatar.dart';
 
 /// Crew Screen - Redesigned "Premium Athletic Minimal"
 ///
@@ -23,7 +28,6 @@ class CrewScreen extends StatefulWidget {
 
 class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
   late AnimationController _entranceController;
-  late AnimationController _pulseController;
 
   @override
   void initState() {
@@ -34,12 +38,6 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-
-    // Continuous pulse for active runners
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -62,7 +60,6 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _entranceController.dispose();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -131,7 +128,7 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
     final crew = crewProvider.myCrew!;
     final members = List<CrewMemberInfo>.from(crewProvider.myCrewMembers);
     final teamColor = crew.team.color;
-    final activeRunners = members.where((m) => m.isRunning).length;
+    final yesterdayRunners = members.where((m) => m.ranYesterday).length;
     final totalFlips = members.fold(0, (sum, m) => sum + m.flipCount);
     final totalDistanceKm = members.length * 12.4; // Mock data
 
@@ -152,7 +149,7 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                 teamColor,
                 totalFlips,
                 totalDistanceKm,
-                activeRunners,
+                yesterdayRunners,
               ),
             ),
           ),
@@ -239,7 +236,7 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
     Color teamColor,
     int totalFlips,
     double totalDistance,
-    int activeRunners,
+    int yesterdayRunners,
   ) {
     return Column(
       children: [
@@ -301,7 +298,11 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                 color: teamColor.withValues(alpha: 0.1),
                 borderColor: teamColor.withValues(alpha: 0.3),
                 child: Center(
-                  child: Icon(Icons.groups_rounded, size: 64, color: teamColor),
+                  child: CrewAvatar.fromCrew(
+                    crew as CrewModel,
+                    size: 100,
+                    showBorder: false,
+                  ),
                 ),
               ),
             ),
@@ -397,48 +398,41 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
         // Bottom Section: Multiplier (Hero)
         _GlassCard(
           height: 80,
-          color: activeRunners > 0
+          color: yesterdayRunners > 0
               ? teamColor.withValues(alpha: 0.15)
               : Colors.white.withValues(alpha: 0.02),
-          borderColor: activeRunners > 0
+          borderColor: yesterdayRunners > 0
               ? teamColor.withValues(alpha: 0.5)
               : Colors.white.withValues(alpha: 0.05),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (activeRunners > 0)
-                AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (context, child) {
-                    return Container(
-                      margin: const EdgeInsets.only(right: 16),
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: teamColor,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: teamColor.withValues(alpha: 0.6),
-                            blurRadius: 10 * _pulseController.value + 5,
-                            spreadRadius: 2 * _pulseController.value,
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+              if (yesterdayRunners > 0)
+                Container(
+                  margin: const EdgeInsets.only(right: 16),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: teamColor.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: teamColor.withValues(alpha: 0.5)),
+                  ),
+                  child: Icon(
+                    Icons.calendar_today_rounded,
+                    size: 16,
+                    color: teamColor,
+                  ),
                 ),
               Text(
-                activeRunners > 0
-                    ? '$activeRunners RUNNERS ACTIVE'
-                    : 'NO ACTIVE RUNNERS',
+                yesterdayRunners > 0
+                    ? '$yesterdayRunners RAN YESTERDAY'
+                    : 'NO RUNNERS YESTERDAY',
                 style: GoogleFonts.bebasNeue(
                   fontSize: 24,
-                  color: activeRunners > 0 ? Colors.white : Colors.white38,
+                  color: yesterdayRunners > 0 ? Colors.white : Colors.white38,
                   letterSpacing: 2.0,
                 ),
               ),
-              if (activeRunners > 0) ...[
+              if (yesterdayRunners > 0) ...[
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   width: 1,
@@ -446,7 +440,7 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                   color: Colors.white24,
                 ),
                 Text(
-                  '${activeRunners}X',
+                  '${yesterdayRunners}X',
                   style: GoogleFonts.bebasNeue(
                     fontSize: 32,
                     color: teamColor,
@@ -474,27 +468,6 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
         Stack(
           alignment: Alignment.center,
           children: [
-            // Active Runner Pulse
-            if (member.isRunning)
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: teamColor.withValues(
-                          alpha: 1.0 - _pulseController.value,
-                        ),
-                        width: 2,
-                      ),
-                    ),
-                  );
-                },
-              ),
-
             // Avatar Circle
             Container(
               width: 56,
@@ -511,11 +484,11 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                         color: Colors.white.withValues(alpha: 0.1),
                         width: 1,
                       ),
-                boxShadow: member.isRunning
+                boxShadow: member.ranYesterday
                     ? [
                         BoxShadow(
-                          color: teamColor.withValues(alpha: 0.4),
-                          blurRadius: 12,
+                          color: teamColor.withValues(alpha: 0.3),
+                          blurRadius: 8,
                           spreadRadius: 0,
                         ),
                       ]
@@ -539,6 +512,25 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                   color: const Color(0xFFFFD700),
                 ),
               ),
+
+            // Ran Yesterday Checkmark Badge
+            if (member.ranYesterday)
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: teamColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppTheme.backgroundStart,
+                      width: 2,
+                    ),
+                  ),
+                  child: const Icon(Icons.check, size: 10, color: Colors.white),
+                ),
+              ),
           ],
         ),
 
@@ -559,10 +551,10 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
         // Status
         const SizedBox(height: 2),
         Text(
-          member.isRunning ? 'RUNNING' : '${member.flipCount} FLIPS',
+          member.ranYesterday ? 'RAN YESTERDAY' : '${member.flipCount} FLIPS',
           style: GoogleFonts.bebasNeue(
             fontSize: 12,
-            color: member.isRunning
+            color: member.ranYesterday
                 ? teamColor
                 : Colors.white.withValues(alpha: 0.4),
             letterSpacing: 1.0,
@@ -682,94 +674,259 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
     final user = context.read<AppStateProvider>().currentUser;
     final teamColor = user?.team.color ?? AppTheme.electricBlue;
 
+    // State for selected sponsor
+    Sponsor? selectedSponsor;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor.withValues(alpha: 0.9),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        title: Text(
-          'CREATE CREW',
-          style: GoogleFonts.bebasNeue(
-            color: Colors.white,
-            fontSize: 28,
-            letterSpacing: 1.5,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              style: GoogleFonts.sora(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'CREW NAME',
-                labelStyle: GoogleFonts.bebasNeue(color: Colors.white54),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.2),
-                  ),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: teamColor),
-                ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: AppTheme.surfaceColor.withValues(alpha: 0.9),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            title: Text(
+              'CREATE CREW',
+              style: GoogleFonts.bebasNeue(
+                color: Colors.white,
+                fontSize: 28,
+                letterSpacing: 1.5,
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              style: GoogleFonts.sora(color: Colors.white, letterSpacing: 4),
-              decoration: InputDecoration(
-                labelText: 'PIN (OPTIONAL)',
-                labelStyle: GoogleFonts.bebasNeue(color: Colors.white54),
-                counterText: '',
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.2),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    style: GoogleFonts.sora(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'CREW NAME',
+                      labelStyle: GoogleFonts.bebasNeue(color: Colors.white54),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: teamColor),
+                      ),
+                    ),
                   ),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: teamColor),
-                ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: pinController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    style: GoogleFonts.sora(
+                      color: Colors.white,
+                      letterSpacing: 4,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'PIN (OPTIONAL)',
+                      labelStyle: GoogleFonts.bebasNeue(color: Colors.white54),
+                      counterText: '',
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: teamColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Sponsor Section
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'SPONSOR',
+                      style: GoogleFonts.bebasNeue(
+                        color: Colors.white54,
+                        fontSize: 16,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (selectedSponsor == null)
+                    _GlassButton(
+                      label: 'SELECT SPONSOR',
+                      color: teamColor,
+                      isOutlined: true,
+                      onTap: () async {
+                        final result = await showModalBottomSheet<Sponsor>(
+                          context: context,
+                          backgroundColor: AppTheme.backgroundStart,
+                          isScrollControlled: true,
+                          builder: (c) => SizedBox(
+                            height: MediaQuery.of(c).size.height * 0.7,
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(
+                                    'SELECT SPONSOR',
+                                    style: GoogleFonts.bebasNeue(
+                                      fontSize: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: SponsorSelector(
+                                    onSelected: (s) => Navigator.pop(c, s),
+                                    selectedSponsorId: selectedSponsor?.id,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+
+                        if (result != null) {
+                          setState(() => selectedSponsor = result);
+                        }
+                      },
+                    )
+                  else
+                    GestureDetector(
+                      onTap: () async {
+                        final result = await showModalBottomSheet<Sponsor>(
+                          context: context,
+                          backgroundColor: AppTheme.backgroundStart,
+                          isScrollControlled: true,
+                          builder: (c) => SizedBox(
+                            height: MediaQuery.of(c).size.height * 0.7,
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(
+                                    'SELECT SPONSOR',
+                                    style: GoogleFonts.bebasNeue(
+                                      fontSize: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: SponsorSelector(
+                                    onSelected: (s) => Navigator.pop(c, s),
+                                    selectedSponsorId: selectedSponsor?.id,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                        if (result != null) {
+                          setState(() => selectedSponsor = result);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: selectedSponsor!.primaryColor.withValues(
+                            alpha: 0.1,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selectedSponsor!.primaryColor.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: CustomPaint(
+                                painter: SponsorLogoPainter(
+                                  sponsor: selectedSponsor!,
+                                  isSelected: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    selectedSponsor!.name,
+                                    style: GoogleFonts.bebasNeue(
+                                      fontSize: 18,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Text(
+                                    selectedSponsor!.tagline,
+                                    style: GoogleFonts.sora(
+                                      fontSize: 10,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.refresh,
+                              color: Colors.white54,
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'CANCEL',
-              style: GoogleFonts.bebasNeue(color: Colors.white54, fontSize: 18),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (nameController.text.isNotEmpty && user != null) {
-                final success = await provider.createCrew(
-                  name: nameController.text,
-                  team: user.team,
-                  user: user,
-                  pin: pinController.text.isEmpty ? null : pinController.text,
-                );
-                if (success && provider.myCrew != null && ctx.mounted) {
-                  context.read<AppStateProvider>().updateCrewId(
-                    provider.myCrew!.id,
-                  );
-                }
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            child: Text(
-              'CREATE',
-              style: GoogleFonts.bebasNeue(color: teamColor, fontSize: 18),
-            ),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'CANCEL',
+                  style: GoogleFonts.bebasNeue(
+                    color: Colors.white54,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  if (nameController.text.isNotEmpty && user != null) {
+                    final success = await provider.createCrew(
+                      name: nameController.text,
+                      team: user.team.name,
+                      user: user,
+                      pin: pinController.text.isEmpty
+                          ? null
+                          : pinController.text,
+                      sponsorId: selectedSponsor?.id,
+                    );
+                    if (success && provider.myCrew != null && ctx.mounted) {
+                      context.read<AppStateProvider>().updateCrewId(
+                        provider.myCrew!.id,
+                      );
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  }
+                },
+                child: Text(
+                  'CREATE',
+                  style: GoogleFonts.bebasNeue(color: teamColor, fontSize: 18),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1069,19 +1226,7 @@ class _JoinCrewSheetState extends State<_JoinCrewSheet> {
                     color: Colors.white.withValues(alpha: 0.03),
                     child: Row(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: teamColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.groups_rounded,
-                            color: teamColor,
-                            size: 20,
-                          ),
-                        ),
+                        CrewAvatar.fromCrew(crew, size: 40, showBorder: true),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(

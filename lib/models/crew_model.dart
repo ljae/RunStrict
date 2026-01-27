@@ -7,6 +7,7 @@ class CrewModel {
   final List<String> memberIds;
   final String? pin;
   final String? representativeImage;
+  final String? sponsorId;
 
   CrewModel({
     required this.id,
@@ -15,6 +16,7 @@ class CrewModel {
     this.memberIds = const [],
     this.pin,
     this.representativeImage,
+    this.sponsorId,
   });
 
   bool get isPurple => team == Team.purple;
@@ -28,6 +30,7 @@ class CrewModel {
     List<String>? memberIds,
     String? pin,
     String? representativeImage,
+    String? sponsorId,
   }) => CrewModel(
     id: id,
     name: name ?? this.name,
@@ -35,6 +38,7 @@ class CrewModel {
     memberIds: memberIds ?? this.memberIds,
     pin: pin ?? this.pin,
     representativeImage: representativeImage ?? this.representativeImage,
+    sponsorId: sponsorId ?? this.sponsorId,
   );
 
   CrewModel addMember(String userId) {
@@ -54,6 +58,7 @@ class CrewModel {
     memberIds: List<String>.from(row['member_ids'] as List? ?? []),
     pin: row['pin'] as String?,
     representativeImage: row['representative_image'] as String?,
+    sponsorId: row['sponsor_id'] as String?,
   );
 
   Map<String, dynamic> toRow() => {
@@ -62,6 +67,7 @@ class CrewModel {
     'member_ids': memberIds,
     'pin': pin,
     'representative_image': representativeImage,
+    'sponsor_id': sponsorId,
   };
 
   Map<String, dynamic> toJson() => {
@@ -71,6 +77,7 @@ class CrewModel {
     'memberIds': memberIds,
     'pin': pin,
     'representativeImage': representativeImage,
+    'sponsorId': sponsorId,
   };
 
   factory CrewModel.fromJson(Map<String, dynamic> json) => CrewModel(
@@ -80,5 +87,6 @@ class CrewModel {
     memberIds: List<String>.from(json['memberIds'] as List? ?? []),
     pin: json['pin'] as String?,
     representativeImage: json['representativeImage'] as String?,
+    sponsorId: json['sponsorId'] as String?,
   );
 }

@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/run_provider.dart';
+import '../providers/crew_provider.dart';
+import '../providers/leaderboard_provider.dart';
+import '../providers/hex_data_provider.dart';
 import '../widgets/season_countdown_widget.dart';
 import '../widgets/flip_points_widget.dart';
 import '../services/season_service.dart';
 import '../services/points_service.dart';
+import '../services/app_lifecycle_manager.dart';
 import 'map_screen.dart';
 import 'running_screen.dart';
 import 'crew_screen.dart';
@@ -42,6 +47,58 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Points service is now provided globally via Provider
     // Crew data loading is now handled by CrewScreen to support Join/Create flows
+
+    // Initialize app lifecycle manager for OnResume data refresh
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeLifecycleManager();
+    });
+  }
+
+  void _initializeLifecycleManager() {
+    final runProvider = context.read<RunProvider>();
+
+    AppLifecycleManager().initialize(
+      isRunning: () => runProvider.isRunning,
+      onRefresh: () => _refreshAppData(),
+    );
+  }
+
+  /// Refresh app data on resume (called by AppLifecycleManager).
+  ///
+  /// Refreshes:
+  /// - Hex map data (clear cache to force re-fetch)
+  /// - Yesterday's multiplier (in case midnight passed)
+  /// - Crew info and members
+  /// - Leaderboard rankings
+  Future<void> _refreshAppData() async {
+    debugPrint('HomeScreen: Refreshing app data on resume');
+
+    // Capture providers before async gap
+    final crewProvider = context.read<CrewProvider>();
+    final leaderboardProvider = context.read<LeaderboardProvider>();
+
+    try {
+      // Clear hex cache to force fresh data on next map view
+      HexDataProvider().clearAllHexData();
+
+      // Refresh crew data if user has a crew
+      if (crewProvider.hasCrew) {
+        await crewProvider.refreshCrewMembers();
+      }
+
+      // Refresh leaderboard data
+      await leaderboardProvider.refreshLeaderboard();
+
+      debugPrint('HomeScreen: App data refresh completed');
+    } catch (e) {
+      debugPrint('HomeScreen: Error refreshing app data: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    AppLifecycleManager().dispose();
+    super.dispose();
   }
 
   @override

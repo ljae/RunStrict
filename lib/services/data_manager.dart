@@ -172,8 +172,8 @@ class InMemoryDataManager implements DataManager {
     return _runSummaries
         .where(
           (r) =>
-              r.date.isAfter(start.subtract(const Duration(seconds: 1))) &&
-              r.date.isBefore(end.add(const Duration(seconds: 1))),
+              r.endTime.isAfter(start.subtract(const Duration(seconds: 1))) &&
+              r.endTime.isBefore(end.add(const Duration(seconds: 1))),
         )
         .toList();
   }

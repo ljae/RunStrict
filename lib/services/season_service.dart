@@ -21,11 +21,15 @@ class SeasonService {
     : seasonStartDate = startDate ?? _defaultSeasonStart();
 
   /// Default season start for development/testing.
-  /// Set to a date that gives us time to test various D-day states.
+  /// Season 1 starts January 1, 2026 (GMT+2).
   static DateTime _defaultSeasonStart() {
-    // For development: start 280 days from now (D-280)
-    // Change this to test different D-day states
-    return DateTime.now();
+    // Season 1: January 1, 2026 00:00:00 GMT+2
+    // D-280 is the first day, D-Day (season end) is October 7, 2026
+    return DateTime.utc(
+      2026,
+      1,
+      1,
+    ).subtract(const Duration(hours: serverTimezoneOffsetHours));
   }
 
   /// The date when the season ends (D-Day).

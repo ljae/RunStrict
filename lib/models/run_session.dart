@@ -49,16 +49,21 @@ class RunSession {
 
   bool get canCaptureHex => paceMinPerKm > 0 && paceMinPerKm < 8.0;
 
-  RunSummary toSummary() {
+  /// Convert to RunSummary for "The Final Sync" upload
+  ///
+  /// [yesterdayCrewCount] is the multiplier from yesterday's crew check-in.
+  /// Default to 1 for solo runners or new users/crews.
+  RunSummary toSummary({int yesterdayCrewCount = 1}) {
     return RunSummary(
       id: id,
-      date: startTime,
+      endTime: endTime ?? DateTime.now(),
       distanceKm: distanceKm,
       durationSeconds: duration.inSeconds,
       avgPaceMinPerKm: paceMinPerKm,
       hexesColored: hexesColored,
       teamAtRun: teamAtRun,
       hexPath: List.from(hexesPassed),
+      yesterdayCrewCount: yesterdayCrewCount,
     );
   }
 

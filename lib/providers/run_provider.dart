@@ -12,7 +12,7 @@ import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
 
-enum RunEvent { pointEarned, cooldownHit }
+enum RunEvent { pointEarned }
 
 /// Provider for managing run state and coordinating services.
 ///
@@ -234,10 +234,6 @@ class RunProvider with ChangeNotifier {
       _eventController.add(RunEvent.pointEarned);
       notifyListeners();
       return true;
-    } else if (result == HexUpdateResult.cooldownActive) {
-      _eventController.add(RunEvent.cooldownHit);
-      notifyListeners(); // Update UI for color change even if no points
-      return false;
     }
 
     return false;
@@ -257,26 +253,32 @@ class RunProvider with ChangeNotifier {
   }
 
   /// Stop the current run and save to history
-  Future<void> stopRun() async {
-    if (!isRunning) return;
+  ///
+  /// Returns the list of captured hex IDs for "The Final Sync" batch upload.
+  Future<List<String>> stopRun() async {
+    if (!isRunning) return [];
 
     _setLoading(true);
     _setError(null);
 
     try {
       _stopTimer();
-      final completedRun = _runTracker.stopRun();
+      final result = _runTracker.stopRun();
       await _locationService.stopTracking();
 
       // Cancel location stream subscription
       await _locationSubscription?.cancel();
       _locationSubscription = null;
 
-      if (completedRun != null) {
+      if (result != null) {
+        final completedRun = result.session;
+        final capturedHexIds = result.capturedHexIds;
+
         debugPrint(
           'RunProvider: Run completed - '
           'distance=${completedRun.distanceKm.toStringAsFixed(2)}km, '
-          'flips=${completedRun.hexesColored}',
+          'flips=${completedRun.hexesColored}, '
+          'hexIds for sync: ${capturedHexIds.length}',
         );
 
         // Save to database
@@ -285,6 +287,16 @@ class RunProvider with ChangeNotifier {
         // Refresh history and stats
         await loadRunHistory();
         await loadTotalStats();
+
+        // Clear shared location when run ends
+        HexDataProvider().clearUserLocation();
+
+        _activeRun = null;
+        _routeVersion = 0;
+        notifyListeners();
+
+        // Return captured hex IDs for "The Final Sync" batch upload
+        return capturedHexIds;
       }
 
       // Clear shared location when run ends
@@ -293,8 +305,10 @@ class RunProvider with ChangeNotifier {
       _activeRun = null;
       _routeVersion = 0;
       notifyListeners();
+      return [];
     } catch (e) {
       _setError('Failed to stop run: $e');
+      return [];
     } finally {
       _setLoading(false);
     }

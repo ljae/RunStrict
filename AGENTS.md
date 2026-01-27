@@ -11,13 +11,15 @@
 - **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - unlocks D-140)
 - **Hex System**: Displays color of **last runner** - no ownership
 - **D-Day Reset**: All territories and scores wiped via TRUNCATE/DROP (The Void)
-- **Crew Benefit**: Simultaneous Runner Multiply (N runners = Nx points)
+- **Crew Benefit**: Yesterday's Check-in Multiplier (yesterday's active members = today's multiplier)
 
 ### Key Design Principles
 - Privacy optimized: No timestamps or runner IDs stored in hexes
 - User location shown as **person icon inside a hexagon** (team-colored)
 - Performance-optimized (no 3D rendering)
 - Serverless architecture: No backend API server (Supabase RLS handles auth)
+- **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync")
+- **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier)
 
 **Tech Stack**: Flutter 3.10+, Dart, Provider (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
 
@@ -80,7 +82,7 @@ lib/
 │   ├── run_session.dart         # Active run session data
 │   ├── run_summary.dart         # Completed run (with hexPath)
 │   ├── daily_running_stat.dart  # Daily stats (Warm data)
-│   ├── daily_hex_flip_record.dart # Daily flip dedup tracking
+
 │   ├── location_point.dart      # GPS point (active run)
 │   └── route_point.dart         # Compact route point (cold storage)
 ├── providers/
@@ -108,7 +110,7 @@ lib/
 │   ├── local_storage_service.dart # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
 │   ├── season_service.dart      # 280-day season countdown
-│   ├── crew_multiplier_service.dart # Simultaneous runner tracking (Realtime)
+│   ├── crew_multiplier_service.dart # Yesterday's check-in multiplier (daily batch)
 │   ├── running_score_service.dart # Pace validation for capture
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
@@ -337,33 +339,38 @@ Use `AppTheme.teamColor(isRed)` for team-aware coloring.
 
 ## Game-Specific Guidelines
 
-### Crew Economy: Simultaneous Runner Multiply
+### Crew Economy: Yesterday's Check-in Multiplier
 ```dart
-// Multiplier = number of crew members running at the same time
+// Multiplier = number of crew members who ran YESTERDAY
+// Calculated daily at midnight GMT+2 via Edge Function
 // Red/Blue: Max 12 members = 12x potential
 // Purple: Max 24 members = 24x potential
-// All teams have 1x base multiplier (no Purple 2x bonus)
-final multiplier = activeCrewRunners; // Linear: N runners = Nx
+// Solo runner or new user/crew = 1x (default)
+final multiplier = yesterdayActiveMembers; // Fetched on app launch
 final points = flipsEarned * multiplier;
 ```
 
 ### Hex Capture & Flip
 ```dart
-// Hex only stores lastRunnerTeam - no timestamps/IDs
-bool setRunnerColor(Team runnerTeam) {
+// Hex stores lastRunnerTeam + lastFlippedAt (for conflict resolution)
+bool setRunnerColor(Team runnerTeam, DateTime runEndTime) {
   if (lastRunnerTeam == runnerTeam) return false;
+  // Only update if this run ended later (prevents offline abusing)
+  if (lastFlippedAt != null && runEndTime.isBefore(lastFlippedAt)) return false;
   lastRunnerTeam = runnerTeam;
+  lastFlippedAt = runEndTime;
   return true; // Color changed (flip)
 }
 
-// Daily flip limit: same hex once per day per runner
-// Check via RPC: has_flipped_today(user_id, hex_id)
+// NO daily flip limit - same hex can be flipped multiple times per day
+// Conflict resolution: Later run_endTime wins (compared via last_flipped_at)
 ```
 
 ### Pace Validation
 ```dart
 // Must be running at valid pace to capture hex
-bool get canCaptureHex => paceMinPerKm < 8.0;
+// Uses MOVING AVERAGE pace (last 10 sec) at hex entry - smooths GPS noise
+bool get canCaptureHex => movingAvgPaceMinPerKm < 8.0;
 // Also: speed < 25 km/h AND GPS accuracy ≤ 50m
 ```
 
@@ -393,15 +400,6 @@ class RunningScreen extends StatelessWidget {
 final result = await supabase.rpc('get_crew_multiplier', params: {
   'p_crew_id': crewId,
 });
-
-// Real-time subscription
-supabase
-  .from('active_runs')
-  .stream(primaryKey: ['user_id'])
-  .eq('crew_id', crewId)
-  .listen((data) {
-    // Update multiplier display
-  });
 ```
 
 ### Async Initialization
@@ -427,7 +425,6 @@ void initState() {
 - Add `///` documentation for public APIs
 - Use derived getters (`isPurple`, `maxMembers`) instead of stored fields
 - Use Supabase RPC for complex queries (multiplier, leaderboard)
-- Use Supabase Realtime for live updates (active runners, hex colors)
 
 ### Don't
 - Don't use `print()` - use `debugPrint()` instead
@@ -467,6 +464,6 @@ void main() {
 | `geolocator` | GPS location tracking |
 | `mapbox_maps_flutter` | Map rendering |
 | `h3_flutter` | Hexagonal grid system |
-| `supabase_flutter` | Backend (Auth + DB + Realtime + Storage) |
+| `supabase_flutter` | Backend (Auth + DB + Storage) |
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |

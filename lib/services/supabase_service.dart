@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
+import '../models/run_summary.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -13,14 +14,6 @@ class SupabaseService {
       url: SupabaseConfig.url,
       anonKey: SupabaseConfig.anonKey,
     );
-  }
-
-  Future<bool> hasFlippedToday(String userId, String hexId) async {
-    final result = await client.rpc(
-      'has_flipped_today',
-      params: {'p_user_id': userId, 'p_hex_id': hexId},
-    );
-    return result as bool? ?? false;
   }
 
   Future<int> getCrewMultiplier(String crewId) async {
@@ -55,33 +48,43 @@ class SupabaseService {
     await client.from('active_runs').delete().eq('user_id', userId);
   }
 
-  Future<void> recordFlip({
-    required String userId,
-    required String hexId,
-    required String team,
-    required int multiplier,
-  }) async {
-    await client.from('daily_flips').insert({
-      'user_id': userId,
-      'date_key': DateTime.now().toIso8601String().substring(0, 10),
-      'hex_id': hexId,
-    });
-
-    await client.from('hexes').upsert({'id': hexId, 'last_runner_team': team});
-
+  /// Finalize a completed run and upload hex captures to server.
+  ///
+  /// Called at run completion. Uploads run summary with hex path and points.
+  /// Server validates points ≤ hex_count × multiplier.
+  Future<void> finalizeRun(RunSummary runSummary) async {
     await client.rpc(
-      'increment_season_points',
-      params: {'p_user_id': userId, 'p_points': multiplier},
+      'finalize_run',
+      params: {
+        'p_end_time': runSummary.endTime.toIso8601String(),
+        'p_distance_km': runSummary.distanceKm,
+        'p_hex_path': runSummary.hexPath,
+        'p_yesterday_crew_count': runSummary.yesterdayCrewCount,
+      },
     );
   }
 
-  /// Returns a stream of active run records for a crew.
-  /// Use `.listen()` on the returned stream to receive updates.
-  Stream<List<Map<String, dynamic>>> subscribeToActiveRuns(String crewId) {
-    return client
-        .from('active_runs')
-        .stream(primaryKey: ['user_id'])
-        .eq('crew_id', crewId);
+  /// Sync app state on launch: fetch user, yesterday crew count, and hex viewport.
+  ///
+  /// Returns: { user, yesterday_crew_count, hexes_in_viewport }
+  /// Called once on app launch to pre-patch all necessary data.
+  Future<Map<String, dynamic>> appLaunchSync(String userId) async {
+    final result = await client.rpc(
+      'app_launch_sync',
+      params: {'p_user_id': userId},
+    );
+    return result as Map<String, dynamic>;
+  }
+
+  /// Get yesterday's active crew member count for multiplier calculation.
+  ///
+  /// Returns the number of crew members who ran yesterday (for today's multiplier).
+  Future<int> getYesterdayCrewCount(String crewId) async {
+    final result = await client.rpc(
+      'get_yesterday_crew_count',
+      params: {'p_crew_id': crewId},
+    );
+    return (result as num?)?.toInt() ?? 1;
   }
 
   // ---------------------------------------------------------------------------
@@ -92,7 +95,9 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> fetchCrewsByTeam(String team) async {
     final result = await client
         .from('crews')
-        .select('id, name, team, member_ids, pin, representative_image')
+        .select(
+          'id, name, team, member_ids, pin, representative_image, sponsor_id',
+        )
         .eq('team', team)
         .order('name');
     return List<Map<String, dynamic>>.from(result);
@@ -102,7 +107,9 @@ class SupabaseService {
   Future<Map<String, dynamic>?> getCrewById(String crewId) async {
     final result = await client
         .from('crews')
-        .select('id, name, team, member_ids, pin, representative_image')
+        .select(
+          'id, name, team, member_ids, pin, representative_image, sponsor_id',
+        )
         .eq('id', crewId)
         .maybeSingle();
     return result;
@@ -117,6 +124,7 @@ class SupabaseService {
     required String userId,
     String? pin,
     String? representativeImage,
+    String? sponsorId,
   }) async {
     // Insert crew with user as first member (leader)
     final crewResult = await client
@@ -127,6 +135,7 @@ class SupabaseService {
           'member_ids': [userId],
           'pin': pin,
           'representative_image': representativeImage,
+          'sponsor_id': sponsorId,
         })
         .select()
         .single();

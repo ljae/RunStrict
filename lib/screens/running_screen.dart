@@ -8,7 +8,6 @@ import '../providers/app_state_provider.dart';
 import '../models/team.dart';
 import '../widgets/route_map.dart';
 import '../widgets/energy_hold_button.dart';
-import '../widgets/daily_limit_feedback.dart';
 
 class RunningScreen extends StatefulWidget {
   const RunningScreen({super.key});
@@ -26,7 +25,6 @@ class _RunningScreenState extends State<RunningScreen>
   // UI State
   bool _isInitializing = false;
   String? _errorMessage;
-  bool _showDailyLimitFeedback = false;
   StreamSubscription? _eventSubscription;
 
   @override
@@ -43,18 +41,13 @@ class _RunningScreenState extends State<RunningScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Listen for run events (cooldown hit, etc)
+    // Listen for run events
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _eventSubscription = context.read<RunProvider>().eventStream.listen((
         event,
       ) {
-        if (event == RunEvent.cooldownHit) {
-          if (mounted) {
-            setState(() {
-              _showDailyLimitFeedback = true;
-            });
-          }
-        }
+        // Events handled here (e.g., run completion)
+        debugPrint('RunProvider event: $event');
       });
     });
   }
@@ -164,25 +157,6 @@ class _RunningScreenState extends State<RunningScreen>
                 ],
               ),
             ),
-
-            // Daily Limit Feedback (Transient Overlay)
-            if (_showDailyLimitFeedback)
-              Positioned(
-                top: 90, // Just below the top bar
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: DailyLimitFeedback(
-                    onDismiss: () {
-                      if (mounted) {
-                        setState(() {
-                          _showDailyLimitFeedback = false;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ),
 
             // Error Message
             if (_errorMessage != null)

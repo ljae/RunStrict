@@ -10,7 +10,7 @@ class CrewMemberInfo {
   final String avatar;
   final int flipCount;
   final Team team;
-  final bool isRunning;
+  final bool ranYesterday;
 
   const CrewMemberInfo({
     required this.id,
@@ -18,7 +18,7 @@ class CrewMemberInfo {
     required this.avatar,
     this.flipCount = 0,
     required this.team,
-    this.isRunning = false,
+    this.ranYesterday = false,
   });
 
   factory CrewMemberInfo.fromRow(Map<String, dynamic> row) {
@@ -28,7 +28,7 @@ class CrewMemberInfo {
       avatar: row['avatar'] as String? ?? '🏃',
       flipCount: (row['season_points'] as num?)?.toInt() ?? 0,
       team: Team.values.byName(row['team'] as String? ?? 'red'),
-      isRunning: row['is_running'] as bool? ?? false,
+      ranYesterday: row['ran_yesterday'] as bool? ?? false,
     );
   }
 }
@@ -79,9 +79,10 @@ class CrewProvider with ChangeNotifier {
   /// Create a new crew
   Future<bool> createCrew({
     required String name,
-    required Team team,
+    required String team,
     required UserModel user,
     String? pin,
+    String? sponsorId,
   }) async {
     _isLoading = true;
     _error = null;
@@ -93,9 +94,10 @@ class CrewProvider with ChangeNotifier {
         final newCrew = CrewModel(
           id: 'crew_${DateTime.now().millisecondsSinceEpoch}',
           name: name,
-          team: team,
+          team: Team.values.byName(team),
           memberIds: [user.id],
           pin: pin,
+          sponsorId: sponsorId,
         );
         _myCrew = newCrew;
         _myCrewMembers = [
@@ -109,9 +111,10 @@ class CrewProvider with ChangeNotifier {
       } else {
         final crewData = await _supabase.createCrew(
           name: name,
-          team: team.name,
+          team: team,
           userId: user.id,
           pin: pin,
+          sponsorId: sponsorId,
         );
         _myCrew = CrewModel.fromRow(crewData);
         _myCrewMembers = [
@@ -414,7 +417,7 @@ class CrewProvider with ChangeNotifier {
         avatar: avatars[i],
         flipCount: (5 + i * 2) % 20,
         team: team,
-        isRunning: i < 3, // First 3 members are "running"
+        ranYesterday: i < 5, // First 5 members ran yesterday
       ),
     )..sort((a, b) => b.flipCount.compareTo(a.flipCount));
   }

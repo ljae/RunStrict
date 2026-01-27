@@ -1,3 +1,5 @@
+import 'dart:collection';
+import 'dart:math' as math;
 import '../models/location_point.dart';
 
 /// GPS Anti-Spoofing Validation Result
@@ -6,28 +8,40 @@ class ValidationResult {
   final String? rejectionReason;
   final double? calculatedSpeed;
   final double? calculatedDistance;
+  final double? movingAvgPaceMinPerKm;
 
   const ValidationResult({
     required this.isValid,
     this.rejectionReason,
     this.calculatedSpeed,
     this.calculatedDistance,
+    this.movingAvgPaceMinPerKm,
   });
 
   factory ValidationResult.valid({
     double? calculatedSpeed,
     double? calculatedDistance,
+    double? movingAvgPaceMinPerKm,
   }) {
     return ValidationResult(
       isValid: true,
       calculatedSpeed: calculatedSpeed,
       calculatedDistance: calculatedDistance,
+      movingAvgPaceMinPerKm: movingAvgPaceMinPerKm,
     );
   }
 
   factory ValidationResult.invalid(String reason) {
     return ValidationResult(isValid: false, rejectionReason: reason);
   }
+}
+
+/// Represents a distance-time sample for moving average calculation
+class _PaceSample {
+  final DateTime timestamp;
+  final double distanceMeters;
+
+  const _PaceSample({required this.timestamp, required this.distanceMeters});
 }
 
 /// GPS Anti-Spoofing Validator
@@ -48,11 +62,18 @@ class GpsValidator {
       500; // At least 0.5s between points
   static const double maxJumpDistanceMeters = 100; // Max jump in single update
 
+  // Moving average pace calculation (10-second window)
+  static const int movingAvgWindowSeconds = 10;
+
   // Track suspicious activity
   int _consecutiveRejects = 0;
   int _totalRejects = 0;
   int _totalPoints = 0;
   DateTime? _lastValidTimestamp;
+
+  // Moving average pace tracking
+  final Queue<_PaceSample> _paceSamples = Queue<_PaceSample>();
+  double _movingAvgPaceMinPerKm = double.infinity;
 
   /// Statistics getters
   int get consecutiveRejects => _consecutiveRejects;
@@ -60,6 +81,17 @@ class GpsValidator {
   int get totalPoints => _totalPoints;
   double get rejectRate =>
       _totalPoints > 0 ? _totalRejects / _totalPoints : 0.0;
+  DateTime? get lastValidTimestamp => _lastValidTimestamp;
+
+  /// Current moving average pace (min/km) over last 10 seconds.
+  /// Returns infinity if not enough data.
+  double get movingAvgPaceMinPerKm => _movingAvgPaceMinPerKm;
+
+  /// Check if current moving average pace is valid for hex capture.
+  /// Must be < 8:00 min/km as per spec §2.4.2.
+  static const double maxCapturePaceMinPerKm = 8.0;
+  bool get canCaptureAtCurrentPace =>
+      _movingAvgPaceMinPerKm < maxCapturePaceMinPerKm;
 
   /// Reset validation state (call when starting new run)
   void reset() {
@@ -67,6 +99,8 @@ class GpsValidator {
     _totalRejects = 0;
     _totalPoints = 0;
     _lastValidTimestamp = null;
+    _paceSamples.clear();
+    _movingAvgPaceMinPerKm = double.infinity;
   }
 
   /// Check if GPS signal quality is acceptable
@@ -155,10 +189,70 @@ class GpsValidator {
       }
     }
 
+    // Update moving average pace
+    _updateMovingAvgPace(current.timestamp, distance);
+
     return ValidationResult.valid(
       calculatedSpeed: calculatedSpeed,
       calculatedDistance: distance,
+      movingAvgPaceMinPerKm: _movingAvgPaceMinPerKm,
     );
+  }
+
+  /// Update the 10-second moving average pace.
+  ///
+  /// Adds a new sample and removes samples older than 10 seconds.
+  /// Calculates pace as min/km from total distance in the window.
+  void _updateMovingAvgPace(DateTime timestamp, double distanceMeters) {
+    // Add new sample
+    _paceSamples.addLast(
+      _PaceSample(timestamp: timestamp, distanceMeters: distanceMeters),
+    );
+
+    // Remove samples older than the window
+    final cutoff = timestamp.subtract(
+      Duration(seconds: movingAvgWindowSeconds),
+    );
+    while (_paceSamples.isNotEmpty &&
+        _paceSamples.first.timestamp.isBefore(cutoff)) {
+      _paceSamples.removeFirst();
+    }
+
+    // Calculate moving average pace
+    if (_paceSamples.length < 2) {
+      _movingAvgPaceMinPerKm = double.infinity;
+      return;
+    }
+
+    // Sum distance in window
+    double totalDistance = 0;
+    for (final sample in _paceSamples) {
+      totalDistance += sample.distanceMeters;
+    }
+
+    // Calculate time span in window
+    final windowDurationSeconds =
+        _paceSamples.last.timestamp
+            .difference(_paceSamples.first.timestamp)
+            .inMilliseconds /
+        1000.0;
+
+    if (windowDurationSeconds <= 0 || totalDistance <= 0) {
+      _movingAvgPaceMinPerKm = double.infinity;
+      return;
+    }
+
+    // Speed in m/s
+    final speedMps = totalDistance / windowDurationSeconds;
+
+    // Convert to min/km: pace = 1000 / (speed * 60) = 1000 / (speed_mps * 60)
+    // Or pace_min_per_km = (1 / speed_km_per_min) = 1 / (speed_mps * 60 / 1000)
+    // = 1000 / (speed_mps * 60) = 16.667 / speed_mps
+    if (speedMps > 0) {
+      _movingAvgPaceMinPerKm = (1000 / 60) / speedMps;
+    } else {
+      _movingAvgPaceMinPerKm = double.infinity;
+    }
   }
 
   /// Full validation of a new point against the previous point
@@ -222,6 +316,286 @@ class GpsValidator {
     if (isLikelySpoofing()) {
       return 'Warning: Possible GPS spoofing detected';
     }
-    return 'GPS validation: ${_totalPoints - _totalRejects}/${_totalPoints} points valid';
+    return 'GPS validation: ${_totalPoints - _totalRejects}/$_totalPoints points valid';
   }
+}
+
+/// 1D Kalman Filter for smoothing GPS coordinate components.
+class _KalmanFilter1D {
+  double _estimate;
+  double _errorEstimate;
+  final double _processNoise;
+  final double _measurementNoise;
+
+  _KalmanFilter1D({
+    required double initialEstimate,
+    required double initialError,
+    required double processNoise,
+    required double measurementNoise,
+  }) : _estimate = initialEstimate,
+       _errorEstimate = initialError,
+       _processNoise = processNoise,
+       _measurementNoise = measurementNoise;
+
+  double get estimate => _estimate;
+  double get errorEstimate => _errorEstimate;
+
+  double update(double measurement) {
+    final prediction = _estimate;
+    final predictionError = _errorEstimate + _processNoise;
+
+    final kalmanGain = predictionError / (predictionError + _measurementNoise);
+    _estimate = prediction + kalmanGain * (measurement - prediction);
+    _errorEstimate = (1 - kalmanGain) * predictionError;
+
+    return _estimate;
+  }
+
+  void reset(double estimate, double error) {
+    _estimate = estimate;
+    _errorEstimate = error;
+  }
+}
+
+/// GPS Kalman Filter for smoothing latitude/longitude coordinates.
+/// Reduces noise from GPS sensor while preserving actual movement.
+class GpsKalmanFilter {
+  _KalmanFilter1D? _latFilter;
+  _KalmanFilter1D? _lngFilter;
+  _KalmanFilter1D? _altFilter;
+
+  final double _processNoise;
+  final double _measurementNoise;
+  final double _initialError;
+
+  DateTime? _lastTimestamp;
+  double? _lastLat;
+  double? _lastLng;
+
+  GpsKalmanFilter({
+    double processNoise = 0.00001,
+    double measurementNoise = 0.0001,
+    double initialError = 0.001,
+  }) : _processNoise = processNoise,
+       _measurementNoise = measurementNoise,
+       _initialError = initialError;
+
+  bool get isInitialized => _latFilter != null;
+
+  void reset() {
+    _latFilter = null;
+    _lngFilter = null;
+    _altFilter = null;
+    _lastTimestamp = null;
+    _lastLat = null;
+    _lastLng = null;
+  }
+
+  LocationPoint filter(LocationPoint point) {
+    if (_latFilter == null) {
+      _latFilter = _KalmanFilter1D(
+        initialEstimate: point.latitude,
+        initialError: _initialError,
+        processNoise: _processNoise,
+        measurementNoise: _measurementNoise,
+      );
+      _lngFilter = _KalmanFilter1D(
+        initialEstimate: point.longitude,
+        initialError: _initialError,
+        processNoise: _processNoise,
+        measurementNoise: _measurementNoise,
+      );
+      if (point.altitude != null) {
+        _altFilter = _KalmanFilter1D(
+          initialEstimate: point.altitude!,
+          initialError: 10.0,
+          processNoise: 0.1,
+          measurementNoise: 5.0,
+        );
+      }
+      _lastTimestamp = point.timestamp;
+      _lastLat = point.latitude;
+      _lastLng = point.longitude;
+      return point;
+    }
+
+    final timeDelta = _lastTimestamp != null
+        ? point.timestamp.difference(_lastTimestamp!).inMilliseconds / 1000.0
+        : 1.0;
+
+    double adaptedMeasurementNoise = _measurementNoise;
+    if (point.accuracy != null && point.accuracy! > 0) {
+      adaptedMeasurementNoise = _measurementNoise * (point.accuracy! / 10.0);
+    }
+
+    final tempLatFilter = _KalmanFilter1D(
+      initialEstimate: _latFilter!.estimate,
+      initialError: _latFilter!.errorEstimate,
+      processNoise: _processNoise * timeDelta,
+      measurementNoise: adaptedMeasurementNoise,
+    );
+    final tempLngFilter = _KalmanFilter1D(
+      initialEstimate: _lngFilter!.estimate,
+      initialError: _lngFilter!.errorEstimate,
+      processNoise: _processNoise * timeDelta,
+      measurementNoise: adaptedMeasurementNoise,
+    );
+
+    final filteredLat = tempLatFilter.update(point.latitude);
+    final filteredLng = tempLngFilter.update(point.longitude);
+
+    _latFilter = tempLatFilter;
+    _lngFilter = tempLngFilter;
+
+    double? filteredAlt;
+    if (point.altitude != null && _altFilter != null) {
+      filteredAlt = _altFilter!.update(point.altitude!);
+    }
+
+    _lastTimestamp = point.timestamp;
+    _lastLat = filteredLat;
+    _lastLng = filteredLng;
+
+    return LocationPoint(
+      latitude: filteredLat,
+      longitude: filteredLng,
+      altitude: filteredAlt ?? point.altitude,
+      accuracy: point.accuracy,
+      speed: point.speed,
+      heading: point.heading,
+      timestamp: point.timestamp,
+    );
+  }
+
+  double distanceFromLast(LocationPoint point) {
+    if (_lastLat == null || _lastLng == null) return 0;
+
+    const double earthRadius = 6371000;
+    final dLat = _toRadians(point.latitude - _lastLat!);
+    final dLng = _toRadians(point.longitude - _lastLng!);
+
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRadians(_lastLat!)) *
+            math.cos(_toRadians(point.latitude)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  double _toRadians(double degrees) => degrees * math.pi / 180;
+}
+
+/// Accelerometer-based motion validator for anti-spoofing.
+/// Validates that GPS movement correlates with actual device motion.
+class AccelerometerValidator {
+  final Queue<_AccelSample> _samples = Queue<_AccelSample>();
+  static const int _sampleWindowMs = 2000;
+  static const double _minMovementThreshold = 0.5;
+  static const double _maxStationaryVariance = 0.3;
+
+  double _variance = 0;
+  double _avgMagnitude = 0;
+  bool _isMoving = false;
+  DateTime? _lastUpdate;
+
+  bool get isMoving => _isMoving;
+  double get variance => _variance;
+  double get avgMagnitude => _avgMagnitude;
+
+  void reset() {
+    _samples.clear();
+    _variance = 0;
+    _avgMagnitude = 0;
+    _isMoving = false;
+    _lastUpdate = null;
+  }
+
+  void addSample(double x, double y, double z) {
+    final now = DateTime.now();
+    final magnitude = math.sqrt(x * x + y * y + z * z);
+
+    _samples.addLast(
+      _AccelSample(timestamp: now, x: x, y: y, z: z, magnitude: magnitude),
+    );
+
+    final cutoff = now.subtract(const Duration(milliseconds: _sampleWindowMs));
+    while (_samples.isNotEmpty && _samples.first.timestamp.isBefore(cutoff)) {
+      _samples.removeFirst();
+    }
+
+    _updateStats();
+    _lastUpdate = now;
+  }
+
+  void _updateStats() {
+    if (_samples.length < 5) {
+      _variance = 0;
+      _avgMagnitude = 9.8;
+      _isMoving = false;
+      return;
+    }
+
+    double sumMag = 0;
+    for (final s in _samples) {
+      sumMag += s.magnitude;
+    }
+    _avgMagnitude = sumMag / _samples.length;
+
+    double sumSquaredDiff = 0;
+    for (final s in _samples) {
+      final diff = s.magnitude - _avgMagnitude;
+      sumSquaredDiff += diff * diff;
+    }
+    _variance = sumSquaredDiff / _samples.length;
+
+    _isMoving = _variance > _minMovementThreshold;
+  }
+
+  ValidationResult validateGpsMovement(
+    double gpsDistanceMeters,
+    double timeSeconds,
+  ) {
+    if (_samples.length < 5) {
+      return ValidationResult.valid();
+    }
+
+    final gpsSpeed = gpsDistanceMeters / timeSeconds;
+    final gpsSpeedKmh = gpsSpeed * 3.6;
+
+    if (gpsSpeedKmh > 5 && !_isMoving && _variance < _maxStationaryVariance) {
+      return ValidationResult.invalid(
+        'GPS shows ${gpsSpeedKmh.toStringAsFixed(1)} km/h but device appears stationary',
+      );
+    }
+
+    if (gpsSpeedKmh < 1 && _isMoving && _variance > _minMovementThreshold * 2) {
+      return ValidationResult.valid();
+    }
+
+    return ValidationResult.valid();
+  }
+
+  bool hasRecentData() {
+    if (_lastUpdate == null) return false;
+    return DateTime.now().difference(_lastUpdate!).inSeconds < 5;
+  }
+}
+
+class _AccelSample {
+  final DateTime timestamp;
+  final double x;
+  final double y;
+  final double z;
+  final double magnitude;
+
+  const _AccelSample({
+    required this.timestamp,
+    required this.x,
+    required this.y,
+    required this.z,
+    required this.magnitude,
+  });
 }

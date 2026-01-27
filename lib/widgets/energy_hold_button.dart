@@ -22,7 +22,7 @@ class EnergyHoldButton extends StatefulWidget {
     required this.fillColor,
     required this.iconColor,
     this.label, // Optional
-    this.duration = const Duration(milliseconds: 1000),
+    this.duration = const Duration(milliseconds: 1500),
     this.isHoldRequired = true,
     this.height = 80.0,
     this.borderRadius = 40.0, // More rounded by default

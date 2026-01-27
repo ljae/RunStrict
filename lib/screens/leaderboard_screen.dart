@@ -1,9 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../config/h3_config.dart';
 import '../theme/app_theme.dart';
 import '../models/team.dart';
+import '../providers/leaderboard_provider.dart';
+import '../providers/app_state_provider.dart';
 
 /// Leaderboard Screen - Season Rankings by Flip Points
 /// Redesigned: "Premium Athletic Minimal"
@@ -20,12 +23,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   GeographicScope _scopeFilter = GeographicScope.all;
   late AnimationController _pulseController;
   late AnimationController _entranceController;
-
-  // Mock current user ID and hex for highlighting and scope filtering
-  static const String _currentUserId = 'user_1';
-  // Mock user's current hex ID (Res 9)
-  // ignore: unused_field
-  static const String _currentUserHexId = '89283082803ffff';
+  final bool _useMockData = false;
 
   // Mock Data
   final List<LeaderboardRunner> _allRunners = [
@@ -196,10 +194,30 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     ),
   ];
 
-  List<LeaderboardRunner> get _filteredRunners {
-    var runners = List<LeaderboardRunner>.from(_allRunners);
+  List<LeaderboardRunner> _getFilteredRunners(BuildContext context) {
+    final leaderboardProvider = context.watch<LeaderboardProvider>();
+    final entries = leaderboardProvider.entries;
 
-    // Team filter
+    List<LeaderboardRunner> runners;
+
+    if (_useMockData || entries.isEmpty) {
+      runners = List<LeaderboardRunner>.from(_allRunners);
+    } else {
+      runners = entries
+          .map(
+            (e) => LeaderboardRunner(
+              id: e.id,
+              name: e.name,
+              team: e.team,
+              flipPoints: e.seasonPoints,
+              totalDistanceKm: 0,
+              avatar: e.avatar,
+              crewName: null,
+            ),
+          )
+          .toList();
+    }
+
     if (_teamFilter != 'ALL') {
       final teamFilter = _teamFilter == 'RED'
           ? Team.red
@@ -209,7 +227,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       runners = runners.where((r) => r.team == teamFilter).toList();
     }
 
-    // Geographic scope filter
     switch (_scopeFilter) {
       case GeographicScope.zone:
         runners = runners.where((r) => r.zoneHexId != null).toList();
@@ -226,22 +243,55 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     return runners;
   }
 
-  bool get _isCurrentUserVisible {
-    return _filteredRunners.any((r) => r.id == _currentUserId);
+  String? _getCurrentUserId(BuildContext context) {
+    return context.read<AppStateProvider>().currentUser?.id;
   }
 
-  int get _currentUserRank {
-    final allRanked = _filteredRunners;
-    final index = allRanked.indexWhere((r) => r.id == _currentUserId);
+  bool _isCurrentUserVisible(
+    BuildContext context,
+    List<LeaderboardRunner> runners,
+  ) {
+    final userId = _getCurrentUserId(context);
+    if (userId == null) return false;
+    return runners.any((r) => r.id == userId);
+  }
+
+  int _getCurrentUserRank(
+    BuildContext context,
+    List<LeaderboardRunner> runners,
+  ) {
+    final userId = _getCurrentUserId(context);
+    if (userId == null) return -1;
+    final index = runners.indexWhere((r) => r.id == userId);
     return index >= 0 ? index + 1 : -1;
   }
 
-  LeaderboardRunner? get _currentUserData {
-    try {
-      return _allRunners.firstWhere((r) => r.id == _currentUserId);
-    } catch (_) {
-      return null;
+  LeaderboardRunner? _getCurrentUserData(BuildContext context) {
+    final userId = _getCurrentUserId(context);
+    if (userId == null) return null;
+
+    final leaderboardProvider = context.read<LeaderboardProvider>();
+    final entries = leaderboardProvider.entries;
+
+    if (_useMockData || entries.isEmpty) {
+      try {
+        return _allRunners.firstWhere((r) => r.id == userId);
+      } catch (_) {
+        return null;
+      }
     }
+
+    final entry = leaderboardProvider.getUser(userId);
+    if (entry == null) return null;
+
+    return LeaderboardRunner(
+      id: entry.id,
+      name: entry.name,
+      team: entry.team,
+      flipPoints: entry.seasonPoints,
+      totalDistanceKm: 0,
+      avatar: entry.avatar,
+    );
   }
 
   @override
@@ -256,6 +306,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LeaderboardProvider>().fetchLeaderboard();
+    });
   }
 
   @override
@@ -267,7 +321,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final runners = _filteredRunners;
+    final runners = _getFilteredRunners(context);
+    final currentUserId = _getCurrentUserId(context);
+    final isUserVisible = _isCurrentUserVisible(context, runners);
+    final currentUserData = _getCurrentUserData(context);
 
     return Container(
       color: AppTheme.backgroundStart,
@@ -291,12 +348,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                               const SliverToBoxAdapter(
                                 child: SizedBox(height: 20),
                               ),
-                              // Top 3 Podium
                               if (runners.isNotEmpty)
                                 SliverToBoxAdapter(
                                   child: _buildPodium(runners),
                                 ),
-                              // Rank List (4th onwards)
                               if (runners.length > 3)
                                 SliverPadding(
                                   padding: const EdgeInsets.fromLTRB(
@@ -317,7 +372,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                                       return _buildRankTile(
                                         runners[listIndex],
                                         listIndex + 1,
-                                        index, // For stagger delay
+                                        index,
+                                        currentUserId,
                                       );
                                     }, childCount: runners.length - 3),
                                   ),
@@ -328,13 +384,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ],
               ),
 
-              // Sticky Footer: My Rank
-              if (!_isCurrentUserVisible && _currentUserData != null)
+              if (!isUserVisible && currentUserData != null)
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: _buildMyRankFooter(),
+                  child: _buildMyRankFooter(
+                    currentUserData,
+                    _getCurrentUserRank(context, runners),
+                  ),
                 ),
             ],
           ),
@@ -668,8 +726,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // RANK LIST (4th+)
   // ---------------------------------------------------------------------------
 
-  Widget _buildRankTile(LeaderboardRunner runner, int rank, int index) {
-    final isCurrentUser = runner.id == _currentUserId;
+  Widget _buildRankTile(
+    LeaderboardRunner runner,
+    int rank,
+    int index,
+    String? currentUserId,
+  ) {
+    final isCurrentUser = runner.id == currentUserId;
     final teamColor = runner.team.color;
     final isPurple = runner.team == Team.purple;
     final showPurpleGlow = isPurple && _teamFilter == 'ALL';
@@ -822,10 +885,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // STICKY FOOTER
   // ---------------------------------------------------------------------------
 
-  Widget _buildMyRankFooter() {
-    final user = _currentUserData!;
+  Widget _buildMyRankFooter(LeaderboardRunner user, int rank) {
     final teamColor = user.team.color;
-    final rank = _currentUserRank;
 
     return ClipRRect(
       child: BackdropFilter(
