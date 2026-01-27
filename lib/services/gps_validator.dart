@@ -59,11 +59,12 @@ class GpsValidator {
   static const double maxAccuracyMeters = 50.0; // Reject if accuracy > 50m
   static const double maxAltitudeChangeMps = 5.0; // Max vertical speed
   static const double minTimeBetweenPointsMs =
-      500; // At least 0.5s between points
+      1500; // At least 1.5s between points (allows 0.5Hz GPS polling with margin)
   static const double maxJumpDistanceMeters = 100; // Max jump in single update
 
-  // Moving average pace calculation (10-second window)
-  static const int movingAvgWindowSeconds = 10;
+  // Moving average pace calculation (20-second window for 0.5Hz polling)
+  // At 0.5Hz, this gives ~10 samples for stable pace calculation
+  static const int movingAvgWindowSeconds = 20;
 
   // Track suspicious activity
   int _consecutiveRejects = 0;
@@ -83,7 +84,8 @@ class GpsValidator {
       _totalPoints > 0 ? _totalRejects / _totalPoints : 0.0;
   DateTime? get lastValidTimestamp => _lastValidTimestamp;
 
-  /// Current moving average pace (min/km) over last 10 seconds.
+  /// Current moving average pace (min/km) over last 20 seconds.
+  /// At 0.5Hz GPS polling, this provides ~10 samples for stable calculation.
   /// Returns infinity if not enough data.
   double get movingAvgPaceMinPerKm => _movingAvgPaceMinPerKm;
 
@@ -199,10 +201,10 @@ class GpsValidator {
     );
   }
 
-  /// Update the 10-second moving average pace.
+  /// Update the 20-second moving average pace.
   ///
-  /// Adds a new sample and removes samples older than 10 seconds.
-  /// Calculates pace as min/km from total distance in the window.
+  /// Adds a new sample and removes samples older than 20 seconds.
+  /// At 0.5Hz GPS polling, this provides ~10 samples for stable pace calculation.
   void _updateMovingAvgPace(DateTime timestamp, double distanceMeters) {
     // Add new sample
     _paceSamples.addLast(

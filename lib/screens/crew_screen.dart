@@ -131,6 +131,8 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
     final yesterdayRunners = members.where((m) => m.ranYesterday).length;
     final totalFlips = members.fold(0, (sum, m) => sum + m.flipCount);
     final totalDistanceKm = members.length * 12.4; // Mock data
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
@@ -150,6 +152,7 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                 totalFlips,
                 totalDistanceKm,
                 yesterdayRunners,
+                isLandscape,
               ),
             ),
           ),
@@ -208,8 +211,8 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isLandscape ? 7 : 4,
               mainAxisSpacing: 24,
               crossAxisSpacing: 16,
               childAspectRatio: 0.7,
@@ -237,7 +240,240 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
     int totalFlips,
     double totalDistance,
     int yesterdayRunners,
+    bool isLandscape,
   ) {
+    if (isLandscape) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left: Name & Avatar
+          Expanded(
+            flex: 5,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: _GlassCard(
+                    height: 160,
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: teamColor.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: teamColor.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Text(
+                            crew.team.displayName,
+                            style: GoogleFonts.sora(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: teamColor,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          crew.name.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.bebasNeue(
+                            fontSize: 36,
+                            height: 0.9,
+                            color: Colors.white,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _GlassCard(
+                    height: 160,
+                    color: teamColor.withValues(alpha: 0.1),
+                    borderColor: teamColor.withValues(alpha: 0.3),
+                    child: Center(
+                      child: CrewAvatar.fromCrew(
+                        crew as CrewModel,
+                        size: 80,
+                        showBorder: false,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Right: Stats & Multiplier
+          Expanded(
+            flex: 4,
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _GlassCard(
+                        height: 74,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'FLIPS',
+                              style: GoogleFonts.sora(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              totalFlips.toString(),
+                              style: GoogleFonts.sora(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _GlassCard(
+                        height: 74,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'DISTANCE',
+                              style: GoogleFonts.sora(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Text(
+                                    totalDistance.toStringAsFixed(1),
+                                    style: GoogleFonts.sora(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'KM',
+                                    style: GoogleFonts.sora(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _GlassCard(
+                  height: 74,
+                  color: yesterdayRunners > 0
+                      ? teamColor.withValues(alpha: 0.15)
+                      : Colors.white.withValues(alpha: 0.02),
+                  borderColor: yesterdayRunners > 0
+                      ? teamColor.withValues(alpha: 0.5)
+                      : Colors.white.withValues(alpha: 0.05),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (yesterdayRunners > 0)
+                        Container(
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: teamColor.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: teamColor.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.calendar_today_rounded,
+                            size: 14,
+                            color: teamColor,
+                          ),
+                        ),
+                      Text(
+                        yesterdayRunners > 0
+                            ? '$yesterdayRunners RAN YESTERDAY'
+                            : 'NO RUNNERS YESTERDAY',
+                        style: GoogleFonts.bebasNeue(
+                          fontSize: 20,
+                          color: yesterdayRunners > 0
+                              ? Colors.white
+                              : Colors.white38,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      if (yesterdayRunners > 0) ...[
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 12),
+                          width: 1,
+                          height: 20,
+                          color: Colors.white24,
+                        ),
+                        Text(
+                          '${yesterdayRunners}X',
+                          style: GoogleFonts.bebasNeue(
+                            fontSize: 28,
+                            color: teamColor,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       children: [
         // Top Section: Name & Icon
@@ -572,94 +808,99 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
     final user = context.watch<AppStateProvider>().currentUser;
     final teamColor = user?.team.color ?? AppTheme.electricBlue;
 
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _AnimatedEntrance(
-            controller: _entranceController,
-            delay: 0.0,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    teamColor.withValues(alpha: 0.2),
-                    teamColor.withValues(alpha: 0.05),
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _AnimatedEntrance(
+                controller: _entranceController,
+                delay: 0.0,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        teamColor.withValues(alpha: 0.2),
+                        teamColor.withValues(alpha: 0.05),
+                      ],
+                    ),
+                    border: Border.all(color: teamColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Icon(Icons.groups_rounded, size: 56, color: teamColor),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              _AnimatedEntrance(
+                controller: _entranceController,
+                delay: 0.1,
+                child: Text(
+                  'RUN TOGETHER',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 48,
+                    color: Colors.white,
+                    letterSpacing: 2.0,
+                    height: 0.9,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              _AnimatedEntrance(
+                controller: _entranceController,
+                delay: 0.2,
+                child: Text(
+                  'Join forces. Multiply points.\nDominate the map together.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.sora(
+                    color: AppTheme.textSecondary,
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 60),
+
+              // Buttons
+              _AnimatedEntrance(
+                controller: _entranceController,
+                delay: 0.3,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _GlassButton(
+                        label: 'CREATE',
+                        color: teamColor,
+                        isOutlined: true,
+                        onTap: () =>
+                            _showCreateCrewDialog(context, crewProvider),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _GlassButton(
+                        label: 'JOIN',
+                        color: teamColor,
+                        isOutlined: false,
+                        onTap: () => _showJoinCrewSheet(context, crewProvider),
+                      ),
+                    ),
                   ],
                 ),
-                border: Border.all(color: teamColor.withValues(alpha: 0.3)),
               ),
-              child: Icon(Icons.groups_rounded, size: 56, color: teamColor),
-            ),
+            ],
           ),
-
-          const SizedBox(height: 40),
-
-          _AnimatedEntrance(
-            controller: _entranceController,
-            delay: 0.1,
-            child: Text(
-              'RUN TOGETHER',
-              style: GoogleFonts.bebasNeue(
-                fontSize: 48,
-                color: Colors.white,
-                letterSpacing: 2.0,
-                height: 0.9,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          _AnimatedEntrance(
-            controller: _entranceController,
-            delay: 0.2,
-            child: Text(
-              'Join forces. Multiply points.\nDominate the map together.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.sora(
-                color: AppTheme.textSecondary,
-                fontSize: 16,
-                height: 1.5,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 60),
-
-          // Buttons
-          _AnimatedEntrance(
-            controller: _entranceController,
-            delay: 0.3,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _GlassButton(
-                    label: 'CREATE',
-                    color: teamColor,
-                    isOutlined: true,
-                    onTap: () => _showCreateCrewDialog(context, crewProvider),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _GlassButton(
-                    label: 'JOIN',
-                    color: teamColor,
-                    isOutlined: false,
-                    onTap: () => _showJoinCrewSheet(context, crewProvider),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

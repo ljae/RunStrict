@@ -47,6 +47,9 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Container(
       decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
       child: Scaffold(
@@ -83,157 +86,139 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildHeader(),
-                  const SizedBox(height: 20),
-                  _buildPeriodToggle(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 10),
+                  if (!isLandscape) ...[
+                    _buildPeriodToggle(),
+                    const SizedBox(height: 24),
+                  ],
                   Expanded(
-                    child: CustomScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      slivers: [
-                        // Stats Row
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: _buildStatsRow(
-                              totalDistance,
-                              avgPace,
-                              totalPoints,
-                              runCount,
-                            ),
-                          ),
-                        ),
-
-                        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-                        // Calendar or Chart based on view mode
-                        if (_viewMode == HistoryViewMode.calendar) ...[
-                          // Calendar View
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surfaceColor.withOpacity(0.6),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.05),
-                                  ),
-                                ),
-                                child: RunCalendar(
-                                  runs: allRuns,
-                                  selectedDate: _selectedDate,
-                                  onDateSelected: (date) {
-                                    setState(() => _selectedDate = date);
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-                          // Selected Date Runs
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: SelectedDateRuns(
-                                date: _selectedDate ?? DateTime.now(),
-                                runs: _runsForDate(
-                                  allRuns,
-                                  _selectedDate ?? DateTime.now(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ] else ...[
-                          // List View - Chart
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: _buildChartCard(
-                                periodRuns,
-                                _selectedPeriod,
-                              ),
-                            ),
-                          ),
-
-                          const SliverToBoxAdapter(child: SizedBox(height: 28)),
-
-                          // Recent Runs Header
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      height: 1,
-                                      color: Colors.white.withOpacity(0.05),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                    ),
-                                    child: Text(
-                                      'RECENT RUNS',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white24,
-                                        letterSpacing: 2.0,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Container(
-                                      height: 1,
-                                      color: Colors.white.withOpacity(0.05),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-                          // Run List
-                          periodRuns.isEmpty
-                              ? SliverToBoxAdapter(child: _buildEmptyState())
-                              : SliverPadding(
+                    child: isLandscape
+                        ? _buildLandscapeLayout(
+                            allRuns,
+                            periodRuns,
+                            totalDistance,
+                            avgPace,
+                            totalPoints,
+                            runCount,
+                          )
+                        : CustomScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            slivers: [
+                              // Stats Row
+                              SliverToBoxAdapter(
+                                child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 24,
                                   ),
-                                  sliver: SliverList(
-                                    delegate: SliverChildBuilderDelegate((
-                                      context,
-                                      index,
-                                    ) {
-                                      return Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 10,
-                                        ),
-                                        child: _buildRunTile(periodRuns[index]),
-                                      );
-                                    }, childCount: periodRuns.length),
+                                  child: _buildStatsRow(
+                                    totalDistance,
+                                    avgPace,
+                                    totalPoints,
+                                    runCount,
                                   ),
                                 ),
-                        ],
+                              ),
 
-                        // Bottom spacing
-                        const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                      ],
-                    ),
+                              const SliverToBoxAdapter(
+                                child: SizedBox(height: 24),
+                              ),
+
+                              // Calendar or Chart based on view mode
+                              if (_viewMode == HistoryViewMode.calendar) ...[
+                                // Calendar View
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                    ),
+                                    child: _buildCalendarContainer(allRuns),
+                                  ),
+                                ),
+
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 20),
+                                ),
+
+                                // Selected Date Runs
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                    ),
+                                    child: SelectedDateRuns(
+                                      date: _selectedDate ?? DateTime.now(),
+                                      runs: _runsForDate(
+                                        allRuns,
+                                        _selectedDate ?? DateTime.now(),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ] else ...[
+                                // List View - Chart
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                    ),
+                                    child: _buildChartCard(
+                                      periodRuns,
+                                      _selectedPeriod,
+                                    ),
+                                  ),
+                                ),
+
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 28),
+                                ),
+
+                                // Recent Runs Header
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                    ),
+                                    child: _buildRecentRunsHeader(),
+                                  ),
+                                ),
+
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 16),
+                                ),
+
+                                // Run List
+                                periodRuns.isEmpty
+                                    ? SliverToBoxAdapter(
+                                        child: _buildEmptyState(),
+                                      )
+                                    : SliverPadding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                        ),
+                                        sliver: SliverList(
+                                          delegate: SliverChildBuilderDelegate((
+                                            context,
+                                            index,
+                                          ) {
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 10,
+                                              ),
+                                              child: _buildRunTile(
+                                                periodRuns[index],
+                                              ),
+                                            );
+                                          }, childCount: periodRuns.length),
+                                        ),
+                                      ),
+                              ],
+
+                              // Bottom spacing
+                              const SliverToBoxAdapter(
+                                child: SizedBox(height: 100),
+                              ),
+                            ],
+                          ),
                   ),
                 ],
               ),
@@ -241,6 +226,120 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildLandscapeLayout(
+    List<RunSession> allRuns,
+    List<RunSession> periodRuns,
+    double totalDistance,
+    double avgPace,
+    int totalPoints,
+    int runCount,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left Column: Stats + Calendar/Chart
+        Expanded(
+          flex: 1,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 12, 24),
+            child: Column(
+              children: [
+                _buildPeriodToggle(),
+                const SizedBox(height: 16),
+                _buildStatsRow(totalDistance, avgPace, totalPoints, runCount),
+                const SizedBox(height: 16),
+                if (_viewMode == HistoryViewMode.calendar)
+                  _buildCalendarContainer(allRuns)
+                else
+                  _buildChartCard(periodRuns, _selectedPeriod),
+              ],
+            ),
+          ),
+        ),
+        // Right Column: Details / List
+        Expanded(
+          flex: 1,
+          child: _viewMode == HistoryViewMode.calendar
+              ? SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 24, 24),
+                  child: SelectedDateRuns(
+                    date: _selectedDate ?? DateTime.now(),
+                    runs: _runsForDate(
+                      allRuns,
+                      _selectedDate ?? DateTime.now(),
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 24, 16),
+                      child: _buildRecentRunsHeader(),
+                    ),
+                    Expanded(
+                      child: periodRuns.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 0, 24, 24),
+                              itemCount: periodRuns.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _buildRunTile(periodRuns[index]),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCalendarContainer(List<RunSession> allRuns) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: RunCalendar(
+        runs: allRuns,
+        selectedDate: _selectedDate,
+        onDateSelected: (date) {
+          setState(() => _selectedDate = date);
+        },
+      ),
+    );
+  }
+
+  Widget _buildRecentRunsHeader() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'RECENT RUNS',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.white24,
+              letterSpacing: 2.0,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
+        ),
+      ],
     );
   }
 

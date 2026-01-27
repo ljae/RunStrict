@@ -105,6 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
     final userTeam = appState.userTeam;
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
 
     // Determine current accent color based on team, default to Neon Blue
     final Color currentAccent = userTeam?.name == 'red'
@@ -116,7 +118,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: true,
-        appBar: _buildModernAppBar(context, appState, currentAccent),
+        appBar: _buildModernAppBar(
+          context,
+          appState,
+          currentAccent,
+          isLandscape,
+        ),
         body: Stack(
           children: [
             Positioned.fill(
@@ -128,7 +135,11 @@ class _HomeScreenState extends State<HomeScreen> {
             _screens[_currentIndex],
           ],
         ),
-        bottomNavigationBar: _buildIconNavigationBar(context, currentAccent),
+        bottomNavigationBar: _buildIconNavigationBar(
+          context,
+          currentAccent,
+          isLandscape,
+        ),
       ),
     );
   }
@@ -137,16 +148,20 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context,
     AppStateProvider appState,
     Color accentColor,
+    bool isLandscape,
   ) {
     final pointsService = context.watch<PointsService>();
     final topPadding = MediaQuery.of(context).padding.top;
+    final contentHeight = isLandscape ? 48.0 : 68.0;
 
     return PreferredSize(
-      preferredSize: Size.fromHeight(topPadding + 68),
+      preferredSize: Size.fromHeight(topPadding + contentHeight),
       child: Container(
         padding: EdgeInsets.only(top: topPadding),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          margin: isLandscape
+              ? const EdgeInsets.fromLTRB(16, 4, 16, 4)
+              : const EdgeInsets.fromLTRB(16, 8, 16, 8),
           decoration: BoxDecoration(
             color: AppTheme.surfaceColor.withOpacity(0.85),
             borderRadius: BorderRadius.circular(24),
@@ -163,14 +178,14 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                height: 52,
+                height: isLandscape ? 40 : 52,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
                       Image.asset(
                         'assets/images/runner_logo_transparent.png',
-                        height: 24,
+                        height: isLandscape ? 20 : 24,
                         fit: BoxFit.contain,
                       ),
                       const Spacer(),
@@ -212,10 +227,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildIconNavigationBar(BuildContext context, Color accentColor) {
+  Widget _buildIconNavigationBar(
+    BuildContext context,
+    Color accentColor,
+    bool isLandscape,
+  ) {
     return Container(
-      height: 90, // Slightly taller for floating effect
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 30), // Lift up from bottom
+      height: isLandscape ? 60 : 90, // Slightly taller for floating effect
+      padding: isLandscape
+          ? const EdgeInsets.fromLTRB(24, 0, 24, 10)
+          : const EdgeInsets.fromLTRB(24, 0, 24, 30), // Lift up from bottom
       color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
@@ -235,18 +256,38 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Even spacing
           children: [
-            _buildNavBarItem(0, Icons.map_rounded, accentColor),
-            _buildNavBarItem(1, Icons.directions_run_rounded, accentColor),
-            _buildNavBarItem(2, Icons.groups_rounded, accentColor),
-            _buildNavBarItem(3, Icons.bar_chart_rounded, accentColor),
-            _buildNavBarItem(4, Icons.emoji_events_rounded, accentColor),
+            _buildNavBarItem(0, Icons.map_rounded, accentColor, isLandscape),
+            _buildNavBarItem(
+              1,
+              Icons.directions_run_rounded,
+              accentColor,
+              isLandscape,
+            ),
+            _buildNavBarItem(2, Icons.groups_rounded, accentColor, isLandscape),
+            _buildNavBarItem(
+              3,
+              Icons.bar_chart_rounded,
+              accentColor,
+              isLandscape,
+            ),
+            _buildNavBarItem(
+              4,
+              Icons.emoji_events_rounded,
+              accentColor,
+              isLandscape,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavBarItem(int index, IconData icon, Color accentColor) {
+  Widget _buildNavBarItem(
+    int index,
+    IconData icon,
+    Color accentColor,
+    bool isLandscape,
+  ) {
     final isSelected = _currentIndex == index;
 
     return GestureDetector(
@@ -255,8 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        width: 48,
-        height: 48,
+        width: isLandscape ? 40 : 48,
+        height: isLandscape ? 40 : 48,
         decoration: isSelected
             ? BoxDecoration(
                 color: accentColor.withOpacity(0.1),
@@ -268,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         child: Icon(
           icon,
-          size: 24,
+          size: isLandscape ? 20 : 24,
           color: isSelected
               ? accentColor
               : AppTheme.textSecondary.withOpacity(0.7),

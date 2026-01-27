@@ -43,14 +43,10 @@ class LocationService {
   bool _isTracking = false;
   bool get isTracking => _isTracking;
 
-  /// Polling rate in Hz (default: 0.5 = every 2 seconds)
-  double _pollingRateHz = 0.5;
-  double get pollingRateHz => _pollingRateHz;
-
-  /// Adaptive polling: higher rate when moving, lower when stationary
-  bool _adaptivePolling = true;
-  DateTime? _lastLocationTime;
-  double _lastSpeed = 0;
+  /// Polling rate in Hz (fixed: 0.5 = every 2 seconds)
+  /// Fixed rate for battery optimization and consistent behavior.
+  static const double _fixedPollingRateHz = 0.5;
+  double get pollingRateHz => _fixedPollingRateHz;
 
   /// Check and request location permissions
   Future<PermissionResult> requestPermissions() async {
@@ -110,14 +106,13 @@ class LocationService {
     );
   }
 
-  /// Start tracking GPS location with adaptive polling
+  /// Start tracking GPS location with fixed 0.5Hz polling
   ///
-  /// [useAdaptivePolling] - When true, increases polling rate when moving fast
-  /// [basePollingRateHz] - Base polling rate (default 0.5Hz = every 2 seconds)
-  Future<void> startTracking({
-    bool useAdaptivePolling = true,
-    double basePollingRateHz = 0.5,
-  }) async {
+  /// Fixed polling rate (0.5Hz = every 2 seconds) for:
+  /// - Battery optimization
+  /// - Consistent behavior across all speeds
+  /// - Reduced lag and smoother UI updates
+  Future<void> startTracking() async {
     if (_isTracking) return;
 
     final permissionResult = await requestPermissions();
@@ -129,11 +124,9 @@ class LocationService {
     }
 
     _isTracking = true;
-    _adaptivePolling = useAdaptivePolling;
-    _pollingRateHz = basePollingRateHz;
 
     final pollingInterval = Duration(
-      milliseconds: (1000 / _pollingRateHz).round(),
+      milliseconds: (1000 / _fixedPollingRateHz).round(),
     );
 
     _pollingTimer = Timer.periodic(pollingInterval, (_) async {
@@ -163,48 +156,10 @@ class LocationService {
         heading: position.heading,
       );
 
-      _lastLocationTime = position.timestamp;
-      _lastSpeed = position.speed;
-
       _locationController.add(locationPoint);
-
-      if (_adaptivePolling) {
-        _adjustPollingRate(position.speed);
-      }
     } catch (e) {
       // Silently handle polling errors
     }
-  }
-
-  void _adjustPollingRate(double speedMps) {
-    double newRateHz;
-
-    if (speedMps < 0.5) {
-      newRateHz = 0.25;
-    } else if (speedMps < 2.0) {
-      newRateHz = 0.5;
-    } else if (speedMps < 4.0) {
-      newRateHz = 1.0;
-    } else {
-      newRateHz = 2.0;
-    }
-
-    if ((newRateHz - _pollingRateHz).abs() > 0.1) {
-      _pollingRateHz = newRateHz;
-      _restartPollingTimer();
-    }
-  }
-
-  void _restartPollingTimer() {
-    _pollingTimer?.cancel();
-    if (!_isTracking) return;
-
-    final pollingInterval = Duration(
-      milliseconds: (1000 / _pollingRateHz).round(),
-    );
-    _pollingTimer = Timer.periodic(pollingInterval, (_) async {
-      await _pollLocation();
-    });
   }
 
   /// Start tracking with distance-based updates (original behavior)
@@ -257,8 +212,6 @@ class LocationService {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     _isTracking = false;
-    _lastLocationTime = null;
-    _lastSpeed = 0;
   }
 
   /// Get current location (one-time request)

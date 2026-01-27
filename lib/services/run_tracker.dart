@@ -39,7 +39,7 @@ class RunTracker {
   LocationPoint? _lastValidPoint;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
-  // GPS validator for moving average pace (10-sec window)
+  // GPS validator for moving average pace (20-sec window at 0.5Hz polling)
   final GpsValidator _gpsValidator = GpsValidator();
 
   // Accelerometer service for anti-spoofing (singleton)
@@ -215,7 +215,8 @@ class RunTracker {
     // Handle hex transition
     final previousHexId = _currentRun!.currentHexId;
 
-    // Use 10-second moving average pace for capture validation (spec §2.4.2)
+    // Use 20-second moving average pace for capture validation (spec §2.4.2)
+    // 20-sec window provides ~10 samples at 0.5Hz GPS polling for stable calculation
     final movingAvgPace = _gpsValidator.movingAvgPaceMinPerKm;
     final canCapture = _gpsValidator.canCaptureAtCurrentPace;
 

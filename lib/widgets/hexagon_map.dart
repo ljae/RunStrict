@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -38,8 +39,11 @@ class HexagonMap extends StatefulWidget {
 }
 
 class _HexagonMapState extends State<HexagonMap> {
+  static const String _hexSourceId = 'hex-polygons-source';
+  static const String _hexLayerId = 'hex-polygons-fill';
+
   MapboxMap? _mapboxMap;
-  PolygonAnnotationManager? _polygonManager;
+  // PolygonAnnotationManager? _polygonManager; // Removed for GeoJSON migration
   PointAnnotationManager? _labelManager;
   PolylineAnnotationManager? _polylineManager; // For route tracking line
   bool _isMapReady = false;
@@ -49,6 +53,7 @@ class _HexagonMapState extends State<HexagonMap> {
   latlong.LatLng? _userLocation;
   int _cameraChangeCounter = 0; // For forcing overlay updates
   int _lastRouteLength = 0; // Track route changes
+  Timer? _debounceTimer; // Debounce for camera updates
 
   final HexDataProvider _hexProvider = HexDataProvider();
   StreamSubscription<latlong.LatLng>? _locationSubscription;
@@ -88,13 +93,22 @@ class _HexagonMapState extends State<HexagonMap> {
     if (!mounted) return;
 
     // When hex data changes (e.g., during a run), refresh the hexagon display
-    // Also sync user location if available
-    if (_hexProvider.userLocation != null) {
-      _userLocation = _hexProvider.userLocation;
-      _currentUserHexId = _hexProvider.currentUserHexId;
-    }
+    // Sync user location - including clearing it when run ends
+    final newLocation = _hexProvider.userLocation;
+    final locationChanged = _userLocation != newLocation;
+
+    _userLocation = newLocation;
+    _currentUserHexId = _hexProvider.currentUserHexId;
+
     if (_isMapReady) {
       _updateHexagons();
+    }
+
+    // Force rebuild if location changed (including becoming null)
+    if (locationChanged) {
+      setState(() {
+        _cameraChangeCounter++;
+      });
     }
   }
 
@@ -151,12 +165,52 @@ class _HexagonMapState extends State<HexagonMap> {
     if (widget.onMapCreated != null) {
       widget.onMapCreated!(mapboxMap);
     }
-    _polygonManager = await _mapboxMap!.annotations
-        .createPolygonAnnotationManager();
+    // _polygonManager = await _mapboxMap!.annotations.createPolygonAnnotationManager(); // Removed
     _labelManager = await _mapboxMap!.annotations
         .createPointAnnotationManager();
     _polylineManager = await _mapboxMap!.annotations
         .createPolylineAnnotationManager();
+
+    // Add GeoJSON source for hex polygons (enables atomic updates without flash)
+    await mapboxMap.style.addSource(
+      GeoJsonSource(
+        id: _hexSourceId,
+        data: '{"type":"FeatureCollection","features":[]}',
+      ),
+    );
+
+    // Add fill layer for hex polygons with data-driven styling
+    // Create layer with default values first, then apply expressions via setStyleLayerProperty
+    await mapboxMap.style.addLayer(
+      FillLayer(
+        id: _hexLayerId,
+        sourceId: _hexSourceId,
+        // Placeholder values - will be overridden by expressions below
+        fillColor: Colors.grey.toARGB32(),
+        fillOpacity: 0.3,
+        fillOutlineColor: Colors.grey.toARGB32(),
+        fillAntialias: true,
+      ),
+    );
+
+    // Apply data-driven expressions to read colors from GeoJSON feature properties
+    // setStyleLayerProperty accepts Dart Lists that map to Mapbox GL expressions
+    await mapboxMap.style.setStyleLayerProperty(_hexLayerId, 'fill-color', [
+      'to-color',
+      ['get', 'fill-color'],
+    ]);
+    await mapboxMap.style.setStyleLayerProperty(_hexLayerId, 'fill-opacity', [
+      'get',
+      'fill-opacity',
+    ]);
+    await mapboxMap.style.setStyleLayerProperty(
+      _hexLayerId,
+      'fill-outline-color',
+      [
+        'to-color',
+        ['get', 'fill-outline-color'],
+      ],
+    );
 
     // Enable location component if requested
     if (widget.showUserLocation) {
@@ -322,7 +376,14 @@ class _HexagonMapState extends State<HexagonMap> {
     setState(() {
       _cameraChangeCounter++;
     });
-    _updateHexagons();
+
+    // Debounce hex updates - wait for camera to settle
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        _updateHexagons();
+      }
+    });
   }
 
   /// Draw the tracking route line on the map
@@ -342,7 +403,7 @@ class _HexagonMapState extends State<HexagonMap> {
 
       final polylineOptions = PolylineAnnotationOptions(
         geometry: LineString(coordinates: coordinates),
-        lineColor: teamColor.value,
+        lineColor: teamColor.toARGB32(),
         lineWidth: 5.0,
         lineOpacity: 0.9,
       );
@@ -357,12 +418,68 @@ class _HexagonMapState extends State<HexagonMap> {
   // Fixed resolution 9 for consistent hex display across all screens and zoom levels
   static const int _fixedResolution = 9;
 
+  /// Builds GeoJSON FeatureCollection for hex polygons with data-driven styling
+  String _buildHexGeoJson(List<String> hexIds) {
+    final features = <Map<String, dynamic>>[];
+
+    for (final hexId in hexIds) {
+      final boundary = HexService().getHexBoundary(hexId);
+      if (boundary.isEmpty) continue;
+
+      // Calculate hex center
+      double avgLat = 0, avgLng = 0;
+      for (final p in boundary) {
+        avgLat += p.latitude;
+        avgLng += p.longitude;
+      }
+      avgLat /= boundary.length;
+      avgLng /= boundary.length;
+
+      final hexCenter = latlong.LatLng(avgLat, avgLng);
+      final hex = _hexProvider.getHex(hexId, hexCenter);
+
+      // Build coordinates (GeoJSON uses [lng, lat] order)
+      final coordinates = boundary
+          .map((p) => [p.longitude, p.latitude])
+          .toList();
+      coordinates.add(coordinates.first); // Close the polygon
+
+      // Determine colors and opacity (same logic as before)
+      final isUserHex = hexId == _currentUserHexId;
+      final teamColor = widget.teamColor ?? AppTheme.electricBlue;
+
+      final fillColor = isUserHex ? teamColor : hex.hexLightColor;
+      final outlineColor = isUserHex ? teamColor : hex.hexColor;
+      final double opacity = isUserHex ? 0.5 : (hex.isNeutral ? 0.15 : 0.3);
+
+      // Convert color to hex string for GeoJSON
+      String colorToHex(Color c) =>
+          '#${c.toARGB32().toRadixString(16).substring(2)}';
+
+      features.add({
+        'type': 'Feature',
+        'id': hexId,
+        'geometry': {
+          'type': 'Polygon',
+          'coordinates': [coordinates],
+        },
+        'properties': {
+          'fill-color': colorToHex(fillColor),
+          'fill-opacity': opacity,
+          'fill-outline-color': colorToHex(outlineColor),
+        },
+      });
+    }
+
+    return jsonEncode({'type': 'FeatureCollection', 'features': features});
+  }
+
   // Re-implementing _updateHexagons to fix the mapping logic
   Future<void> _updateHexagons() async {
     // Guard: all required objects must be ready and widget is mounted
     if (!mounted ||
         _mapboxMap == null ||
-        _polygonManager == null ||
+        // _polygonManager == null || // Removed
         !_isMapReady) {
       return;
     }
@@ -402,10 +519,6 @@ class _HexagonMapState extends State<HexagonMap> {
       // Safely extract coordinates
       final lat = center.coordinates.lat;
       final lng = center.coordinates.lng;
-      if (lat == null || lng == null) {
-        debugPrint('_updateHexagons: center coordinates are null');
-        return;
-      }
       final centerLatLng = latlong.LatLng(lat.toDouble(), lng.toDouble());
 
       final hexIds = HexService().getHexagonsInArea(
@@ -417,72 +530,23 @@ class _HexagonMapState extends State<HexagonMap> {
       _visibleHexIds = hexIds;
 
       // Re-check after async operations - state may have changed
-      if (!mounted || _polygonManager == null) return;
+      if (!mounted) return;
 
-      await _polygonManager!.deleteAll();
-      if (_labelManager != null) {
-        await _labelManager!.deleteAll();
+      // Build GeoJSON and update source atomically (no flash!)
+      final geoJson = _buildHexGeoJson(hexIds);
+      try {
+        final source = await _mapboxMap!.style.getSource(_hexSourceId);
+        if (source is GeoJsonSource) {
+          await source.updateGeoJSON(geoJson);
+        }
+      } catch (e) {
+        debugPrint('Error updating hex GeoJSON: $e');
       }
 
-      final polygonOptions = <PolygonAnnotationOptions>[];
-
-      for (final hexId in hexIds) {
-        final boundary = HexService().getHexBoundary(hexId);
-        if (boundary.isEmpty) continue;
-
-        // Calculate center for label
-        double avgLat = 0, avgLng = 0;
-        for (final p in boundary) {
-          avgLat += p.latitude;
-          avgLng += p.longitude;
-        }
-        avgLat /= boundary.length;
-        avgLng /= boundary.length;
-
-        final hexCenter = latlong.LatLng(avgLat, avgLng);
-        final hex = _hexProvider.getHex(hexId, hexCenter);
-
-        final coordinates = boundary
-            .map((p) => Position(p.longitude, p.latitude))
-            .toList();
-
-        if (coordinates.isNotEmpty) {
-          coordinates.add(coordinates.first); // Close loop
-        }
-
-        // Highlight user's current hex
-        final isUserHex = hexId == _currentUserHexId;
-        final teamColor = widget.teamColor ?? AppTheme.electricBlue;
-
-        final fillColor = isUserHex ? teamColor : hex.hexLightColor;
-        final outlineColor = isUserHex ? teamColor : hex.hexColor;
-
-        // Static opacity: user hex brighter, neutral subtle, colored moderate
-        final double opacity = isUserHex
-            ? 0.5
-            : hex.isNeutral
-            ? 0.15
-            : 0.3;
-
-        polygonOptions.add(
-          PolygonAnnotationOptions(
-            geometry: Polygon(coordinates: [coordinates]),
-            fillColor: fillColor.toARGB32(),
-            fillOutlineColor: outlineColor.toARGB32(),
-            fillOpacity: opacity,
-          ),
-        );
-      }
-
-      // Re-check before createMulti - state may have changed during loop
-      if (!mounted || _polygonManager == null) return;
-
-      await _polygonManager!.createMulti(polygonOptions);
+      await _labelManager?.deleteAll();
 
       // Add score labels if zoom is high enough
-      if (widget.showScoreLabels &&
-          _currentZoom >= 13 &&
-          _labelManager != null) {
+      if (widget.showScoreLabels && _currentZoom >= 13) {
         final labelOptions = <PointAnnotationOptions>[];
 
         for (final hexId in hexIds) {
@@ -557,12 +621,24 @@ class _HexagonMapState extends State<HexagonMap> {
   }
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
+    _debounceTimer?.cancel();
     _locationSubscription?.cancel();
     _hexProvider.removeListener(_onHexDataChanged);
-    _polygonManager = null;
+    // _polygonManager = null; // Removed
     _labelManager = null;
     _polylineManager = null;
+
+    // Clean up GeoJSON source and layer
+    if (_mapboxMap != null) {
+      try {
+        await _mapboxMap!.style.removeStyleLayer(_hexLayerId);
+        await _mapboxMap!.style.removeStyleSource(_hexSourceId);
+      } catch (e) {
+        debugPrint('Error cleaning up hex layer/source: $e');
+      }
+    }
+
     _mapboxMap = null;
     super.dispose();
   }
@@ -585,19 +661,34 @@ class _UserLocationOverlay extends StatefulWidget {
   State<_UserLocationOverlay> createState() => _UserLocationOverlayState();
 }
 
-class _UserLocationOverlayState extends State<_UserLocationOverlay> {
+class _UserLocationOverlayState extends State<_UserLocationOverlay>
+    with SingleTickerProviderStateMixin {
   Offset? _screenPosition;
+  Offset? _previousPosition;
+  late AnimationController _animationController;
+  late Animation<Offset> _positionAnimation;
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
     _updateScreenPosition();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(_UserLocationOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.userLocation != widget.userLocation) {
+      _previousPosition = _screenPosition;
       _updateScreenPosition();
     }
   }
@@ -612,13 +703,26 @@ class _UserLocationOverlayState extends State<_UserLocationOverlay> {
       );
 
       final screenCoordinate = await widget.mapboxMap.pixelForCoordinate(point);
+      final newPosition = Offset(
+        screenCoordinate.x.toDouble(),
+        screenCoordinate.y.toDouble(),
+      );
 
       if (mounted) {
+        final startPosition = _previousPosition ?? newPosition;
+
+        _positionAnimation =
+            Tween<Offset>(begin: startPosition, end: newPosition).animate(
+              CurvedAnimation(
+                parent: _animationController,
+                curve: Curves.easeOutCubic,
+              ),
+            );
+
+        _animationController.forward(from: 0.0);
+
         setState(() {
-          _screenPosition = Offset(
-            screenCoordinate.x.toDouble(),
-            screenCoordinate.y.toDouble(),
-          );
+          _screenPosition = newPosition;
         });
       }
     } catch (e) {
@@ -632,9 +736,20 @@ class _UserLocationOverlayState extends State<_UserLocationOverlay> {
       return const SizedBox.shrink();
     }
 
-    return Positioned(
-      left: _screenPosition!.dx - 36, // Center the 72px marker
-      top: _screenPosition!.dy - 36,
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        // If animation hasn't started or is invalid, use current position
+        final position = _animationController.isAnimating
+            ? _positionAnimation.value
+            : _screenPosition!;
+
+        return Positioned(
+          left: position.dx - 36, // Center the 72px marker
+          top: position.dy - 36,
+          child: child!,
+        );
+      },
       child: GlowingLocationMarker(
         accentColor: widget.teamColor,
         size: 24.0,

@@ -85,18 +85,74 @@ class RunnerApp extends StatelessWidget {
         theme: AppTheme.themeData,
         themeMode: ThemeMode.dark,
         debugShowCheckedModeBanner: false,
-        home: Consumer<AppStateProvider>(
-          builder: (context, appState, _) {
-            return appState.hasUser
-                ? const HomeScreen()
-                : const TeamSelectionScreen();
-          },
-        ),
+        home: const _AppInitializer(),
         routes: {
           '/home': (context) => const HomeScreen(),
           '/team-selection': (context) => const TeamSelectionScreen(),
         },
       ),
+    );
+  }
+}
+
+/// Handles app initialization: restores session then navigates
+class _AppInitializer extends StatefulWidget {
+  const _AppInitializer();
+
+  @override
+  State<_AppInitializer> createState() => _AppInitializerState();
+}
+
+class _AppInitializerState extends State<_AppInitializer> {
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    final appState = context.read<AppStateProvider>();
+    await appState.initialize();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AppStateProvider>(
+      builder: (context, appState, _) {
+        // Show loading while initializing
+        if (!appState.isInitialized) {
+          return Scaffold(
+            backgroundColor: AppTheme.backgroundStart,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'RUN',
+                    style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.electricBlue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // After initialization, show appropriate screen
+        return appState.hasUser
+            ? const HomeScreen()
+            : const TeamSelectionScreen();
+      },
     );
   }
 }

@@ -50,18 +50,28 @@ class SupabaseService {
 
   /// Finalize a completed run and upload hex captures to server.
   ///
-  /// Called at run completion. Uploads run summary with hex path and points.
-  /// Server validates points ≤ hex_count × multiplier.
-  Future<void> finalizeRun(RunSummary runSummary) async {
-    await client.rpc(
+  /// Called at run completion ("The Final Sync"). Uploads run summary with
+  /// hex path and points. Server validates points ≤ hex_count × multiplier.
+  /// Returns server response with validated flip count and points.
+  Future<Map<String, dynamic>> finalizeRun(RunSummary runSummary) async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) {
+      throw Exception('User not authenticated');
+    }
+
+    final result = await client.rpc(
       'finalize_run',
       params: {
+        'p_user_id': userId,
+        'p_start_time': runSummary.startTime.toIso8601String(),
         'p_end_time': runSummary.endTime.toIso8601String(),
         'p_distance_km': runSummary.distanceKm,
+        'p_duration_seconds': runSummary.durationSeconds,
         'p_hex_path': runSummary.hexPath,
         'p_yesterday_crew_count': runSummary.yesterdayCrewCount,
       },
     );
+    return result as Map<String, dynamic>;
   }
 
   /// Sync app state on launch: fetch user, yesterday crew count, and hex viewport.
@@ -79,9 +89,10 @@ class SupabaseService {
   /// Get yesterday's active crew member count for multiplier calculation.
   ///
   /// Returns the number of crew members who ran yesterday (for today's multiplier).
+  /// Uses calculate_yesterday_checkins SQL function.
   Future<int> getYesterdayCrewCount(String crewId) async {
     final result = await client.rpc(
-      'get_yesterday_crew_count',
+      'calculate_yesterday_checkins',
       params: {'p_crew_id': crewId},
     );
     return (result as num?)?.toInt() ?? 1;

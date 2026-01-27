@@ -68,8 +68,9 @@ class _RunningScreenState extends State<RunningScreen>
     try {
       final appState = context.read<AppStateProvider>();
       final team = appState.userTeam ?? Team.blue;
+      final crewId = appState.currentUser?.crewId;
 
-      await context.read<RunProvider>().startRun(team: team);
+      await context.read<RunProvider>().startRun(team: team, crewId: crewId);
 
       // Run started - stay on RunningScreen
     } catch (e) {
@@ -99,76 +100,154 @@ class _RunningScreenState extends State<RunningScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundStart,
-      body: Container(
-        // Remove gradient, use flat background
-        color: AppTheme.backgroundStart,
-        child: Stack(
-          children: [
-            // Full Screen Map Background (Always visible)
-            Positioned.fill(
-              child: RouteMap(
-                key: const ValueKey('running_screen_map'),
-                route: runningProvider.routePoints,
-                routeVersion: runningProvider.routeVersion,
-                showLiveLocation: true,
-                aspectRatio: 1.0,
-                interactive: true,
-                showHexGrid: true,
-                // Enable navigation mode (bearing tracking)
-                navigationMode: true,
-                teamColor: teamColor,
-                isRedTeam: isRed,
-                isRunning: runningProvider.isRunning,
-              ),
+      body: Stack(
+        children: [
+          OrientationBuilder(
+            builder: (context, orientation) {
+              return orientation == Orientation.landscape
+                  ? _buildLandscapeLayout(runningProvider, teamColor, isRed)
+                  : _buildPortraitLayout(runningProvider, teamColor, isRed);
+            },
+          ),
+          // Error Message (Overlay on top of everything)
+          if (_errorMessage != null)
+            Positioned(
+              top: 100,
+              left: 24,
+              right: 24,
+              child: _buildErrorBanner(),
             ),
+        ],
+      ),
+    );
+  }
 
-            // Minimal overlay for readability
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppTheme.backgroundStart.withOpacity(0.6),
-                        Colors.transparent,
-                        AppTheme.backgroundStart.withOpacity(0.8),
-                      ],
-                      stops: const [0.0, 0.4, 1.0],
-                    ),
+  Widget _buildPortraitLayout(
+    RunProvider runningProvider,
+    Color teamColor,
+    bool isRed,
+  ) {
+    return Container(
+      color: AppTheme.backgroundStart,
+      child: Stack(
+        children: [
+          // Full Screen Map Background
+          Positioned.fill(
+            child: RouteMap(
+              key: const ValueKey('running_screen_map'),
+              route: runningProvider.routePoints,
+              routeVersion: runningProvider.routeVersion,
+              showLiveLocation: true,
+              aspectRatio: 1.0,
+              interactive: true,
+              showHexGrid: true,
+              navigationMode: true,
+              teamColor: teamColor,
+              isRedTeam: isRed,
+              isRunning: runningProvider.isRunning,
+            ),
+          ),
+
+          // Minimal overlay for readability
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppTheme.backgroundStart.withOpacity(0.6),
+                      Colors.transparent,
+                      AppTheme.backgroundStart.withOpacity(0.8),
+                    ],
+                    stops: const [0.0, 0.4, 1.0],
                   ),
                 ),
               ),
             ),
+          ),
 
-            // Main Content
-            SafeArea(
-              child: Column(
-                children: [
-                  _buildTopBar(runningProvider, teamColor),
-                  const SizedBox(height: 16),
-                  _buildSecondaryStats(runningProvider, teamColor),
-                  const SizedBox(height: 12),
-                  _buildMainStats(runningProvider, teamColor),
-                  const Spacer(),
-                  _buildControls(runningProvider, teamColor),
-                  const SizedBox(height: 40),
-                ],
+          // Main Content
+          SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(runningProvider, teamColor),
+                const SizedBox(height: 16),
+                _buildSecondaryStats(runningProvider, teamColor),
+                const SizedBox(height: 12),
+                _buildMainStats(runningProvider, teamColor),
+                const Spacer(),
+                _buildControls(runningProvider, teamColor),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLandscapeLayout(
+    RunProvider runningProvider,
+    Color teamColor,
+    bool isRed,
+  ) {
+    return Row(
+      children: [
+        // Map on the left (takes most space)
+        Expanded(
+          flex: 3,
+          child: RouteMap(
+            key: const ValueKey('running_screen_map'),
+            route: runningProvider.routePoints,
+            routeVersion: runningProvider.routeVersion,
+            showLiveLocation: true,
+            aspectRatio: 1.0,
+            interactive: true,
+            showHexGrid: true,
+            navigationMode: true,
+            teamColor: teamColor,
+            isRedTeam: isRed,
+            isRunning: runningProvider.isRunning,
+          ),
+        ),
+
+        // Stats & Controls on the right
+        Expanded(
+          flex: 2,
+          child: Container(
+            color: AppTheme.backgroundStart,
+            child: SafeArea(
+              left: false,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildTopBar(runningProvider, teamColor),
+                      const SizedBox(height: 10),
+                      // Scale down main stats to fit
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: _buildMainStats(runningProvider, teamColor),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildSecondaryStats(runningProvider, teamColor),
+                      const SizedBox(height: 20),
+                      _buildControls(runningProvider, teamColor),
+                    ],
+                  ),
+                ),
               ),
             ),
-
-            // Error Message
-            if (_errorMessage != null)
-              Positioned(
-                top: 100,
-                left: 24,
-                right: 24,
-                child: _buildErrorBanner(),
-              ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 

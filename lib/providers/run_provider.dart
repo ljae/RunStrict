@@ -8,6 +8,7 @@ import '../services/location_service.dart';
 import '../services/run_tracker.dart';
 import '../services/storage_service.dart';
 import '../services/points_service.dart';
+import '../services/supabase_service.dart';
 import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
@@ -29,6 +30,7 @@ class RunProvider with ChangeNotifier {
   final LocationService _locationService;
   final RunTracker _runTracker;
   final StorageService _storageService;
+  final SupabaseService _supabaseService;
   PointsService? _pointsService;
 
   RunSession? _activeRun;
@@ -37,6 +39,9 @@ class RunProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   StreamSubscription<LocationPoint>? _locationSubscription;
+
+  /// Yesterday's crew count for multiplier (fetched on run start)
+  int _yesterdayCrewCount = 1;
 
   // Event stream for transient UI feedback
   final _eventController = StreamController<RunEvent>.broadcast();
@@ -49,10 +54,12 @@ class RunProvider with ChangeNotifier {
     required LocationService locationService,
     required RunTracker runTracker,
     required StorageService storageService,
+    SupabaseService? supabaseService,
     PointsService? pointsService,
   }) : _locationService = locationService,
        _runTracker = runTracker,
        _storageService = storageService,
+       _supabaseService = supabaseService ?? SupabaseService(),
        _pointsService = pointsService;
 
   /// Update the points service reference (for ProxyProvider)
@@ -148,8 +155,23 @@ class RunProvider with ChangeNotifier {
     }
   }
 
+  /// Set the crew multiplier for the next run.
+  ///
+  /// Call this before starting a run to apply the crew bonus.
+  /// The multiplier is the number of crew members who ran yesterday.
+  void setCrewMultiplier(int multiplier) {
+    _yesterdayCrewCount = multiplier > 0 ? multiplier : 1;
+    debugPrint('RunProvider: Crew multiplier set to $_yesterdayCrewCount');
+  }
+
+  /// Get the current crew multiplier
+  int get crewMultiplier => _yesterdayCrewCount;
+
   /// Start a new run
-  Future<void> startRun({required Team team}) async {
+  ///
+  /// [team] - The team the runner belongs to
+  /// [crewId] - Optional crew ID for multiplier lookup (if not already set)
+  Future<void> startRun({required Team team, String? crewId}) async {
     if (isRunning) {
       throw StateError('A run is already in progress');
     }
@@ -158,6 +180,22 @@ class RunProvider with ChangeNotifier {
     _setError(null);
 
     try {
+      // Fetch crew multiplier if crewId provided and not already set
+      if (crewId != null && _yesterdayCrewCount == 1) {
+        try {
+          final multiplier = await _supabaseService.getYesterdayCrewCount(
+            crewId,
+          );
+          _yesterdayCrewCount = multiplier > 0 ? multiplier : 1;
+          debugPrint(
+            'RunProvider: Fetched crew multiplier: $_yesterdayCrewCount',
+          );
+        } catch (e) {
+          debugPrint('RunProvider: Failed to fetch multiplier, using 1 - $e');
+          _yesterdayCrewCount = 1;
+        }
+      }
+
       // Request permissions and start location tracking
       await _locationService.startTracking();
 
@@ -281,8 +319,29 @@ class RunProvider with ChangeNotifier {
           'hexIds for sync: ${capturedHexIds.length}',
         );
 
-        // Save to database
+        // Save to local database
         await _storageService.saveRun(completedRun);
+
+        // === THE FINAL SYNC ===
+        // Upload run summary with hex captures to server
+        if (capturedHexIds.isNotEmpty) {
+          try {
+            final runSummary = completedRun.toSummary(
+              yesterdayCrewCount: _yesterdayCrewCount,
+            );
+            final syncResult = await _supabaseService.finalizeRun(runSummary);
+            debugPrint(
+              'RunProvider: Final Sync completed - '
+              'flips=${syncResult['flips']}, '
+              'points=${syncResult['points_earned']}, '
+              'multiplier=${syncResult['multiplier']}',
+            );
+          } catch (e) {
+            // Log but don't fail - local data is already saved
+            debugPrint('RunProvider: Final Sync failed - $e');
+            // TODO: Queue for retry on next app launch
+          }
+        }
 
         // Refresh history and stats
         await loadRunHistory();
@@ -295,7 +354,7 @@ class RunProvider with ChangeNotifier {
         _routeVersion = 0;
         notifyListeners();
 
-        // Return captured hex IDs for "The Final Sync" batch upload
+        // Return captured hex IDs for caller reference
         return capturedHexIds;
       }
 

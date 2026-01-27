@@ -39,20 +39,28 @@ class RunSummary {
 
   Duration get duration => Duration(seconds: durationSeconds);
 
+  /// Derived start time (for server sync)
+  DateTime get startTime =>
+      endTime.subtract(Duration(seconds: durationSeconds));
+
   /// Calculate flip points (for display only - server validates)
   int get flipPoints => hexesColored * yesterdayCrewCount;
 
   /// For local SQLite storage (milliseconds epoch)
+  /// Note: Must match LocalStorage table schema columns
   Map<String, dynamic> toMap() => {
     'id': id,
+    'startTime': endTime
+        .subtract(Duration(seconds: durationSeconds))
+        .millisecondsSinceEpoch,
     'endTime': endTime.millisecondsSinceEpoch,
     'distanceKm': distanceKm,
     'durationSeconds': durationSeconds,
-    'avgPaceMinPerKm': avgPaceMinPerKm,
+    'avgPaceSecPerKm':
+        avgPaceMinPerKm * 60, // Convert min/km to sec/km for storage
     'hexesColored': hexesColored,
     'teamAtRun': teamAtRun.name,
-    'hexPath': hexPath.join(','),
-    'yesterdayCrewCount': yesterdayCrewCount,
+    'isPurpleRunner': teamAtRun == Team.purple ? 1 : 0,
   };
 
   factory RunSummary.fromMap(Map<String, dynamic> map) => RunSummary(
@@ -60,16 +68,13 @@ class RunSummary {
     endTime: DateTime.fromMillisecondsSinceEpoch(map['endTime'] as int),
     distanceKm: (map['distanceKm'] as num).toDouble(),
     durationSeconds: (map['durationSeconds'] as num).toInt(),
-    avgPaceMinPerKm: (map['avgPaceMinPerKm'] as num).toDouble(),
-    hexesColored: (map['hexesColored'] as num).toInt(),
+    avgPaceMinPerKm:
+        (map['avgPaceSecPerKm'] as num).toDouble() /
+        60, // Convert sec/km back to min/km
+    hexesColored: (map['hexesColored'] as num?)?.toInt() ?? 0,
     teamAtRun: Team.values.byName(map['teamAtRun'] as String),
-    hexPath:
-        (map['hexPath'] as String?)
-            ?.split(',')
-            .where((s) => s.isNotEmpty)
-            .toList() ??
-        [],
-    yesterdayCrewCount: (map['yesterdayCrewCount'] as num?)?.toInt() ?? 1,
+    hexPath: const [], // Not stored in SQLite (only for server sync)
+    yesterdayCrewCount: 1, // Not stored in SQLite (only for server sync)
   );
 
   /// From Supabase row (snake_case)

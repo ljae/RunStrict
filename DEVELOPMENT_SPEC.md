@@ -183,20 +183,22 @@ A location-based running game that gamifies territory control through hexagonal 
 
 | Rule | Value |
 |------|-------|
-| Pace Threshold | < 8:00 min/km **moving average (last 10 sec)** |
+| Pace Threshold | < 8:00 min/km **moving average (last 20 sec)** |
 | Speed Cap | < 25 km/h (anti-spoofing) |
 | GPS Accuracy | Must be ≤ 50m to be valid |
+| GPS Polling | Fixed 0.5 Hz (every 2 seconds) |
 | Trigger | GPS coordinate enters hex boundary (immediate) |
 | Color Logic | Hex displays color of LAST runner only |
 | Stored Data | `lastRunnerTeam` + `last_flipped_at` (no runner ID) |
 
 **Rules:**
 - A hex changes color when a valid runner's GPS enters the hex boundary.
-- "Valid runner" = **moving average pace (last 10 sec)** < 8:00 min/km AND speed < 25 km/h AND GPS accuracy ≤ 50m.
-- **Moving Average Pace (10 sec)** = average pace over the last 10 seconds of movement.
+- "Valid runner" = **moving average pace (last 20 sec)** < 8:00 min/km AND speed < 25 km/h AND GPS accuracy ≤ 50m.
+- **Moving Average Pace (20 sec)** = average pace over the last 20 seconds of movement.
+  - At 0.5Hz GPS polling, provides ~10 samples for stable pace calculation.
   - Smooths out GPS noise and momentary speed fluctuations.
   - Prevents false captures from GPS jumps.
-  - This means a runner can walk for 10 minutes, then jog for 10+ seconds to capture hexes.
+  - This means a runner can walk for 10 minutes, then jog for 20+ seconds to capture hexes.
 - Purple runners paint hexes purple (regardless of original team before defection).
 - No ownership mechanic — only "who ran here last".
 - Accelerometer validation is required even in MVP (anti-spoofing).
@@ -1605,6 +1607,11 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 
 | Date | Change |
 |------|--------|
+| 2026-01-27 | **Session 5 - GPS Polling Optimization**: |
+| | — Fixed 0.5Hz GPS polling (disabled adaptive polling for battery + lag prevention) |
+| | — Moving average window: 10s → 20s (~10 samples at 0.5Hz for stable pace calculation) |
+| | — Min time between points: 100ms → 1500ms (allows 0.5Hz with margin) |
+| | — Pace validation now uses 20-second moving average instead of 10-second |
 | 2026-01-26 | **Session 4 - Data Architecture**: |
 | | — Daily flip limit REMOVED — same hex can be flipped multiple times per day |
 | | — Table separation: `runs` (heavy, seasonal) vs `run_history` (light, permanent) |
@@ -1676,21 +1683,21 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 
 ### 9.2 GPS Polling & Battery Optimization
 
-> **Strategy**: Battery efficiency is prioritized over data precision. Smoothing algorithms compensate for lower sample rates.
+> **Strategy**: Battery efficiency is prioritized over data precision. Fixed 0.5Hz polling with 20-second moving average window compensates for lower sample rates.
 
 | Setting | Options | Selected |
 |---------|---------|----------|
-| **Polling Strategy** | ☑ Adaptive Polling | ✅ |
-| | ☐ Fixed High-Frequency (constant 1Hz) | |
-| **Base Sample Rate** | ☐ 1 Hz (1 sample/second) | |
-| | ☑ 0.5 Hz (1 sample/2 seconds) — battery saving | ✅ |
-| **Stationary Detection** | ☑ Reduce to 0.1 Hz when zero cadence detected | ✅ |
-| | ☐ Maintain base rate always | |
+| **Polling Strategy** | ☐ Adaptive Polling (variable rate based on speed) | |
+| | ☑ Fixed 0.5 Hz (every 2 seconds) — battery saving, consistent behavior | ✅ |
+| **Moving Average Window** | ☐ 10 seconds (~5 samples at 0.5Hz — unstable) | |
+| | ☑ 20 seconds (~10 samples at 0.5Hz — stable) | ✅ |
+| **Min Time Between Points** | ☐ 100ms (allows up to 10Hz) | |
+| | ☑ 1500ms (allows 0.5Hz with margin) | ✅ |
 | **Distance Filter (iOS)** | ☑ 5 meters — Required for battery optimization | ✅ |
 | | ☐ 10 meters | |
 | | ☐ `kCLDistanceFilterNone` (all updates — high battery) | |
-| **Batch Buffer Size** | ☐ 10 points (write every ~10 seconds) | |
-| | ☑ 20 points (write every ~20 seconds) — fewer I/O ops | ✅ |
+| **Batch Buffer Size** | ☐ 10 points (write every ~20 seconds at 0.5Hz) | |
+| | ☑ 20 points (write every ~40 seconds at 0.5Hz) — fewer I/O ops | ✅ |
 | | ☐ 1 point (immediate write — high I/O) | |
 
 ### 9.3 Signal Processing & Noise Reduction
@@ -2022,6 +2029,37 @@ For **RunStrict** optimal balance of battery, accuracy, and cost:
 ---
 
 ## Changelog
+
+### 2026-01-27 (Session 7)
+
+**Fixed: Hex Map Flashing on Filter Change**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | GeoJsonSource + FillLayer pattern | **버그수정/UX** | Migrated from PolygonAnnotationManager to GeoJsonSource for atomic hex updates |
+| 2 | Data-driven styling via setStyleLayerProperty | **기술/Mapbox** | Bypasses FillLayer constructor's strict typing limitation for expression support |
+| 3 | Landscape overflow fixes | **버그수정/UI** | Fixed overflow errors on landscape orientation across all screens |
+
+**Technical Details:**
+- `PolygonAnnotationManager.deleteAll()` + `createMulti()` caused visible flash
+- Solution: Use `GeoJsonSource` with `FillLayer` for data-driven styling
+- `mapbox_maps_flutter` FillLayer constructor expects `int?` for fillColor, not expression `List`
+- Workaround: Create layer with placeholder values, then apply expressions via `setStyleLayerProperty()`
+
+**Files Changed:**
+- `lib/widgets/hexagon_map.dart` — Complete rewrite of hex rendering logic
+- `lib/screens/running_screen.dart` — Landscape layout (OrientationBuilder)
+- `lib/screens/home_screen.dart` — Reduced sizes in landscape
+- `lib/screens/leaderboard_screen.dart` — Responsive podium heights
+- `lib/screens/crew_screen.dart` — Responsive member grid
+- `lib/screens/profile_screen.dart` — Landscape adjustments
+- `lib/screens/run_history_screen.dart` — Side-by-side layout in landscape
+
+**Document Updates:**
+- AGENTS.md: Added Mapbox Patterns section with GeoJsonSource + FillLayer documentation
+- CLAUDE.md: Added Mapbox Patterns section with GeoJsonSource + FillLayer documentation
+
+---
 
 ### 2026-01-26 (Session 6)
 

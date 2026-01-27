@@ -72,6 +72,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
 
         final teamColor = _teamColor(user.team);
+        final isLandscape =
+            MediaQuery.of(context).orientation == Orientation.landscape;
 
         return Scaffold(
           backgroundColor: AppTheme.backgroundStart,
@@ -85,43 +87,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(AppTheme.spacingM),
-            child: Column(
-              children: [
-                _AvatarSection(avatar: user.avatar, teamColor: teamColor),
-                const SizedBox(height: AppTheme.spacingL),
-                _TeamBadge(
-                  team: user.team,
-                  teamColor: teamColor,
-                  teamName: _teamName(user.team),
-                ),
-                const SizedBox(height: AppTheme.spacingL),
-                _ManifestoSection(
-                  manifesto: user.manifesto,
-                  isEditing: _isEditingManifesto,
-                  controller: _manifestoController,
-                  onToggleEdit: () {
-                    setState(() {
-                      _isEditingManifesto = !_isEditingManifesto;
-                    });
-                  },
-                  onSave: () {
-                    final text = _manifestoController.text.trim();
-                    if (text.length <= 12) {
-                      appState.setUser(user.copyWith(manifesto: text));
-                      setState(() {
-                        _isEditingManifesto = false;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: AppTheme.spacingXL),
-                _SeasonStatsSection(
-                  seasonPoints: user.seasonPoints,
-                  seasonService: _seasonService,
-                  teamColor: teamColor,
-                ),
-              ],
-            ),
+            child: isLandscape
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _AvatarSection(
+                              avatar: user.avatar,
+                              teamColor: teamColor,
+                            ),
+                            const SizedBox(height: AppTheme.spacingL),
+                            _TeamBadge(
+                              team: user.team,
+                              teamColor: teamColor,
+                              teamName: _teamName(user.team),
+                            ),
+                            const SizedBox(height: AppTheme.spacingL),
+                            _ManifestoSection(
+                              manifesto: user.manifesto,
+                              isEditing: _isEditingManifesto,
+                              controller: _manifestoController,
+                              onToggleEdit: () {
+                                setState(() {
+                                  _isEditingManifesto = !_isEditingManifesto;
+                                });
+                              },
+                              onSave: () {
+                                final text = _manifestoController.text.trim();
+                                if (text.length <= 12) {
+                                  appState.setUser(
+                                    user.copyWith(manifesto: text),
+                                  );
+                                  setState(() {
+                                    _isEditingManifesto = false;
+                                  });
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppTheme.spacingL),
+                      Expanded(
+                        child: _SeasonStatsSection(
+                          seasonPoints: user.seasonPoints,
+                          seasonService: _seasonService,
+                          teamColor: teamColor,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      _AvatarSection(avatar: user.avatar, teamColor: teamColor),
+                      const SizedBox(height: AppTheme.spacingL),
+                      _TeamBadge(
+                        team: user.team,
+                        teamColor: teamColor,
+                        teamName: _teamName(user.team),
+                      ),
+                      const SizedBox(height: AppTheme.spacingL),
+                      _ManifestoSection(
+                        manifesto: user.manifesto,
+                        isEditing: _isEditingManifesto,
+                        controller: _manifestoController,
+                        onToggleEdit: () {
+                          setState(() {
+                            _isEditingManifesto = !_isEditingManifesto;
+                          });
+                        },
+                        onSave: () {
+                          final text = _manifestoController.text.trim();
+                          if (text.length <= 12) {
+                            appState.setUser(user.copyWith(manifesto: text));
+                            setState(() {
+                              _isEditingManifesto = false;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: AppTheme.spacingXL),
+                      _SeasonStatsSection(
+                        seasonPoints: user.seasonPoints,
+                        seasonService: _seasonService,
+                        teamColor: teamColor,
+                      ),
+                    ],
+                  ),
           ),
         );
       },

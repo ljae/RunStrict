@@ -325,6 +325,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final currentUserId = _getCurrentUserId(context);
     final isUserVisible = _isCurrentUserVisible(context, runners);
     final currentUserData = _getCurrentUserData(context);
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Container(
       color: AppTheme.backgroundStart,
@@ -350,7 +352,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                               ),
                               if (runners.isNotEmpty)
                                 SliverToBoxAdapter(
-                                  child: _buildPodium(runners),
+                                  child: _buildPodium(runners, isLandscape),
                                 ),
                               if (runners.length > 3)
                                 SliverPadding(
@@ -432,7 +434,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               ),
             ],
           ),
-          // Optional: Add an icon or action here if needed
         ],
       ),
     );
@@ -540,7 +541,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   Widget _buildScopeDropdown() {
     return GestureDetector(
       onTap: () {
-        // Cycle through scopes for simplicity in this UI
         setState(() {
           if (_scopeFilter == GeographicScope.all) {
             _scopeFilter = GeographicScope.city;
@@ -584,39 +584,48 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // PODIUM (Top 3)
   // ---------------------------------------------------------------------------
 
-  Widget _buildPodium(List<LeaderboardRunner> runners) {
+  Widget _buildPodium(List<LeaderboardRunner> runners, bool isLandscape) {
     return SizedBox(
-      height: 280,
+      height: isLandscape ? 200 : 280,
       child: Stack(
         alignment: Alignment.bottomCenter,
         children: [
           // 2nd Place (Left)
           if (runners.length > 1)
             Positioned(
-              left: 20,
+              left: isLandscape ? 40 : 20,
               bottom: 0,
-              child: _buildPodiumCard(runners[1], 2),
+              child: _buildPodiumCard(runners[1], 2, isLandscape),
             ),
 
           // 3rd Place (Right)
           if (runners.length > 2)
             Positioned(
-              right: 20,
+              right: isLandscape ? 40 : 20,
               bottom: 0,
-              child: _buildPodiumCard(runners[2], 3),
+              child: _buildPodiumCard(runners[2], 3, isLandscape),
             ),
 
           // 1st Place (Center - Z-index highest)
-          Positioned(bottom: 20, child: _buildPodiumCard(runners[0], 1)),
+          Positioned(
+            bottom: isLandscape ? 10 : 20,
+            child: _buildPodiumCard(runners[0], 1, isLandscape),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildPodiumCard(LeaderboardRunner runner, int rank) {
+  Widget _buildPodiumCard(
+    LeaderboardRunner runner,
+    int rank,
+    bool isLandscape,
+  ) {
     final isFirst = rank == 1;
-    final width = isFirst ? 140.0 : 110.0;
-    final height = isFirst ? 240.0 : 200.0; // Increased to prevent overflow
+    final scale = isLandscape ? 0.7 : 1.0;
+    final width = (isFirst ? 140.0 : 110.0) * scale;
+    final height =
+        (isFirst ? 240.0 : 200.0) * scale; // Reduced to prevent overflow
     final teamColor = runner.team.color;
 
     return ScaleTransition(
@@ -629,16 +638,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(24 * scale),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             width: width,
             height: height,
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: EdgeInsets.symmetric(vertical: 8 * scale),
             decoration: BoxDecoration(
               color: AppTheme.surfaceColor.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(24 * scale),
               border: Border.all(
                 color: isFirst
                     ? teamColor.withValues(alpha: 0.3)
@@ -659,62 +668,65 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   ),
               ],
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Rank Number
-                Text(
-                  '$rank',
-                  style: GoogleFonts.bebasNeue(
-                    fontSize: isFirst ? 64 : 48,
-                    height: 1.0,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    shadows: [
-                      Shadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                // Avatar
-                Text(
-                  runner.avatar,
-                  style: TextStyle(fontSize: isFirst ? 48 : 36),
-                ),
-
-                const SizedBox(height: 4),
-
-                // Name
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    runner.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Rank Number
+                  Text(
+                    '$rank',
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: isFirst ? 64 : 48,
+                      height: 1.0,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                   ),
-                ),
 
-                // Points
-                Text(
-                  '${runner.flipPoints}',
-                  style: GoogleFonts.sora(
-                    fontSize: isFirst ? 28 : 20,
-                    fontWeight: FontWeight.w700,
-                    color: teamColor,
+                  const SizedBox(height: 4),
+
+                  // Avatar
+                  Text(
+                    runner.avatar,
+                    style: TextStyle(fontSize: isFirst ? 48 : 36),
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 4),
+
+                  // Name
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      runner.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.sora(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+
+                  // Points
+                  Text(
+                    '${runner.flipPoints}',
+                    style: GoogleFonts.sora(
+                      fontSize: isFirst ? 28 : 20,
+                      fontWeight: FontWeight.w700,
+                      color: teamColor,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

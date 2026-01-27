@@ -242,10 +242,24 @@ class _TeamSelectionScreenState extends State<TeamSelectionScreen>
     );
   }
 
-  void _handleTeamSelection(BuildContext context, Team team) {
+  Future<void> _handleTeamSelection(BuildContext context, Team team) async {
     final appState = context.read<AppStateProvider>();
-    appState.selectTeam(team, 'Runner');
-    Navigator.of(context).pushReplacementNamed('/home');
+
+    try {
+      await appState.selectTeam(team, 'Runner');
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create account: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

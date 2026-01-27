@@ -123,7 +123,7 @@ lib/
 │   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
 │   └── lru_cache.dart           # LRU cache for hex data
 └── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay
+    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer pattern)
     ├── route_map.dart           # Route display + navigation mode
     ├── smooth_camera_controller.dart # 60fps camera interpolation
     ├── glowing_location_marker.dart  # Team-colored pulsing marker
@@ -369,9 +369,11 @@ bool setRunnerColor(Team runnerTeam, DateTime runEndTime) {
 ### Pace Validation
 ```dart
 // Must be running at valid pace to capture hex
-// Uses MOVING AVERAGE pace (last 10 sec) at hex entry - smooths GPS noise
+// Uses MOVING AVERAGE pace (last 20 sec) at hex entry - smooths GPS noise
+// 20-sec window provides ~10 samples at 0.5Hz GPS polling for stable calculation
 bool get canCaptureHex => movingAvgPaceMinPerKm < 8.0;
 // Also: speed < 25 km/h AND GPS accuracy ≤ 50m
+// GPS Polling: Fixed 0.5 Hz (every 2 seconds) for battery optimization
 ```
 
 ---
@@ -467,3 +469,66 @@ void main() {
 | `supabase_flutter` | Backend (Auth + DB + Storage) |
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |
+
+---
+
+## Mapbox Patterns
+
+### Hex Grid Rendering (GeoJsonSource + FillLayer)
+
+The `hexagon_map.dart` widget uses `GeoJsonSource` + `FillLayer` for atomic hex updates without visual flash.
+
+**Problem**: `PolygonAnnotationManager.deleteAll()` + `createMulti()` causes visible flash when updating hexes.
+
+**Solution**: Use `GeoJsonSource` with `FillLayer` for data-driven styling:
+
+```dart
+// Step 1: Create GeoJsonSource
+await mapboxMap.style.addSource(
+  GeoJsonSource(id: _hexSourceId, data: '{"type":"FeatureCollection","features":[]}'),
+);
+
+// Step 2: Create FillLayer with placeholder values
+// NOTE: mapbox_maps_flutter FillLayer has strict typing - fillColor expects int?, not List
+await mapboxMap.style.addLayer(
+  FillLayer(
+    id: _hexLayerId,
+    sourceId: _hexSourceId,
+    fillColor: Colors.grey.toARGB32(),  // placeholder
+    fillOpacity: 0.3,
+    fillOutlineColor: Colors.grey.toARGB32(),
+    fillAntialias: true,
+  ),
+);
+
+// Step 3: Apply data-driven expressions via setStyleLayerProperty
+// This bypasses the strict typing limitation
+await mapboxMap.style.setStyleLayerProperty(
+  _hexLayerId, 'fill-color', ['to-color', ['get', 'fill-color']],
+);
+await mapboxMap.style.setStyleLayerProperty(
+  _hexLayerId, 'fill-opacity', ['get', 'fill-opacity'],
+);
+await mapboxMap.style.setStyleLayerProperty(
+  _hexLayerId, 'fill-outline-color', ['to-color', ['get', 'fill-outline-color']],
+);
+```
+
+**GeoJSON Feature Properties**: Each hex feature includes styling properties:
+```json
+{
+  "type": "Feature",
+  "geometry": { "type": "Polygon", "coordinates": [...] },
+  "properties": {
+    "fill-color": "#FF003C",
+    "fill-opacity": 0.3,
+    "fill-outline-color": "#FF003C"
+  }
+}
+```
+
+**Why This Pattern**:
+- Atomic updates: Single `updateGeoJSONSourceFeatures()` call updates all hexes
+- No flash: Source data swap is instantaneous
+- Data-driven: Per-feature colors read from GeoJSON properties
+- Performance: GPU-accelerated fill rendering

@@ -178,6 +178,9 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundStart,
       body: Consumer<RunProvider>(
@@ -200,9 +203,12 @@ class _MapScreenState extends State<MapScreen> {
               // Stats Overlay for CITY and ALL views only (not ZONE)
               if (!_showUserLocation && _hexStats != null)
                 Positioned(
-                  top: MediaQuery.of(context).padding.top + 76,
+                  top: isLandscape
+                      ? 16
+                      : MediaQuery.of(context).padding.top + 76,
                   left: 16,
-                  right: 16,
+                  right: isLandscape ? null : 16,
+                  width: isLandscape ? 350 : null,
                   child: _TeamStatsOverlay(
                     stats: _hexStats!,
                     scope: _selectedScope,
@@ -212,7 +218,9 @@ class _MapScreenState extends State<MapScreen> {
               // Location FAB (upper right, below AppBar) - only in ZONE view
               if (_showUserLocation)
                 Positioned(
-                  top: MediaQuery.of(context).padding.top + 76,
+                  top: isLandscape
+                      ? 16
+                      : MediaQuery.of(context).padding.top + 76,
                   right: 16,
                   child: FloatingActionButton(
                     mini: true,
@@ -231,21 +239,29 @@ class _MapScreenState extends State<MapScreen> {
                 bottom: 12,
                 left: 16,
                 right: 16,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // CTA card (only in ZONE view)
-                    if (_showUserLocation) ...[
-                      const _CallToActionCard(),
-                      const SizedBox(height: 10),
-                    ],
-                    // Zoom level selector (ZONE / CITY / ALL)
-                    _ZoomLevelSelector(
-                      selectedIndex: _selectedScope.scopeIndex,
-                      onChanged: _onZoomChanged,
-                    ),
-                  ],
-                ),
+                child: isLandscape
+                    ? Align(
+                        alignment: Alignment.bottomCenter,
+                        child: _ZoomLevelSelector(
+                          selectedIndex: _selectedScope.scopeIndex,
+                          onChanged: _onZoomChanged,
+                        ),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // CTA card (only in ZONE view)
+                          if (_showUserLocation) ...[
+                            const _CallToActionCard(),
+                            const SizedBox(height: 10),
+                          ],
+                          // Zoom level selector (ZONE / CITY / ALL)
+                          _ZoomLevelSelector(
+                            selectedIndex: _selectedScope.scopeIndex,
+                            onChanged: _onZoomChanged,
+                          ),
+                        ],
+                      ),
               ),
             ],
           );
