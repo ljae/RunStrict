@@ -38,6 +38,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082803ffff',
       zoneHexId: '88283082807ffff',
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 5.25,
+      stabilityScore: 92,
     ),
     LeaderboardRunner(
       id: 'user_2',
@@ -50,6 +52,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082813ffff',
       zoneHexId: '88283082817ffff',
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 5.45,
+      stabilityScore: 88,
     ),
     LeaderboardRunner(
       id: 'user_3',
@@ -62,6 +66,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082823ffff',
       zoneHexId: '88283082827ffff',
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 5.10,
+      stabilityScore: 85,
     ),
     LeaderboardRunner(
       id: 'user_4',
@@ -74,6 +80,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082833ffff',
       zoneHexId: '88283082837ffff',
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 6.00,
+      stabilityScore: 78,
     ),
     LeaderboardRunner(
       id: 'user_5',
@@ -86,6 +94,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082843ffff',
       zoneHexId: '88283082847ffff',
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 4.80,
+      stabilityScore: 45,
     ),
     LeaderboardRunner(
       id: 'user_6',
@@ -98,6 +108,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082853ffff',
       zoneHexId: '88283082857ffff',
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 5.55,
+      stabilityScore: 82,
     ),
     LeaderboardRunner(
       id: 'user_7',
@@ -110,6 +122,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082863ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 5.30,
+      stabilityScore: 75,
     ),
     LeaderboardRunner(
       id: 'user_8',
@@ -122,6 +136,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082873ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 4.50,
+      stabilityScore: 38,
     ),
     LeaderboardRunner(
       id: 'user_9',
@@ -134,6 +150,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082883ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 5.80,
+      stabilityScore: 70,
     ),
     LeaderboardRunner(
       id: 'user_10',
@@ -146,6 +164,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       lastHexId: '89283082893ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
+      avgPaceMinPerKm: 6.20,
+      stabilityScore: 65,
     ),
     LeaderboardRunner(
       id: 'user_11',
@@ -155,6 +175,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 105.0,
       avatar: '🦅',
       crewName: 'Phoenix Squad',
+      avgPaceMinPerKm: 5.40,
+      stabilityScore: 80,
     ),
     LeaderboardRunner(
       id: 'user_12',
@@ -164,6 +186,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 98.6,
       avatar: '🐙',
       crewName: 'Tidal Force',
+      avgPaceMinPerKm: 5.90,
+      stabilityScore: 72,
     ),
     LeaderboardRunner(
       id: 'user_13',
@@ -173,6 +197,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 32.1,
       avatar: '👁️',
       crewName: 'Shadow Protocol',
+      avgPaceMinPerKm: 4.30,
+      stabilityScore: 28,
     ),
     LeaderboardRunner(
       id: 'user_14',
@@ -182,6 +208,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 95.2,
       avatar: '✨',
       crewName: 'Blaze Squad',
+      avgPaceMinPerKm: 5.70,
+      stabilityScore: 68,
     ),
     LeaderboardRunner(
       id: 'user_15',
@@ -191,6 +219,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       totalDistanceKm: 92.1,
       avatar: '🌊',
       crewName: 'Thunder Crew',
+      avgPaceMinPerKm: 6.10,
+      stabilityScore: 60,
     ),
   ];
 
@@ -210,9 +240,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               name: e.name,
               team: e.team,
               flipPoints: e.seasonPoints,
-              totalDistanceKm: 0,
+              totalDistanceKm: e.totalDistanceKm,
               avatar: e.avatar,
               crewName: null,
+              avgPaceMinPerKm: e.avgPaceMinPerKm,
+              stabilityScore: e.stabilityScore,
             ),
           )
           .toList();
@@ -289,8 +321,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       name: entry.name,
       team: entry.team,
       flipPoints: entry.seasonPoints,
-      totalDistanceKm: 0,
+      totalDistanceKm: entry.totalDistanceKm,
       avatar: entry.avatar,
+      avgPaceMinPerKm: entry.avgPaceMinPerKm,
+      stabilityScore: entry.stabilityScore,
     );
   }
 
@@ -725,6 +759,44 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       color: teamColor,
                     ),
                   ),
+
+                  const SizedBox(height: 4),
+
+                  // Secondary stats row: distance + stability
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Distance
+                      Text(
+                        '${runner.totalDistanceKm.toStringAsFixed(0)}km',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white54,
+                        ),
+                      ),
+                      if (runner.stabilityScore != null) ...[
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          width: 2,
+                          height: 2,
+                          decoration: const BoxDecoration(
+                            color: Colors.white24,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        // Stability badge
+                        Text(
+                          '${runner.stabilityScore}%',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: _getStabilityColor(runner.stabilityScore!),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -857,6 +929,45 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     ),
                   ),
 
+                  // Distance (matching podium format)
+                  if (runner.totalDistanceKm > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        '${runner.totalDistanceKm.toStringAsFixed(0)}km',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white54,
+                        ),
+                      ),
+                    ),
+
+                  // Stability badge (if available)
+                  if (runner.stabilityScore != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStabilityColor(
+                          runner.stabilityScore!,
+                        ).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '${runner.stabilityScore}%',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _getStabilityColor(runner.stabilityScore!),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+
                   // Points
                   Text(
                     '${runner.flipPoints}',
@@ -956,6 +1067,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
+  /// Get color for stability score badge
+  /// Green = high stability (>80), Yellow = medium (50-80), Red = low (<50)
+  Color _getStabilityColor(int score) {
+    if (score >= 80) return const Color(0xFF22C55E); // Green
+    if (score >= 50) return const Color(0xFFF59E0B); // Amber
+    return const Color(0xFFEF4444); // Red
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -996,6 +1115,12 @@ class LeaderboardRunner {
   final String? zoneHexId;
   final String? cityHexId;
 
+  /// Average pace in min/km (null if no runs)
+  final double? avgPaceMinPerKm;
+
+  /// Stability score (0-100, higher = more consistent pace)
+  final int? stabilityScore;
+
   const LeaderboardRunner({
     required this.id,
     required this.name,
@@ -1007,5 +1132,20 @@ class LeaderboardRunner {
     this.lastHexId,
     this.zoneHexId,
     this.cityHexId,
+    this.avgPaceMinPerKm,
+    this.stabilityScore,
   });
+
+  /// Format pace as "X'XX" (e.g., "5'30")
+  String get formattedPace {
+    if (avgPaceMinPerKm == null ||
+        avgPaceMinPerKm!.isInfinite ||
+        avgPaceMinPerKm!.isNaN ||
+        avgPaceMinPerKm == 0) {
+      return "-'--";
+    }
+    final min = avgPaceMinPerKm!.floor();
+    final sec = ((avgPaceMinPerKm! - min) * 60).round();
+    return "$min'${sec.toString().padLeft(2, '0')}";
+  }
 }
