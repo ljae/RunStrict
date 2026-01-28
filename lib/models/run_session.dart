@@ -18,6 +18,10 @@ class RunSession {
   String? currentHexId;
   double distanceInCurrentHex;
 
+  /// Coefficient of Variation (null for runs < 1km)
+  /// Measures pace consistency: lower = more stable
+  final double? cv;
+
   RunSession({
     required this.id,
     required this.startTime,
@@ -30,6 +34,7 @@ class RunSession {
     List<String>? hexesPassed,
     this.currentHexId,
     this.distanceInCurrentHex = 0,
+    this.cv,
   }) : route = route ?? [],
        hexesPassed = hexesPassed ?? [];
 
@@ -48,6 +53,13 @@ class RunSession {
   }
 
   bool get canCaptureHex => paceMinPerKm > 0 && paceMinPerKm < 8.0;
+
+  /// Stability score (100 - CV, clamped 0-100)
+  /// Higher = more consistent pace
+  int? get stabilityScore {
+    if (cv == null) return null;
+    return (100 - cv!).round().clamp(0, 100);
+  }
 
   /// Convert to RunSummary for "The Final Sync" upload
   ///
@@ -99,6 +111,7 @@ class RunSession {
     int? hexesColored,
     String? currentHexId,
     double? distanceInCurrentHex,
+    double? cv,
   }) {
     return RunSession(
       id: id,
@@ -112,6 +125,7 @@ class RunSession {
       hexesPassed: hexesPassed,
       currentHexId: currentHexId ?? this.currentHexId,
       distanceInCurrentHex: distanceInCurrentHex ?? this.distanceInCurrentHex,
+      cv: cv ?? this.cv,
     );
   }
 

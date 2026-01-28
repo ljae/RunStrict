@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import '../models/run_session.dart';
 import '../models/run_summary.dart';
 import '../models/location_point.dart';
+import '../models/lap_model.dart';
 import '../services/storage_service.dart';
 
 /// SQLite implementation of StorageService for local data persistence
@@ -10,14 +11,16 @@ import '../services/storage_service.dart';
 /// Stores:
 /// - RunSummary in 'runs' table (lightweight, for history)
 /// - CompressedRoute in 'routes' table (cold storage, lazy loaded)
+/// - LapModel in 'laps' table (per-km lap data for CV calculation)
 ///
 /// Note: daily_flips table removed - no daily flip limit per spec.
 class LocalStorage implements StorageService {
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 5; // Bumped for daily_flips removal
+  static const int _databaseVersion = 6; // Bumped for CV + laps table
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
+  static const String _tableLaps = 'laps';
 
   Database? _database;
 
@@ -47,7 +50,8 @@ class LocalStorage implements StorageService {
         avgPaceSecPerKm REAL NOT NULL,
         hexesColored INTEGER NOT NULL DEFAULT 0,
         teamAtRun TEXT NOT NULL,
-        isPurpleRunner INTEGER NOT NULL DEFAULT 0
+        isPurpleRunner INTEGER NOT NULL DEFAULT 0,
+        cv REAL
       )
     ''');
 
@@ -63,9 +67,28 @@ class LocalStorage implements StorageService {
       )
     ''');
 
+    // Laps table (stores per-km lap data for CV calculation)
+    await db.execute('''
+      CREATE TABLE $_tableLaps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        runId TEXT NOT NULL,
+        lapNumber INTEGER NOT NULL,
+        distanceMeters REAL NOT NULL,
+        durationSeconds REAL NOT NULL,
+        startTimestampMs INTEGER NOT NULL,
+        endTimestampMs INTEGER NOT NULL,
+        FOREIGN KEY (runId) REFERENCES $_tableRuns (id) ON DELETE CASCADE
+      )
+    ''');
+
     // Index for faster route queries
     await db.execute('''
       CREATE INDEX idx_routes_runId ON $_tableRoutes(runId)
+    ''');
+
+    // Index for faster lap queries
+    await db.execute('''
+      CREATE INDEX idx_laps_runId ON $_tableLaps(runId)
     ''');
   }
 
@@ -113,6 +136,35 @@ class LocalStorage implements StorageService {
         // Table may not exist
       }
     }
+    if (oldVersion < 6) {
+      // Migrate from v5 to v6: add CV column and laps table
+      try {
+        // Add cv column to runs table
+        await db.execute('ALTER TABLE $_tableRuns ADD COLUMN cv REAL');
+      } catch (e) {
+        // Column may already exist
+      }
+      try {
+        // Create laps table
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS $_tableLaps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            runId TEXT NOT NULL,
+            lapNumber INTEGER NOT NULL,
+            distanceMeters REAL NOT NULL,
+            durationSeconds REAL NOT NULL,
+            startTimestampMs INTEGER NOT NULL,
+            endTimestampMs INTEGER NOT NULL,
+            FOREIGN KEY (runId) REFERENCES $_tableRuns (id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_laps_runId ON $_tableLaps(runId)
+        ''');
+      } catch (e) {
+        // Table may already exist
+      }
+    }
   }
 
   @override
@@ -144,6 +196,89 @@ class LocalStorage implements StorageService {
     });
   }
 
+  /// Save a completed run with lap data for CV calculation
+  ///
+  /// Stores run summary (including CV), route points, and individual lap data.
+  /// Use this instead of [saveRun] when lap data is available.
+  Future<void> saveRunWithLaps(
+    RunSession run,
+    List<LapModel> laps, {
+    double? cv,
+  }) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    // Convert to summary and add CV
+    final summaryMap = run.toSummary().toMap();
+    summaryMap['cv'] = cv;
+
+    await _database!.transaction((txn) async {
+      // Insert run summary with CV
+      await txn.insert(
+        _tableRuns,
+        summaryMap,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      // Insert route points (cold storage)
+      for (final point in run.route) {
+        await txn.insert(_tableRoutes, {
+          'runId': run.id,
+          'lat': point.latitude,
+          'lng': point.longitude,
+          'timestampMs': point.timestamp.millisecondsSinceEpoch,
+        });
+      }
+
+      // Insert lap data
+      for (final lap in laps) {
+        await txn.insert(_tableLaps, {'runId': run.id, ...lap.toMap()});
+      }
+    });
+  }
+
+  /// Get laps for a specific run
+  Future<List<LapModel>> getLapsForRun(String runId) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final List<Map<String, dynamic>> lapMaps = await _database!.query(
+      _tableLaps,
+      where: 'runId = ?',
+      whereArgs: [runId],
+      orderBy: 'lapNumber ASC',
+    );
+
+    return lapMaps.map((map) {
+      return LapModel(
+        lapNumber: map['lapNumber'] as int,
+        distanceMeters: (map['distanceMeters'] as num).toDouble(),
+        durationSeconds: (map['durationSeconds'] as num).toDouble(),
+        startTimestampMs: map['startTimestampMs'] as int,
+        endTimestampMs: map['endTimestampMs'] as int,
+      );
+    }).toList();
+  }
+
+  /// Get run summary by ID (includes CV)
+  Future<RunSummary?> getRunSummaryById(String id) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final List<Map<String, dynamic>> runMaps = await _database!.query(
+      _tableRuns,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    if (runMaps.isEmpty) return null;
+    return RunSummary.fromMap(runMaps.first);
+  }
+
   @override
   Future<List<RunSession>> getAllRuns() async {
     if (_database == null) {
@@ -170,6 +305,7 @@ class LocalStorage implements StorageService {
         isActive: false,
         teamAtRun: summary.teamAtRun,
         hexesColored: summary.hexesColored,
+        cv: summary.cv,
       );
     }).toList();
   }
@@ -203,6 +339,7 @@ class LocalStorage implements StorageService {
       isActive: false,
       teamAtRun: summary.teamAtRun,
       hexesColored: summary.hexesColored,
+      cv: summary.cv,
     );
   }
 
