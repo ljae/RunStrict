@@ -36,6 +36,40 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     'GMT-8 (PST)',
   ];
 
+  /// Get the UTC offset in hours for the selected timezone
+  int _getTimezoneOffsetHours() {
+    switch (_timezone) {
+      case 'UTC':
+        return 0;
+      case 'GMT+9 (KST)':
+        return 9;
+      case 'GMT+2 (SAST)':
+        return 2;
+      case 'GMT-5 (EST)':
+        return -5;
+      case 'GMT-8 (PST)':
+        return -8;
+      case 'Local':
+      default:
+        // Return local timezone offset (device timezone)
+        return DateTime.now().timeZoneOffset.inHours;
+    }
+  }
+
+  /// Convert a DateTime to the selected timezone for display
+  /// All stored times should be in UTC; this converts to display timezone
+  DateTime _convertToDisplayTimezone(DateTime utcTime) {
+    if (_timezone == 'Local') {
+      // For local, convert UTC to local time
+      return utcTime.toLocal();
+    }
+    // For explicit timezones, add the offset to UTC time
+    final offsetHours = _getTimezoneOffsetHours();
+    // Ensure we're working with UTC, then add offset
+    final utc = utcTime.isUtc ? utcTime : utcTime.toUtc();
+    return utc.add(Duration(hours: offsetHours));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -151,6 +185,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                                         allRuns,
                                         _selectedDate ?? DateTime.now(),
                                       ),
+                                      timezoneConverter:
+                                          _convertToDisplayTimezone,
                                     ),
                                   ),
                                 ),
@@ -271,6 +307,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                       allRuns,
                       _selectedDate ?? DateTime.now(),
                     ),
+                    timezoneConverter: _convertToDisplayTimezone,
                   ),
                 )
               : Column(
@@ -314,6 +351,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         onDateSelected: (date) {
           setState(() => _selectedDate = date);
         },
+        timezoneConverter: _convertToDisplayTimezone,
       ),
     );
   }
@@ -664,12 +702,15 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     int minX = 0;
     int maxX = 6;
 
+    // Use current time in selected timezone
+    final today = _convertToDisplayTimezone(DateTime.now().toUtc());
+
     if (period == HistoryPeriod.week) {
-      final today = DateTime.now();
       minX = 0;
       maxX = 6;
       for (var run in runs) {
-        final diff = today.difference(run.startTime).inDays;
+        final displayTime = _convertToDisplayTimezone(run.startTime);
+        final diff = today.difference(displayTime).inDays;
         if (diff >= 0 && diff <= 6) {
           final x = 6 - diff;
           buckets[x] = (buckets[x] ?? 0) + run.distanceKm;
@@ -679,14 +720,16 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       minX = 1;
       maxX = 31;
       for (var run in runs) {
-        final day = run.startTime.day;
+        final displayTime = _convertToDisplayTimezone(run.startTime);
+        final day = displayTime.day;
         buckets[day] = (buckets[day] ?? 0) + run.distanceKm;
       }
     } else {
       minX = 1;
       maxX = 12;
       for (var run in runs) {
-        final month = run.startTime.month;
+        final displayTime = _convertToDisplayTimezone(run.startTime);
+        final month = displayTime.month;
         buckets[month] = (buckets[month] ?? 0) + run.distanceKm;
       }
     }
@@ -761,7 +804,9 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   String _getLabel(int value, HistoryPeriod period) {
     if (period == HistoryPeriod.week) {
-      final date = DateTime.now().subtract(Duration(days: 6 - value));
+      // Use current time in selected timezone
+      final today = _convertToDisplayTimezone(DateTime.now().toUtc());
+      final date = today.subtract(Duration(days: 6 - value));
       return DateFormat.E().format(date)[0];
     } else if (period == HistoryPeriod.month) {
       // Show labels at day 1, 7, 14, 21, 28
@@ -776,6 +821,9 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   Widget _buildRunTile(RunSession run) {
+    // Convert time to selected timezone for display
+    final displayTime = _convertToDisplayTimezone(run.startTime);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -798,7 +846,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  DateFormat('d').format(run.startTime),
+                  DateFormat('d').format(displayTime),
                   style: GoogleFonts.sora(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -807,7 +855,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   ),
                 ),
                 Text(
-                  DateFormat('MMM').format(run.startTime).toUpperCase(),
+                  DateFormat('MMM').format(displayTime).toUpperCase(),
                   style: GoogleFonts.inter(
                     fontSize: 8,
                     fontWeight: FontWeight.w600,
@@ -868,6 +916,26 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                         color: Colors.white38,
                       ),
                     ),
+                    // Stability badge (if available)
+                    if (run.stabilityScore != null) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        width: 3,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      Text(
+                        '${run.stabilityScore}%',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _getStabilityColor(run.stabilityScore!),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -964,11 +1032,20 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     }
   }
 
+  /// Get color for stability score badge
+  /// Green = high stability (≥80), Yellow = medium (50-79), Red = low (<50)
+  Color _getStabilityColor(int score) {
+    if (score >= 80) return const Color(0xFF22C55E); // Green
+    if (score >= 50) return const Color(0xFFF59E0B); // Amber
+    return const Color(0xFFEF4444); // Red
+  }
+
   List<RunSession> _runsForDate(List<RunSession> runs, DateTime date) {
     return runs.where((run) {
-      return run.startTime.year == date.year &&
-          run.startTime.month == date.month &&
-          run.startTime.day == date.day;
+      final displayTime = _convertToDisplayTimezone(run.startTime);
+      return displayTime.year == date.year &&
+          displayTime.month == date.month &&
+          displayTime.day == date.day;
     }).toList();
   }
 
@@ -976,9 +1053,11 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     List<RunSession> runs,
     HistoryPeriod period,
   ) {
-    final now = DateTime.now();
+    // Use current time in selected timezone for filtering
+    final now = _convertToDisplayTimezone(DateTime.now().toUtc());
     return runs.where((run) {
-      final diff = now.difference(run.startTime);
+      final displayTime = _convertToDisplayTimezone(run.startTime);
+      final diff = now.difference(displayTime);
       switch (period) {
         case HistoryPeriod.week:
           return diff.inDays < 7;

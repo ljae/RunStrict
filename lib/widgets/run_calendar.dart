@@ -13,12 +13,17 @@ class RunCalendar extends StatefulWidget {
   final ValueChanged<DateTime>? onDateSelected;
   final ValueChanged<DateTime>? onMonthChanged;
 
+  /// Optional function to convert UTC time to display timezone.
+  /// If not provided, times are displayed as-is (local time).
+  final DateTime Function(DateTime)? timezoneConverter;
+
   const RunCalendar({
     super.key,
     required this.runs,
     this.selectedDate,
     this.onDateSelected,
     this.onMonthChanged,
+    this.timezoneConverter,
   });
 
   @override
@@ -45,11 +50,17 @@ class _RunCalendarState extends State<RunCalendar> {
     }
   }
 
-  /// Group runs by date (year-month-day key)
+  /// Convert time using the provided timezone converter or return as-is
+  DateTime _convertTime(DateTime time) {
+    return widget.timezoneConverter?.call(time) ?? time;
+  }
+
+  /// Group runs by date (year-month-day key) in display timezone
   Map<String, List<RunSession>> get _runsByDate {
     final map = <String, List<RunSession>>{};
     for (final run in widget.runs) {
-      final key = _dateKey(run.startTime);
+      final displayTime = _convertTime(run.startTime);
+      final key = _dateKey(displayTime);
       map.putIfAbsent(key, () => []).add(run);
     }
     return map;
@@ -345,7 +356,20 @@ class SelectedDateRuns extends StatelessWidget {
   final DateTime date;
   final List<RunSession> runs;
 
-  const SelectedDateRuns({super.key, required this.date, required this.runs});
+  /// Optional function to convert UTC time to display timezone.
+  final DateTime Function(DateTime)? timezoneConverter;
+
+  const SelectedDateRuns({
+    super.key,
+    required this.date,
+    required this.runs,
+    this.timezoneConverter,
+  });
+
+  /// Convert time using the provided timezone converter or return as-is
+  DateTime _convertTime(DateTime time) {
+    return timezoneConverter?.call(time) ?? time;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -413,8 +437,9 @@ class SelectedDateRuns extends StatelessWidget {
   }
 
   Widget _buildRunCard(RunSession run) {
+    final displayTime = _convertTime(run.startTime);
     final timeStr =
-        '${run.startTime.hour.toString().padLeft(2, '0')}:${run.startTime.minute.toString().padLeft(2, '0')}';
+        '${displayTime.hour.toString().padLeft(2, '0')}:${displayTime.minute.toString().padLeft(2, '0')}';
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -495,6 +520,28 @@ class SelectedDateRuns extends StatelessWidget {
               ),
             ),
           ],
+
+          // Stability badge (if available)
+          if (run.stabilityScore != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: _getStabilityColor(
+                  run.stabilityScore!,
+                ).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${run.stabilityScore}%',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: _getStabilityColor(run.stabilityScore!),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -537,6 +584,14 @@ class SelectedDateRuns extends StatelessWidget {
     } else {
       return '${seconds}s';
     }
+  }
+
+  /// Get color for stability score badge
+  /// Green = high stability (≥80), Yellow = medium (50-79), Red = low (<50)
+  Color _getStabilityColor(int score) {
+    if (score >= 80) return const Color(0xFF22C55E); // Green
+    if (score >= 50) return const Color(0xFFF59E0B); // Amber
+    return const Color(0xFFEF4444); // Red
   }
 
   String _getDayName(int weekday) {
