@@ -1,6 +1,6 @@
 # RunStrict Development Specification: "The 280-Day Journey"
 
-> **Last Updated**: 2026-01-26  
+> **Last Updated**: 2026-01-28  
 > **App Name**: RunStrict (Project Code: 280-Journey)  
 > **Current Season Status**: D-280 (Pre-season)
 
@@ -15,9 +15,10 @@
    - 2.3 Crew System
    - 2.4 Hex Capture Mechanics
    - 2.5 Economy & Points
-   - 2.6 Ranking & Leaderboard
-   - 2.7 Purple Crew: Protocol of Chaos
-   - 2.8 D-Day Reset Protocol
+   - 2.6 Pace Consistency (CV & Stability Score)
+   - 2.7 Ranking & Leaderboard
+   - 2.8 Purple Crew: Protocol of Chaos
+   - 2.9 D-Day Reset Protocol
 3. [UI Structure](#3-ui-structure)
    - 3.1 Navigation Architecture
    - 3.2 Screen Specifications
@@ -49,6 +50,7 @@
    - 9.9 Privacy & Security
    - 9.10 Real-time Computation
    - 9.11 Recommended Configuration Summary
+   - 9.12 Remote Configuration System
 
 ---
 
@@ -307,7 +309,58 @@ The core crew benefit: **multiplier = number of crew members who completed at le
   - **User A wins** because their run ended later, regardless of sync order.
 - **Flip points**: Calculated by client, **validated by server** (points ≤ hex_count × multiplier).
 
-### 2.6 Ranking & Leaderboard
+### 2.6 Pace Consistency (CV & Stability Score)
+
+#### 2.6.1 Coefficient of Variation (CV)
+
+| Property | Value |
+|----------|-------|
+| Purpose | Measure pace consistency during runs |
+| Formula | `CV = (standard deviation / mean) × 100` of 1km lap paces |
+| Denominator | Sample standard deviation (n-1) |
+| Calculation | At run completion, from recorded lap data |
+| Min Requirement | ≥ 1 km run (at least one complete lap) |
+| Single Lap | Returns CV = 0 (no variance possible) |
+
+**Lap Recording:**
+- Laps are recorded automatically during runs
+- Each lap = 1 kilometer of running
+- Lap data: `lapNumber`, `distanceMeters`, `durationSeconds`, `startTimestampMs`, `endTimestampMs`
+- Stored in local SQLite `laps` table
+
+**CV Calculation (LapService):**
+```dart
+static double? calculateCV(List<LapModel> laps) {
+  if (laps.isEmpty) return null;
+  if (laps.length == 1) return 0.0;
+
+  final paces = laps.map((lap) => lap.avgPaceSecPerKm).toList();
+  final mean = paces.reduce((a, b) => a + b) / paces.length;
+  
+  // Sample standard deviation (n-1 denominator)
+  final sumSquaredDiffs = paces.fold<double>(0, (sum, pace) => sum + pow(pace - mean, 2));
+  final variance = sumSquaredDiffs / (paces.length - 1);
+  final stdev = sqrt(variance);
+  
+  return (stdev / mean) * 100;
+}
+```
+
+#### 2.6.2 Stability Score
+
+| Property | Value |
+|----------|-------|
+| Formula | `Stability Score = 100 - CV` (clamped 0-100) |
+| Interpretation | Higher = more consistent pace (better) |
+| Display | Badge on leaderboard podium and rank tiles |
+| Color Coding | Green (≥80), Yellow (50-79), Red (<50) |
+
+**User Average CV:**
+- Users accumulate an **average CV** across all qualifying runs
+- Updated incrementally with each run via `finalize_run()` RPC
+- Runs < 1km do not contribute to average CV
+
+### 2.7 Ranking & Leaderboard
 
 | Property | Value |
 |----------|-------|
@@ -315,8 +368,9 @@ The core crew benefit: **multiplier = number of crew members who completed at le
 | Ranking Metric | Individual accumulated Flip Points |
 | Crew Affiliation Impact | None (purely individual) |
 | Display | Top rankings per geographic scope based on user's "home hex" |
+| Stability Badge | Shows user's stability score on podium and rank tiles |
 
-#### 2.6.1 Home Hex System (Asymmetric Definition)
+#### 2.7.1 Home Hex System (Asymmetric Definition)
 
 > **Design Goal**: Determine user's ranking scope based on their most recent running location, with privacy-preserving asymmetry.
 
@@ -370,9 +424,9 @@ String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
 - Team filter tabs: [ALL] / [RED] / [BLUE] / [PURPLE].
 - **Ranking snapshot**: Downloaded once on app launch, NOT polled in real-time.
 
-### 2.7 Purple Crew: Protocol of Chaos
+### 2.8 Purple Crew: Protocol of Chaos
 
-#### 2.7.1 Unlock & Entry
+#### 2.8.1 Unlock & Entry
 
 | Property | Value |
 |----------|-------|
@@ -389,7 +443,7 @@ String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
 - No minimum Flip Point threshold to defect (anyone can defect).
 - Defection is available at any time after D-140 until season end.
 
-#### 2.7.2 Purple Mechanics
+#### 2.8.2 Purple Mechanics
 
 | Property | Value |
 |----------|-------|
@@ -399,7 +453,7 @@ String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
 | Hex Color | Purple (distinct from Red/Blue) |
 | Role | "Virus/Joker" — disrupts Red/Blue territory with larger coordinated crews |
 
-### 2.8 D-Day Reset Protocol (The Void)
+### 2.9 D-Day Reset Protocol (The Void)
 
 | Step | Action | Method |
 |------|--------|--------|
@@ -666,12 +720,21 @@ class UserModel {
   final String? crewId;        // Current crew membership
   final int seasonPoints;      // Flip points this season (reset to 0 on Purple defection)
   final String? manifesto;     // 12-char declaration, editable anytime
+  final double totalDistanceKm; // Running season aggregate
+  final double? avgPaceMinPerKm; // Weighted average pace (min/km)
+  final double? avgCv;         // Average Coefficient of Variation (null if no CV data)
+  final int totalRuns;         // Number of completed runs
+
+  /// Stability score from average CV (higher = better, 0-100)
+  int? get stabilityScore => avgCv == null ? null : (100 - avgCv!).round().clamp(0, 100);
 }
 ```
 
-**Derived (not stored):**
-- `totalDistance` → calculated from `dailyStats/` collection
-- `currentSeasonDistance` → calculated from `dailyStats/` within season dates
+**Aggregate Fields (incremental update via `finalize_run`):**
+- `totalDistanceKm` → cumulative distance from all runs
+- `avgPaceMinPerKm` → incremental average pace (updated on each run)
+- `avgCv` → incremental average CV from runs with CV data (≥1km)
+- `totalRuns` → count of completed runs
 
 #### HexModel
 
@@ -747,6 +810,10 @@ class RunSummary {
   final Team teamAtRun;
   final List<String> hexPath;       // H3 hex IDs passed (deduplicated, no timestamps)
   final int yesterdayCrewCount;     // Applied multiplier (yesterday's check-in count)
+  final double? cv;                 // Coefficient of Variation (null for runs < 1km)
+
+  /// Stability score (100 - CV, clamped 0-100). Higher = more consistent pace.
+  int? get stabilityScore => cv == null ? null : (100 - cv!).round().clamp(0, 100);
 }
 ```
 
@@ -806,6 +873,24 @@ class DailyRunningStat {
   final int flipCount;              // Total flips that day
 }
 ```
+
+#### LapModel (Per-km Lap Data)
+
+```dart
+/// Represents a single 1km lap during a run
+class LapModel {
+  final int lapNumber;         // which lap (1, 2, 3...)
+  final double distanceMeters; // should be 1000.0 for complete laps
+  final double durationSeconds; // time to complete this lap
+  final int startTimestampMs;  // when lap started
+  final int endTimestampMs;    // when lap ended
+
+  /// Derived: average pace in seconds per kilometer
+  double get avgPaceSecPerKm => durationSeconds / (distanceMeters / 1000);
+}
+```
+
+**Purpose**: Used to calculate Coefficient of Variation (CV) for pace consistency analysis.
 
 #### LocationPoint (Active GPS — Ephemeral)
 
@@ -1206,12 +1291,12 @@ COMMIT;
   NO daily flip limit (same hex can be flipped multiple times)
 
 [Run Completion - "The Final Sync"]
-  Client uploads: { startTime, endTime, distanceKm, hex_path[], yesterdayCrewCount }
+  Client uploads: { startTime, endTime, distanceKm, hex_path[], yesterdayCrewCount, cv }
   Server RPC: finalize_run() →
     → Count flips (color changes from current hex state)
     → Conflict resolution: later endTime wins hex color
-    → UPDATE hexes, users
-    → INSERT INTO run_history (lightweight stats, preserved)
+    → UPDATE hexes, users (including CV aggregate)
+    → INSERT INTO run_history (lightweight stats + cv, preserved)
   
 [Daily Maintenance - Edge Function (midnight GMT+2)]
   calculate_yesterday_checkins() →
@@ -1270,9 +1355,29 @@ COMMIT;
 |-------|---------|---------------|
 | `runs` | Offline run data (active session) | Upload to Supabase on connectivity |
 | `routes` | GPS points during active run | Compress → Supabase Storage on completion |
+| `laps` | Per-km lap data for CV calculation | Local only, used for CV computation |
 | `run_history` | Local cache of run history | Pull from Supabase |
 | `daily_stats` | Local cache of daily stats | Pull from Supabase |
 | `hex_cache` | Nearby hex data for offline | Cache visible + surrounding hexes |
+
+**Schema v6 (CV Support):**
+```sql
+-- runs table now includes:
+cv REAL  -- Coefficient of Variation (null for runs < 1km)
+
+-- New laps table:
+CREATE TABLE laps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  runId TEXT NOT NULL,
+  lapNumber INTEGER NOT NULL,
+  distanceMeters REAL NOT NULL,
+  durationSeconds REAL NOT NULL,
+  startTimestampMs INTEGER NOT NULL,
+  endTimestampMs INTEGER NOT NULL,
+  FOREIGN KEY (runId) REFERENCES runs (id) ON DELETE CASCADE
+);
+CREATE INDEX idx_laps_runId ON laps(runId);
+```
 
 ---
 
@@ -1372,12 +1477,14 @@ lib/
 │   └── supabase_config.dart     # Supabase URL & anon key
 ├── models/
 │   ├── team.dart                # Team enum (red/blue/purple)
-│   ├── user_model.dart          # User data model
+│   ├── user_model.dart          # User data model (with CV aggregates)
 │   ├── hex_model.dart           # Hex tile (lastRunnerTeam only)
-│   ├── crew_model.dart          # Crew with maxMembers/leaderId
+│   ├── crew_model.dart          # Crew with maxMembers/leaderId (uses RemoteConfigService)
+│   ├── app_config.dart          # Server-configurable constants (Season, Crew, GPS, Scoring, Hex, Timing)
 │   ├── run_session.dart         # Active run session data
-│   ├── run_summary.dart         # Completed run (with hexPath) - seasonal
+│   ├── run_summary.dart         # Completed run (with hexPath, cv) - seasonal
 │   ├── run_history_model.dart   # Lightweight run stats (preserved)
+│   ├── lap_model.dart           # Per-km lap data for CV calculation
 │   ├── daily_running_stat.dart  # Daily stats (preserved)
 │   ├── location_point.dart      # GPS point (active run)
 │   └── route_point.dart         # Compact route point (Cold storage)
@@ -1396,18 +1503,23 @@ lib/
 │   ├── run_history_screen.dart  # Past runs (Calendar)
 │   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
-│   ├── supabase_service.dart    # Supabase client init & RPC wrappers
+│   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
+│   ├── remote_config_service.dart      # Server-configurable constants (fetch, cache, provide)
+│   ├── config_cache_service.dart       # Local JSON cache for remote config
 │   ├── hex_service.dart         # H3 hex grid operations
-│   ├── location_service.dart    # GPS tracking
-│   ├── run_tracker.dart         # Run session & hex capture engine
-│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer)
+│   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
+│   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
+│   ├── lap_service.dart         # CV calculation from lap data
+│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer, uses RemoteConfigService)
+│   ├── accelerometer_service.dart      # Accelerometer anti-spoofing (5s no-data warning)
 │   ├── storage_service.dart     # Storage interface (abstract)
 │   ├── in_memory_storage_service.dart  # In-memory (MVP/testing)
 │   ├── local_storage_service.dart      # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 280-day season countdown
+│   ├── season_service.dart      # 280-day season countdown (uses RemoteConfigService)
 │   ├── crew_multiplier_service.dart    # Yesterday's check-in multiplier (daily batch, no realtime)
 │   ├── running_score_service.dart      # Pace validation for capture
+│   ├── app_lifecycle_manager.dart      # App foreground/background handling (uses RemoteConfigService)
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite implementation
@@ -1963,6 +2075,133 @@ For **RunStrict** optimal balance of battery, accuracy, and cost:
 | **Privacy Zones** | Enabled, 500m radius, client-side masking |
 | **Real-time** | All local computation (distance, pace, hex detection) |
 
+### 9.12 Remote Configuration System
+
+> **Strategy**: All 50+ game constants are server-configurable via Supabase, with local caching and graceful fallback to hardcoded defaults.
+
+#### 9.12.1 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    RemoteConfigService                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   Server    │→ │   Cache     │→ │   Defaults          │ │
+│  │ (Supabase)  │  │ (JSON file) │  │ (AppConfig.defaults)│ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│                  Fallback Chain: server → cache → defaults   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Fallback Chain:**
+1. **Server**: Fetch from `app_config` table via `app_launch_sync` RPC
+2. **Cache**: Load from `config_cache.json` if server unreachable
+3. **Defaults**: Use `AppConfig.defaults()` if no cache available
+
+#### 9.12.2 Database Schema
+
+```sql
+-- Single-row table with all config as JSONB
+CREATE TABLE app_config (
+  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),  -- Single-row constraint
+  config_version INTEGER NOT NULL DEFAULT 1,
+  config_data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Returned via app_launch_sync RPC
+-- { user, yesterday_crew_count, hexes_in_viewport, app_config: { version, data } }
+```
+
+#### 9.12.3 AppConfig Model Structure
+
+```dart
+class AppConfig {
+  final int configVersion;
+  final SeasonConfig seasonConfig;
+  final CrewConfig crewConfig;
+  final GpsConfig gpsConfig;
+  final ScoringConfig scoringConfig;
+  final HexConfig hexConfig;
+  final TimingConfig timingConfig;
+  
+  factory AppConfig.defaults() => AppConfig(...);  // All hardcoded defaults
+  factory AppConfig.fromJson(Map<String, dynamic> json) => ...;
+}
+```
+
+#### 9.12.4 Configurable Constants by Category
+
+| Category | Constants | Example Values |
+|----------|-----------|----------------|
+| **Season** | `durationDays`, `serverTimezoneOffsetHours` | 280, 2 |
+| **Crew** | `maxMembersRegular`, `maxMembersPurple` | 12, 24 |
+| **GPS** | `maxSpeedMps`, `minSpeedMps`, `maxAccuracyMeters`, `maxAltitudeChangeMps`, `maxJumpDistanceMeters`, `movingAvgWindowSeconds`, `maxCapturePaceMinPerKm`, `pollingRateHz`, `minTimeBetweenPointsMs` | 6.94, 0.3, 50.0, 5.0, 100, 20, 8.0, 0.5, 1500 |
+| **Hex** | `baseResolution`, `zoneResolution`, `cityResolution`, `allResolution`, `captureCheckDistanceMeters`, `maxCacheSize` | 9, 8, 6, 4, 20.0, 4000 |
+| **Timing** | `accelerometerSamplingPeriodMs`, `refreshThrottleSeconds` | 200, 30 |
+
+#### 9.12.5 Run Consistency (Freeze/Unfreeze)
+
+During an active run, config is frozen to prevent mid-run changes:
+
+```dart
+// In RunTracker.startNewRun()
+RemoteConfigService().freezeForRun();
+
+// In RunTracker.stopRun()
+RemoteConfigService().unfreezeAfterRun();
+```
+
+**Usage Pattern in Services:**
+
+```dart
+// For run-critical values (frozen during runs)
+static double get maxSpeedMps => 
+    RemoteConfigService().configSnapshot.gpsConfig.maxSpeedMps;
+
+// For non-critical values (can change anytime)
+static int get maxCacheSize => 
+    RemoteConfigService().config.hexConfig.maxCacheSize;
+```
+
+#### 9.12.6 Initialization
+
+```dart
+// In main.dart (after SupabaseService, before HexService)
+await RemoteConfigService().initialize();
+```
+
+**Initialization Flow:**
+1. Try fetch from server via `app_launch_sync` RPC
+2. If success: Cache to `config_cache.json`, use server config
+3. If fail: Try load from cache
+4. If no cache: Use `AppConfig.defaults()`
+
+#### 9.12.7 Files
+
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/20260128_create_app_config.sql` | Database table with JSONB schema |
+| `supabase/migrations/20260128_update_app_launch_sync.sql` | RPC returns config |
+| `lib/models/app_config.dart` | Typed model with nested classes |
+| `lib/services/config_cache_service.dart` | Local JSON caching |
+| `lib/services/remote_config_service.dart` | Singleton service |
+| `test/services/remote_config_service_test.dart` | Unit tests (7 tests) |
+
+#### 9.12.8 Services Using RemoteConfigService
+
+| Service | Config Used |
+|---------|-------------|
+| `SeasonService` | `seasonConfig.durationDays`, `serverTimezoneOffsetHours` |
+| `GpsValidator` | All 8 GPS validation constants |
+| `LocationService` | `gpsConfig.pollingRateHz` |
+| `RunTracker` | `hexConfig.baseResolution`, `captureCheckDistanceMeters` |
+| `HexDataProvider` | `hexConfig.maxCacheSize` |
+| `HexagonMap` | `hexConfig.baseResolution` |
+| `AccelerometerService` | `timingConfig.accelerometerSamplingPeriodMs` |
+| `AppLifecycleManager` | `timingConfig.refreshThrottleSeconds` |
+| `H3Config` | All 4 resolution constants |
+| `CrewModel` | `crewConfig.maxMembersRegular`, `maxMembersPurple` |
+
 ---
 
 ## Remaining Open Items
@@ -2029,6 +2268,87 @@ For **RunStrict** optimal balance of battery, accuracy, and cost:
 ---
 
 ## Changelog
+
+### 2026-01-28 (Session 9)
+
+**CV & Stability Score Feature**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | `LapModel` | **기능/모델** | Per-km lap data model for CV calculation |
+| 2 | `LapService` | **기능/서비스** | CV and Stability Score calculation (sample stdev, n-1 denominator) |
+| 3 | `RunSummary.cv` | **기능/모델** | Added CV field to run summary |
+| 4 | `UserModel` aggregates | **기능/모델** | Added `totalDistanceKm`, `avgPaceMinPerKm`, `avgCv`, `totalRuns`, `stabilityScore` |
+| 5 | SQLite schema v6 | **기능/DB** | Added `cv` column to runs, new `laps` table |
+| 6 | Server migration 003 | **기능/DB** | `finalize_run()` now accepts `p_cv`, updates user aggregates incrementally |
+| 7 | Leaderboard stability badge | **기능/UI** | Shows stability score on podium and rank tiles (green/yellow/red) |
+| 8 | `RunTracker` lap tracking | **기능/로직** | Automatic lap recording during runs, CV calculation on stop |
+
+**Timezone Conversion in Run History**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | Timezone selector | **기능/UI** | Dropdown to select display timezone (Local, UTC, KST, SAST, EST, PST) |
+| 2 | `_convertToDisplayTimezone()` | **기능/로직** | Converts UTC times to selected timezone |
+| 3 | `RunCalendar` callback | **기능/UI** | `timezoneConverter` parameter for calendar and run tiles |
+
+**Files Created:**
+- `lib/models/lap_model.dart` — Lap data model
+- `lib/services/lap_service.dart` — CV calculation service
+- `test/models/lap_model_test.dart` — 6 unit tests
+- `test/services/lap_service_test.dart` — 12 unit tests
+- `supabase/migrations/003_cv_aggregates.sql` — Server migration
+
+**Files Modified:**
+- `lib/storage/local_storage.dart` — Schema v6 with cv column and laps table
+- `lib/models/run_summary.dart` — Added cv field and stabilityScore getter
+- `lib/models/user_model.dart` — Added aggregate fields
+- `lib/services/run_tracker.dart` — Lap tracking and CV calculation
+- `lib/services/supabase_service.dart` — Pass p_cv to finalize_run
+- `lib/providers/leaderboard_provider.dart` — LeaderboardEntry with CV fields
+- `lib/screens/leaderboard_screen.dart` — Stability badge on podium and tiles
+- `lib/screens/run_history_screen.dart` — Timezone conversion
+- `lib/widgets/run_calendar.dart` — timezoneConverter parameter
+
+---
+
+### 2026-01-28 (Session 8)
+
+**Remote Configuration System**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | `app_config` Supabase table | **기능/DB** | Single-row JSONB table for all 50+ game constants |
+| 2 | `app_launch_sync` RPC extended | **기능/API** | Returns config alongside user data on app launch |
+| 3 | `AppConfig` Dart model | **기능/클라이언트** | Typed model with nested classes (Season, Crew, GPS, Scoring, Hex, Timing) |
+| 4 | `ConfigCacheService` | **기능/클라이언트** | Local JSON caching for offline fallback |
+| 5 | `RemoteConfigService` | **기능/클라이언트** | Singleton with fallback chain (server → cache → defaults) |
+| 6 | Config freeze for runs | **기능/로직** | `freezeForRun()` / `unfreezeAfterRun()` prevents mid-run config changes |
+| 7 | 11 services migrated | **리팩토링** | All hardcoded constants now read from RemoteConfigService |
+
+**AccelerometerService Improvements**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | 5-second no-data warning | **버그수정/UX** | Clear diagnostic when running on iOS Simulator (no hardware) |
+| 2 | Reduced log spam | **버그수정/UX** | Removed per-GPS-point "No recent data" messages |
+
+**Files Changed:**
+- `supabase/migrations/20260128_create_app_config.sql` — New config table
+- `supabase/migrations/20260128_update_app_launch_sync.sql` — RPC extension
+- `lib/models/app_config.dart` — New typed config model
+- `lib/services/config_cache_service.dart` — New cache service
+- `lib/services/remote_config_service.dart` — New config service
+- `lib/services/accelerometer_service.dart` — Improved diagnostics
+- `lib/main.dart` — Added RemoteConfigService initialization
+- 11 service/widget files updated to use RemoteConfigService
+
+**Document Updates:**
+- AGENTS.md: Added Remote Configuration System section
+- CLAUDE.md: Added Remote Configuration System section
+- DEVELOPMENT_SPEC.md: Added §9.12 Remote Configuration System
+
+---
 
 ### 2026-01-27 (Session 7)
 

@@ -77,13 +77,14 @@ lib/
 │   └── supabase_config.dart     # Supabase URL & anon key
 ├── models/
 │   ├── team.dart                # Team enum (red/blue/purple)
-│   ├── user_model.dart          # User data model
+│   ├── user_model.dart          # User data model (with CV aggregates)
 │   ├── hex_model.dart           # Hex tile model (lastRunnerTeam only)
-│   ├── crew_model.dart          # Crew with maxMembers/leaderId
+│   ├── crew_model.dart          # Crew with maxMembers/leaderId (uses RemoteConfigService)
+│   ├── app_config.dart          # Server-configurable constants (Season, Crew, GPS, Scoring, Hex, Timing)
 │   ├── run_session.dart         # Active run session data
-│   ├── run_summary.dart         # Completed run (with hexPath)
+│   ├── run_summary.dart         # Completed run (with hexPath, cv)
+│   ├── lap_model.dart           # Per-km lap data for CV calculation
 │   ├── daily_running_stat.dart  # Daily stats (Warm data)
-
 │   ├── location_point.dart      # GPS point model (active run)
 │   └── route_point.dart         # Compact route point (cold storage)
 ├── providers/
@@ -101,18 +102,23 @@ lib/
 │   ├── run_history_screen.dart  # Past runs (Calendar)
 │   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
-│   ├── supabase_service.dart    # Supabase client init & RPC wrappers
+│   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
+│   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
+│   ├── config_cache_service.dart # Local JSON cache for remote config
 │   ├── hex_service.dart         # H3 hex grid operations
-│   ├── location_service.dart    # GPS tracking
-│   ├── run_tracker.dart         # Run session & hex capture engine
-│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer)
+│   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
+│   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
+│   ├── lap_service.dart         # CV calculation from lap data
+│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer, uses RemoteConfigService)
+│   ├── accelerometer_service.dart # Accelerometer anti-spoofing (5s no-data warning)
 │   ├── storage_service.dart     # Storage interface (abstract)
 │   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
 │   ├── local_storage_service.dart # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 280-day season countdown
+│   ├── season_service.dart      # 280-day season countdown (uses RemoteConfigService)
 │   ├── crew_multiplier_service.dart # Yesterday's check-in multiplier (daily batch)
 │   ├── running_score_service.dart # Pace validation for capture
+│   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite implementation (runs, routes)
@@ -161,17 +167,24 @@ enum Team {
 class UserModel {
   String id;
   String name;
-  Team team;              // 'red' | 'blue' | 'purple'
-  String avatar;          // Overridden by crew image when in crew
-  String? originalAvatar; // Preserved when joining crew, restored on leave
+  Team team;               // 'red' | 'blue' | 'purple'
+  String avatar;           // Overridden by crew image when in crew
+  String? originalAvatar;  // Preserved when joining crew, restored on leave
   String? crewId;
-  int seasonPoints;       // Reset to 0 when defecting to Purple
-  String? manifesto;      // 12-char declaration
-  String? homeHexStart;   // H3 index of run start location (self only)
-  String? homeHexEnd;     // H3 index of run end location (visible to others)
+  int seasonPoints;        // Reset to 0 when defecting to Purple
+  String? manifesto;       // 12-char declaration
+  String? homeHexStart;    // H3 index of run start location (self only)
+  String? homeHexEnd;      // H3 index of run end location (visible to others)
+  double totalDistanceKm;  // Running season aggregate
+  double? avgPaceMinPerKm; // Weighted average pace
+  double? avgCv;           // Average CV (from runs ≥ 1km)
+  int totalRuns;           // Number of completed runs
+
+  /// Stability score (100 - avgCv, clamped 0-100). Higher = better.
+  int? get stabilityScore => avgCv == null ? null : (100 - avgCv!).round().clamp(0, 100);
 }
 ```
-**Note**: Distance stats calculated from `daily_stats` table on-demand.
+**Note**: Aggregate fields updated incrementally via `finalize_run()` RPC.
 **Home Hex**: Asymmetric visibility - `homeHexStart` for self, `homeHexEnd` for others.
 
 ### Hex Model (Supabase: hexes table)
@@ -212,17 +225,35 @@ class DailyRunningStat {
 }
 ```
 
+### LapModel (Local SQLite: laps table)
+```dart
+/// Per-km lap data for CV calculation
+class LapModel {
+  int lapNumber;           // which lap (1, 2, 3...)
+  double distanceMeters;   // should be 1000.0 for complete laps
+  double durationSeconds;  // time to complete this lap
+  int startTimestampMs;
+  int endTimestampMs;
+
+  double get avgPaceSecPerKm => durationSeconds / (distanceMeters / 1000);
+}
+```
+
 ### RunSummary (Supabase: runs table)
 ```dart
 class RunSummary {
   String id;
-  DateTime date;
+  DateTime endTime;        // Used for conflict resolution
   double distanceKm;
   int durationSeconds;
   double avgPaceMinPerKm;
-  int hexesColored;       // Flip count
+  int hexesColored;        // Flip count
   Team teamAtRun;
-  List<String> hexPath;   // H3 hex IDs passed (route shape)
+  List<String> hexPath;    // H3 hex IDs passed (route shape)
+  double? cv;              // Coefficient of Variation (null for runs < 1km)
+
+  /// Stability score (100 - CV, clamped 0-100). Higher = better.
+  int? get stabilityScore => cv == null ? null : (100 - cv!).round().clamp(0, 100);
 }
 ```
 
@@ -255,6 +286,27 @@ class RunSummary {
 - **NO daily flip limit** - same hex can be flipped multiple times per day
 - Conflict resolution: **Later run_endTime wins** (compared via last_flipped_at timestamp)
 - Capturable hexes pulse (2s, 1.2x scale, glow)
+
+### CV & Stability Score
+CV (Coefficient of Variation) measures pace consistency during runs.
+
+```dart
+// Calculated from 1km lap paces using sample stdev (n-1 denominator)
+// CV = (stdev / mean) × 100
+// Lower CV = more consistent pace
+
+// LapService.calculateCV()
+if (laps.isEmpty) return null;
+if (laps.length == 1) return 0.0;  // No variance with single lap
+// ... sample stdev calculation
+
+// Stability Score = 100 - CV (clamped 0-100)
+// Higher = better consistency
+// Color coding: Green (≥80), Yellow (50-79), Red (<50)
+```
+
+**Lap Recording**: Automatic during runs, stored in local SQLite `laps` table.
+**User Aggregate**: Average CV calculated incrementally via `finalize_run()` RPC.
 
 ### Flip Points Calculation
 ```
@@ -344,17 +396,22 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 ## Supabase Schema (Key Tables)
 
 ```sql
-users        -- id, name, team, avatar, original_avatar, crew_id, season_points, manifesto, home_hex_start, home_hex_end
+users        -- id, name, team, avatar, original_avatar, crew_id, season_points, manifesto,
+             -- home_hex_start, home_hex_end, total_distance_km, avg_pace_min_per_km,
+             -- avg_cv, total_runs, cv_run_count
 crews        -- id, name, team, member_ids[], pin, representative_image
 hexes        -- id (H3 index), last_runner_team, last_flipped_at (conflict resolution)
 runs         -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
+run_history  -- id, user_id, run_date, distance_km, duration_seconds, cv (preserved across seasons)
 daily_stats  -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
 -- active_runs  DEPRECATED: No longer used (no Realtime)
 ```
 
 **Key RPC Functions:**
+- `finalize_run(...)` → batch sync on run completion, accepts `p_cv`, updates user aggregates
 - `get_crew_multiplier(crew_id)` → count of yesterday's active members
-- `get_leaderboard(limit)` → ranked users by season_points
+- `get_leaderboard(limit)` → ranked users by season_points with CV aggregates
+- `app_launch_sync(...)` → pre-patch data on launch with CV fields
 
 ---
 
@@ -432,3 +489,51 @@ await mapboxMap.style.setStyleLayerProperty(
 - No flash: Source data swap is instantaneous
 - Data-driven: Per-feature colors read from GeoJSON properties
 - Performance: GPU-accelerated fill rendering
+
+---
+
+## Remote Configuration System
+
+All game constants (50+) are server-configurable via the `app_config` table in Supabase.
+
+### Usage Pattern
+
+```dart
+// For values frozen during runs (use configSnapshot)
+static double get maxSpeedMps =>
+    RemoteConfigService().configSnapshot.gpsConfig.maxSpeedMps;
+
+// For values that can change anytime (use config)
+static int get maxCacheSize =>
+    RemoteConfigService().config.hexConfig.maxCacheSize;
+```
+
+### Run Consistency
+
+Config is frozen during active runs:
+```dart
+RemoteConfigService().freezeForRun();   // In startNewRun()
+RemoteConfigService().unfreezeAfterRun(); // In stopRun()
+```
+
+### Configurable Constants
+
+| Category | Examples |
+|----------|----------|
+| **Season** | `durationDays`, `serverTimezoneOffsetHours` |
+| **Crew** | `maxMembersRegular`, `maxMembersPurple` |
+| **GPS** | `maxSpeedMps`, `pollingRateHz`, `maxAccuracyMeters` |
+| **Scoring** | `maxCapturePaceMinPerKm`, `minMovingAvgWindowSec` |
+| **Hex** | `baseResolution`, `maxCacheSize` |
+| **Timing** | `refreshThrottleSeconds`, `accelerometerSamplingPeriodMs` |
+
+---
+
+## Accelerometer Anti-Spoofing
+
+The `AccelerometerService` validates GPS movement against physical device motion.
+
+| Platform | Behavior |
+|----------|----------|
+| **Real device** | Accelerometer events validate movement |
+| **iOS Simulator** | No hardware → graceful fallback to GPS-only (5s warning logged) |

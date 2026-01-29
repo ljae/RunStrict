@@ -12,11 +12,22 @@ class UserModel {
   /// Original avatar preserved when joining crew (restored on leave)
   final String? originalAvatar;
 
-  /// Home hex (FIRST hex of last run) - used for self's leaderboard scope
-  final String? homeHexStart;
+  /// Home hex (Res 9) - set once on first GPS fix, used for scope filtering
+  /// Parent cells derived on-demand via HexService.getScopeHexId()
+  final String? homeHex;
 
-  /// Home hex (LAST hex of last run) - used for others' leaderboard scope
-  final String? homeHexEnd;
+  /// Total distance run in season (km)
+  final double totalDistanceKm;
+
+  /// Average pace across all runs (min/km, null if no runs)
+  final double? avgPaceMinPerKm;
+
+  /// Average Coefficient of Variation (null if no CV data)
+  /// Measures overall pace consistency
+  final double? avgCv;
+
+  /// Total number of runs completed
+  final int totalRuns;
 
   const UserModel({
     required this.id,
@@ -27,11 +38,21 @@ class UserModel {
     this.seasonPoints = 0,
     this.manifesto,
     this.originalAvatar,
-    this.homeHexStart,
-    this.homeHexEnd,
+    this.homeHex,
+    this.totalDistanceKm = 0,
+    this.avgPaceMinPerKm,
+    this.avgCv,
+    this.totalRuns = 0,
   });
 
   bool get isPurple => team == Team.purple;
+
+  /// Stability score from average CV (higher = better)
+  /// Returns clamped 0-100 value, null if no CV data
+  int? get stabilityScore {
+    if (avgCv == null) return null;
+    return (100 - avgCv!).round().clamp(0, 100);
+  }
 
   /// Copy with optional field updates.
   ///
@@ -47,8 +68,11 @@ class UserModel {
     String? manifesto,
     String? originalAvatar,
     bool clearOriginalAvatar = false,
-    String? homeHexStart,
-    String? homeHexEnd,
+    String? homeHex,
+    double? totalDistanceKm,
+    double? avgPaceMinPerKm,
+    double? avgCv,
+    int? totalRuns,
   }) {
     return UserModel(
       id: id,
@@ -61,8 +85,11 @@ class UserModel {
       originalAvatar: clearOriginalAvatar
           ? null
           : (originalAvatar ?? this.originalAvatar),
-      homeHexStart: homeHexStart ?? this.homeHexStart,
-      homeHexEnd: homeHexEnd ?? this.homeHexEnd,
+      homeHex: homeHex ?? this.homeHex,
+      totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
+      avgPaceMinPerKm: avgPaceMinPerKm ?? this.avgPaceMinPerKm,
+      avgCv: avgCv ?? this.avgCv,
+      totalRuns: totalRuns ?? this.totalRuns,
     );
   }
 
@@ -80,8 +107,11 @@ class UserModel {
       seasonPoints: 0,
       manifesto: manifesto,
       originalAvatar: null, // Clear on defection
-      homeHexStart: homeHexStart,
-      homeHexEnd: homeHexEnd,
+      homeHex: homeHex,
+      totalDistanceKm: totalDistanceKm,
+      avgPaceMinPerKm: avgPaceMinPerKm,
+      avgCv: avgCv,
+      totalRuns: totalRuns,
     );
   }
 
@@ -94,8 +124,11 @@ class UserModel {
     seasonPoints: (row['season_points'] as num?)?.toInt() ?? 0,
     manifesto: row['manifesto'] as String?,
     originalAvatar: row['original_avatar'] as String?,
-    homeHexStart: row['home_hex_start'] as String?,
-    homeHexEnd: row['home_hex_end'] as String?,
+    homeHex: row['home_hex'] as String?,
+    totalDistanceKm: (row['total_distance_km'] as num?)?.toDouble() ?? 0,
+    avgPaceMinPerKm: (row['avg_pace_min_per_km'] as num?)?.toDouble(),
+    avgCv: (row['avg_cv'] as num?)?.toDouble(),
+    totalRuns: (row['total_runs'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> toRow() => {
@@ -106,8 +139,11 @@ class UserModel {
     'season_points': seasonPoints,
     'manifesto': manifesto,
     'original_avatar': originalAvatar,
-    'home_hex_start': homeHexStart,
-    'home_hex_end': homeHexEnd,
+    'home_hex': homeHex,
+    'total_distance_km': totalDistanceKm,
+    'avg_pace_min_per_km': avgPaceMinPerKm,
+    'avg_cv': avgCv,
+    'total_runs': totalRuns,
   };
 
   Map<String, dynamic> toJson() => {
@@ -119,8 +155,11 @@ class UserModel {
     'seasonPoints': seasonPoints,
     'manifesto': manifesto,
     'originalAvatar': originalAvatar,
-    'homeHexStart': homeHexStart,
-    'homeHexEnd': homeHexEnd,
+    'homeHex': homeHex,
+    'totalDistanceKm': totalDistanceKm,
+    'avgPaceMinPerKm': avgPaceMinPerKm,
+    'avgCv': avgCv,
+    'totalRuns': totalRuns,
   };
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -132,7 +171,10 @@ class UserModel {
     seasonPoints: (json['seasonPoints'] as num?)?.toInt() ?? 0,
     manifesto: json['manifesto'] as String?,
     originalAvatar: json['originalAvatar'] as String?,
-    homeHexStart: json['homeHexStart'] as String?,
-    homeHexEnd: json['homeHexEnd'] as String?,
+    homeHex: json['homeHex'] as String?,
+    totalDistanceKm: (json['totalDistanceKm'] as num?)?.toDouble() ?? 0,
+    avgPaceMinPerKm: (json['avgPaceMinPerKm'] as num?)?.toDouble(),
+    avgCv: (json['avgCv'] as num?)?.toDouble(),
+    totalRuns: (json['totalRuns'] as num?)?.toInt() ?? 0,
   );
 }

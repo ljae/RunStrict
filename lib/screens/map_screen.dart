@@ -13,6 +13,8 @@ import '../providers/app_state_provider.dart';
 import '../providers/hex_data_provider.dart';
 import '../providers/run_provider.dart';
 import '../services/local_storage_service.dart';
+import '../services/prefetch_service.dart';
+import '../services/hex_service.dart';
 
 /// Premium dark-themed map screen with hex territory visualization
 class MapScreen extends StatefulWidget {
@@ -153,14 +155,46 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _onZoomChanged(int index) {
+  void _onZoomChanged(int index) async {
     if (!mounted) return;
     final newScope = GeographicScope.fromIndex(index);
     setState(() => _selectedScope = newScope);
-    // Use easeTo for smooth zoom transitions between ZONE/CITY/ALL
+
+    // Determine camera center based on scope:
+    // - ZONE: Center on current GPS location
+    // - CITY/ALL: Center on home hex (fixed territory boundary)
+    mapbox.Point? centerPoint;
+
+    if (newScope == GeographicScope.zone) {
+      // ZONE: Center on user's current location
+      try {
+        final position = await Geolocator.getLastKnownPosition();
+        if (position != null) {
+          centerPoint = mapbox.Point(
+            coordinates: mapbox.Position(position.longitude, position.latitude),
+          );
+        }
+      } catch (e) {
+        debugPrint('Failed to get current location for ZONE: $e');
+      }
+    } else {
+      // CITY/ALL: Center on home hex
+      final homeHex = PrefetchService().homeHex;
+      if (homeHex != null) {
+        final homeCenter = HexService().getHexCenter(homeHex);
+        centerPoint = mapbox.Point(
+          coordinates: mapbox.Position(
+            homeCenter.longitude,
+            homeCenter.latitude,
+          ),
+        );
+      }
+    }
+
+    // Use easeTo for smooth zoom + center transitions
     try {
       _mapController?.easeTo(
-        mapbox.CameraOptions(zoom: newScope.zoomLevel),
+        mapbox.CameraOptions(center: centerPoint, zoom: newScope.zoomLevel),
         mapbox.MapAnimationOptions(duration: 300, startDelay: 0),
       );
     } catch (e) {
@@ -168,7 +202,7 @@ class _MapScreenState extends State<MapScreen> {
       debugPrint('easeTo zoom failed, falling back: $e');
       try {
         _mapController?.setCamera(
-          mapbox.CameraOptions(zoom: newScope.zoomLevel),
+          mapbox.CameraOptions(center: centerPoint, zoom: newScope.zoomLevel),
         );
       } catch (e2) {
         debugPrint('setCamera zoom fallback failed: $e2');

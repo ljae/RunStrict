@@ -1,5 +1,7 @@
 import 'dart:math' show pow;
 
+import '../services/remote_config_service.dart';
+
 /// H3 Resolution Configuration for RunStrict
 ///
 /// The H3 hierarchical spatial index uses resolutions 0-15, where higher
@@ -18,19 +20,23 @@ class H3Config {
 
   /// Base gameplay resolution - ALL flip points calculated at this level
   /// Edge: ~174m, Area: ~0.10 km²
-  static const int baseResolution = 9;
+  static int get baseResolution =>
+      RemoteConfigService().config.hexConfig.baseResolution;
 
   /// Zone scope resolution (Neighborhood level)
   /// Edge: ~461m, Area: ~0.73 km²
-  static const int zoneResolution = 8;
+  static int get zoneResolution =>
+      RemoteConfigService().config.hexConfig.zoneResolution;
 
   /// City scope resolution (District level)
   /// Edge: ~3.2km, Area: ~36 km²
-  static const int cityResolution = 6;
+  static int get cityResolution =>
+      RemoteConfigService().config.hexConfig.cityResolution;
 
   /// All/Region scope resolution (Metro area level)
   /// Edge: ~22.6km, Area: ~1,770 km²
-  static const int allResolution = 4;
+  static int get allResolution =>
+      RemoteConfigService().config.hexConfig.allResolution;
 
   /// Approximate children count per parent
   ///
@@ -53,7 +59,7 @@ enum GeographicScope {
   /// - Shows individual hexes with user location
   /// - Leaderboard filters by Res 8 parent cell
   zone(
-    resolution: H3Config.zoneResolution,
+    resolution: 8,
     zoomLevel: 15.0,
     label: 'ZONE',
     description: 'Neighborhood',
@@ -62,22 +68,12 @@ enum GeographicScope {
   /// City: District level (~3.2km radius)
   /// - Shows individual hexes with stats overlay
   /// - Leaderboard filters by Res 6 parent cell
-  city(
-    resolution: H3Config.cityResolution,
-    zoomLevel: 12.0,
-    label: 'CITY',
-    description: 'District',
-  ),
+  city(resolution: 6, zoomLevel: 12.0, label: 'CITY', description: 'District'),
 
   /// All: Metro/Region level (no geographic filter)
   /// - Shows dense hex grid with stats overlay
   /// - Leaderboard shows all users (no filter)
-  all(
-    resolution: H3Config.allResolution,
-    zoomLevel: 10.0,
-    label: 'ALL',
-    description: 'Region',
-  );
+  all(resolution: 4, zoomLevel: 10.0, label: 'ALL', description: 'Region');
 
   /// H3 resolution for this scope's parent cell grouping
   final int resolution;

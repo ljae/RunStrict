@@ -53,5 +53,7 @@
 	<string>We need your location to track runs even when the app is in the background.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>We need your location to track your runs accurately.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>We use motion data to verify your running activity and prevent GPS spoofing.</string>
 </dict>
 </plist>

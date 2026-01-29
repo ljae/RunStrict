@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:math' as math;
 import '../models/location_point.dart';
+import 'remote_config_service.dart';
 
 /// GPS Anti-Spoofing Validation Result
 class ValidationResult {
@@ -53,18 +54,24 @@ class _PaceSample {
 /// 4. Time Validation: Check for timestamp anomalies
 /// 5. Altitude Validation: Check for impossible altitude changes
 class GpsValidator {
-  // Configuration constants
-  static const double maxSpeedMps = 6.94; // 25 km/h in m/s (fast sprint pace)
-  static const double minSpeedMps = 0.3; // Below this, consider stationary
-  static const double maxAccuracyMeters = 50.0; // Reject if accuracy > 50m
-  static const double maxAltitudeChangeMps = 5.0; // Max vertical speed
-  static const double minTimeBetweenPointsMs =
-      1500; // At least 1.5s between points (allows 0.5Hz GPS polling with margin)
-  static const double maxJumpDistanceMeters = 100; // Max jump in single update
-
-  // Moving average pace calculation (20-second window for 0.5Hz polling)
-  // At 0.5Hz, this gives ~10 samples for stable pace calculation
-  static const int movingAvgWindowSeconds = 20;
+  // Configuration getters (read from RemoteConfigService)
+  static double get maxSpeedMps =>
+      RemoteConfigService().configSnapshot.gpsConfig.maxSpeedMps;
+  static double get minSpeedMps =>
+      RemoteConfigService().configSnapshot.gpsConfig.minSpeedMps;
+  static double get maxAccuracyMeters =>
+      RemoteConfigService().configSnapshot.gpsConfig.maxAccuracyMeters;
+  static double get maxAltitudeChangeMps =>
+      RemoteConfigService().configSnapshot.gpsConfig.maxAltitudeChangeMps;
+  static double get minTimeBetweenPointsMs => RemoteConfigService()
+      .configSnapshot
+      .gpsConfig
+      .minTimeBetweenPointsMs
+      .toDouble();
+  static double get maxJumpDistanceMeters =>
+      RemoteConfigService().configSnapshot.gpsConfig.maxJumpDistanceMeters;
+  static int get movingAvgWindowSeconds =>
+      RemoteConfigService().configSnapshot.gpsConfig.movingAvgWindowSeconds;
 
   // Track suspicious activity
   int _consecutiveRejects = 0;
@@ -91,7 +98,8 @@ class GpsValidator {
 
   /// Check if current moving average pace is valid for hex capture.
   /// Must be < 8:00 min/km as per spec §2.4.2.
-  static const double maxCapturePaceMinPerKm = 8.0;
+  static double get maxCapturePaceMinPerKm =>
+      RemoteConfigService().configSnapshot.gpsConfig.maxCapturePaceMinPerKm;
   bool get canCaptureAtCurrentPace =>
       _movingAvgPaceMinPerKm < maxCapturePaceMinPerKm;
 

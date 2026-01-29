@@ -5,12 +5,15 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:geolocator/geolocator.dart' as geo;
 import '../services/hex_service.dart';
+import '../services/prefetch_service.dart';
+import '../config/h3_config.dart';
 import '../models/location_point.dart';
 import '../models/team.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../providers/hex_data_provider.dart';
 import '../widgets/glowing_location_marker.dart';
+import '../services/remote_config_service.dart';
 
 class HexagonMap extends StatefulWidget {
   final latlong.LatLng? initialCenter;
@@ -415,8 +418,24 @@ class _HexagonMapState extends State<HexagonMap> {
     }
   }
 
-  // Fixed resolution 9 for consistent hex display across all screens and zoom levels
-  static const int _fixedResolution = 9;
+  // Fixed resolution from remote config for consistent hex display across all screens and zoom levels
+  static int get _fixedResolution =>
+      RemoteConfigService().config.hexConfig.baseResolution;
+
+  /// Determine current geographic scope based on zoom level
+  /// Aligned with GeographicScope zoom levels from h3_config.dart:
+  /// - ZONE: zoom >= 14 → neighborhood view
+  /// - CITY: zoom >= 12 → district view
+  /// - ALL: zoom < 12 → metro/region view
+  GeographicScope get _currentScope {
+    if (_currentZoom >= 14) {
+      return GeographicScope.zone;
+    } else if (_currentZoom >= 12) {
+      return GeographicScope.city;
+    } else {
+      return GeographicScope.all;
+    }
+  }
 
   /// Builds GeoJSON FeatureCollection for hex polygons with data-driven styling
   String _buildHexGeoJson(List<String> hexIds) {
@@ -448,9 +467,37 @@ class _HexagonMapState extends State<HexagonMap> {
       final isUserHex = hexId == _currentUserHexId;
       final teamColor = widget.teamColor ?? AppTheme.electricBlue;
 
-      final fillColor = isUserHex ? teamColor : hex.hexLightColor;
-      final outlineColor = isUserHex ? teamColor : hex.hexColor;
-      final double opacity = isUserHex ? 0.5 : (hex.isNeutral ? 0.15 : 0.3);
+      // Check if hex is within home scope range (based on current zoom/scope)
+      // ZONE view: no limit (all hexes colored)
+      // CITY/ALL views: hexes are generated from home hex center, so all in-range
+      final prefetch = PrefetchService();
+      final currentScope = _currentScope;
+      // When we have a home hex, CITY/ALL hexes are generated from home center
+      // so they're all in-range by definition. Only check scope if no home hex.
+      final bool inRange =
+          currentScope == GeographicScope.zone ||
+          !prefetch.isInitialized ||
+          prefetch.homeHex != null;
+
+      // Out-of-range hexes shown as gray/disabled
+      final Color fillColor;
+      final Color outlineColor;
+      final double opacity;
+
+      if (!inRange) {
+        // Gray styling for out-of-range hexes
+        fillColor = const Color(0xFF333333);
+        outlineColor = const Color(0xFF444444);
+        opacity = 0.2;
+      } else if (isUserHex) {
+        fillColor = teamColor;
+        outlineColor = teamColor;
+        opacity = 0.5;
+      } else {
+        fillColor = hex.hexLightColor;
+        outlineColor = hex.hexColor;
+        opacity = hex.isNeutral ? 0.15 : 0.3;
+      }
 
       // Convert color to hex string for GeoJSON
       String colorToHex(Color c) =>
@@ -467,6 +514,7 @@ class _HexagonMapState extends State<HexagonMap> {
           'fill-color': colorToHex(fillColor),
           'fill-opacity': opacity,
           'fill-outline-color': colorToHex(outlineColor),
+          'in-range': inRange,
         },
       });
     }
@@ -491,38 +539,48 @@ class _HexagonMapState extends State<HexagonMap> {
 
       _currentZoom = zoom;
 
-      // Use fixed resolution 9 - hexagons maintain same size regardless of zoom
-      // Only adjust k-ring radius to show more/fewer hexagons based on viewport
-      const int resolution = _fixedResolution;
+      // Use fixed resolution - hexagons maintain same size regardless of zoom
+      final int resolution = _fixedResolution;
 
-      // Calculate k-ring radius based on zoom to cover visible viewport
-      // Aligned with GeographicScope zoom levels from h3_config.dart:
-      // - ZONE: zoom 15.0 → neighborhood view
-      // - CITY: zoom 12.0 → district view
-      // - ALL: zoom 10.0 → metro view
-      //
+      // Determine current scope based on zoom level
+      final currentScope = _currentScope;
+
+      // Calculate k-ring radius based on scope
       // k-ring formula: hexes = 1 + 3*k*(k+1)
-      // Gap designed for clear visual differentiation between scopes
       int kRing;
-      if (zoom >= 14) {
-        kRing = 5; // ZONE view: ~91 hexes (neighborhood)
-      } else if (zoom >= 12) {
-        kRing = 10; // CITY view: ~331 hexes (district)
-      } else if (zoom >= 10) {
-        kRing = 35; // ALL view: ~3,711 hexes (metro area) - 10x CITY gap
-      } else if (zoom >= 8) {
-        kRing = 50; // Very zoomed out: ~7,651 hexes
+      if (currentScope == GeographicScope.zone) {
+        kRing = 5; // ZONE view: ~91 hexes (neighborhood) - no scope limit
+      } else if (currentScope == GeographicScope.city) {
+        kRing = 10; // CITY view: ~331 hexes (district) - City scope limit
       } else {
-        kRing = 70; // Maximum coverage: ~14,911 hexes
+        kRing = 35; // ALL view: ~3,781 hexes (metro area) - All scope limit
       }
 
-      // Safely extract coordinates
-      final lat = center.coordinates.lat;
-      final lng = center.coordinates.lng;
-      final centerLatLng = latlong.LatLng(lat.toDouble(), lng.toDouble());
+      // Determine center for hex generation:
+      // - ZONE view: use camera center (panning shows different hexes)
+      // - CITY/ALL views: use HOME HEX center (fixed scope boundary)
+      latlong.LatLng hexGenerationCenter;
+
+      if (currentScope == GeographicScope.zone) {
+        // ZONE: follow camera, no scope limit
+        final lat = center.coordinates.lat;
+        final lng = center.coordinates.lng;
+        hexGenerationCenter = latlong.LatLng(lat.toDouble(), lng.toDouble());
+      } else {
+        // CITY/ALL: use home hex center for consistent scope boundary
+        final homeHex = PrefetchService().homeHex;
+        if (homeHex != null) {
+          hexGenerationCenter = HexService().getHexCenter(homeHex);
+        } else {
+          // Fallback to camera center if no home hex
+          final lat = center.coordinates.lat;
+          final lng = center.coordinates.lng;
+          hexGenerationCenter = latlong.LatLng(lat.toDouble(), lng.toDouble());
+        }
+      }
 
       final hexIds = HexService().getHexagonsInArea(
-        centerLatLng,
+        hexGenerationCenter,
         resolution,
         kRing,
       );
@@ -621,22 +679,24 @@ class _HexagonMapState extends State<HexagonMap> {
   }
 
   @override
-  Future<void> dispose() async {
+  void dispose() {
     _debounceTimer?.cancel();
     _locationSubscription?.cancel();
     _hexProvider.removeListener(_onHexDataChanged);
-    // _polygonManager = null; // Removed
     _labelManager = null;
     _polylineManager = null;
 
-    // Clean up GeoJSON source and layer
-    if (_mapboxMap != null) {
-      try {
-        await _mapboxMap!.style.removeStyleLayer(_hexLayerId);
-        await _mapboxMap!.style.removeStyleSource(_hexSourceId);
-      } catch (e) {
-        debugPrint('Error cleaning up hex layer/source: $e');
-      }
+    // Clean up GeoJSON source and layer (fire and forget - don't block dispose)
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap != null) {
+      Future.microtask(() async {
+        try {
+          await mapboxMap.style.removeStyleLayer(_hexLayerId);
+          await mapboxMap.style.removeStyleSource(_hexSourceId);
+        } catch (e) {
+          debugPrint('Error cleaning up hex layer/source: $e');
+        }
+      });
     }
 
     _mapboxMap = null;

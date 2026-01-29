@@ -37,6 +37,8 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
 
+  bool _isCompleted = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,15 +46,24 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        HapticFeedback.heavyImpact();
-        widget.onComplete();
-        // Reset after completion if needed, or keep it filled until parent rebuilds
-        // Usually, the action (like navigation or state change) will rebuild this widget
-        // or unmount it. If not, we might want to reset.
-        // For now, let's auto-reset after a small delay to show completion
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted) _controller.reset();
-        });
+        debugPrint(
+          '>>> EnergyHoldButton: Animation COMPLETED, _isCompleted=$_isCompleted',
+        );
+        if (!_isCompleted) {
+          // Trigger rebuild to lock visual state
+          setState(() {
+            _isCompleted = true;
+          });
+          debugPrint(
+            '>>> EnergyHoldButton: Set _isCompleted=true, calling onComplete',
+          );
+          HapticFeedback.heavyImpact();
+          widget.onComplete();
+          // Button stays filled (locked) to prevent double-trigger.
+          // Parent widget is expected to replace this button or navigate away.
+        } else {
+          debugPrint('>>> EnergyHoldButton: BLOCKED (already completed)');
+        }
       }
     });
   }
@@ -64,6 +75,14 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
   }
 
   void _handleTapDown(TapDownDetails details) {
+    debugPrint(
+      '>>> EnergyHoldButton._handleTapDown: _isCompleted=$_isCompleted',
+    );
+    if (_isCompleted) {
+      debugPrint('>>> EnergyHoldButton._handleTapDown: BLOCKED (completed)');
+      return;
+    }
+
     if (widget.isHoldRequired) {
       _controller.forward();
       HapticFeedback.selectionClick();
@@ -74,6 +93,8 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
   }
 
   void _handleTapUp(TapUpDetails details) {
+    if (_isCompleted) return;
+
     if (widget.isHoldRequired) {
       if (!_controller.isCompleted) {
         _controller.reverse();
@@ -86,101 +107,108 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
   }
 
   void _handleTapCancel() {
+    if (_isCompleted) return;
     _controller.reverse();
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      child: Container(
-        height: widget.height,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: widget.baseColor,
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          border: Border.all(
-            color: widget.fillColor.withOpacity(0.3),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+    // When completed, wrap in IgnorePointer to block ALL touch events
+    return IgnorePointer(
+      ignoring: _isCompleted,
+      child: GestureDetector(
+        onTapDown: _handleTapDown,
+        onTapUp: _handleTapUp,
+        onTapCancel: _handleTapCancel,
+        child: Container(
+          height: widget.height,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: widget.baseColor,
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            border: Border.all(
+              color: widget.fillColor.withOpacity(0.3),
+              width: 1,
             ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            // Background Fill Animation
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return FractionallySizedBox(
-                  widthFactor: _controller.value,
-                  alignment: Alignment.centerLeft,
-                  child: Container(color: widget.fillColor.withOpacity(0.8)),
-                );
-              },
-            ),
-
-            // Content
-            Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    widget.icon,
-                    color: widget.iconColor,
-                    size: 32,
-                  ), // Larger icon
-                  if (widget.label != null) ...[
-                    const SizedBox(width: 12),
-                    Text(
-                      widget.label!,
-                      style: GoogleFonts.outfit(
-                        color: widget.iconColor,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-                  ],
-                ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-
-            // Hold Hint (Only visible when not holding and required)
-            if (widget.isHoldRequired)
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              // Background Fill Animation
               AnimatedBuilder(
                 animation: _controller,
                 builder: (context, child) {
-                  return Opacity(
-                    opacity: (1.0 - _controller.value * 2).clamp(0.0, 1.0),
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: 12.0,
-                        ), // More padding
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: widget.iconColor.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
+                  // Force full width if completed to visually lock it
+                  final value = _isCompleted ? 1.0 : _controller.value;
+                  return FractionallySizedBox(
+                    widthFactor: value,
+                    alignment: Alignment.centerLeft,
+                    child: Container(color: widget.fillColor.withOpacity(0.8)),
                   );
                 },
               ),
-          ],
+
+              // Content
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      widget.icon,
+                      color: widget.iconColor,
+                      size: 32,
+                    ), // Larger icon
+                    if (widget.label != null) ...[
+                      const SizedBox(width: 12),
+                      Text(
+                        widget.label!,
+                        style: GoogleFonts.outfit(
+                          color: widget.iconColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2.0,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // Hold Hint (Only visible when not holding and required)
+              if (widget.isHoldRequired)
+                AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: (1.0 - _controller.value * 2).clamp(0.0, 1.0),
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: 12.0,
+                          ), // More padding
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: widget.iconColor.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );

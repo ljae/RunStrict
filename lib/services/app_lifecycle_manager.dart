@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
+import 'remote_config_service.dart';
 
 /// Manages app lifecycle events and triggers data refresh on resume.
 ///
@@ -16,8 +17,10 @@ class AppLifecycleManager with WidgetsBindingObserver {
   factory AppLifecycleManager() => _instance;
   AppLifecycleManager._internal();
 
-  /// Minimum interval between refreshes (30 seconds)
-  static const Duration _throttleInterval = Duration(seconds: 30);
+  /// Minimum interval between refreshes (from RemoteConfigService)
+  static Duration get _throttleInterval => Duration(
+    seconds: RemoteConfigService().config.timingConfig.refreshThrottleSeconds,
+  );
 
   DateTime? _lastRefreshTime;
   bool _isInitialized = false;

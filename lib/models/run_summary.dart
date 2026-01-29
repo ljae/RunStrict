@@ -25,6 +25,10 @@ class RunSummary {
   /// Default to 1 for solo runners or new users/crews
   final int yesterdayCrewCount;
 
+  /// Coefficient of Variation (null for runs < 1km)
+  /// Measures pace consistency: lower = more stable
+  final double? cv;
+
   const RunSummary({
     required this.id,
     required this.endTime,
@@ -35,6 +39,7 @@ class RunSummary {
     required this.teamAtRun,
     this.hexPath = const [],
     this.yesterdayCrewCount = 1,
+    this.cv,
   });
 
   Duration get duration => Duration(seconds: durationSeconds);
@@ -45,6 +50,13 @@ class RunSummary {
 
   /// Calculate flip points (for display only - server validates)
   int get flipPoints => hexesColored * yesterdayCrewCount;
+
+  /// Stability score (100 - CV, clamped 0-100)
+  /// Higher = more consistent pace
+  int? get stabilityScore {
+    if (cv == null) return null;
+    return (100 - cv!).round().clamp(0, 100);
+  }
 
   /// For local SQLite storage (milliseconds epoch)
   /// Note: Must match LocalStorage table schema columns
@@ -61,6 +73,7 @@ class RunSummary {
     'hexesColored': hexesColored,
     'teamAtRun': teamAtRun.name,
     'isPurpleRunner': teamAtRun == Team.purple ? 1 : 0,
+    'cv': cv,
   };
 
   factory RunSummary.fromMap(Map<String, dynamic> map) => RunSummary(
@@ -75,6 +88,7 @@ class RunSummary {
     teamAtRun: Team.values.byName(map['teamAtRun'] as String),
     hexPath: const [], // Not stored in SQLite (only for server sync)
     yesterdayCrewCount: 1, // Not stored in SQLite (only for server sync)
+    cv: (map['cv'] as num?)?.toDouble(),
   );
 
   /// From Supabase row (snake_case)
@@ -88,6 +102,7 @@ class RunSummary {
     teamAtRun: Team.values.byName(row['team_at_run'] as String),
     hexPath: List<String>.from(row['hex_path'] as List? ?? []),
     yesterdayCrewCount: (row['yesterday_crew_count'] as num?)?.toInt() ?? 1,
+    cv: (row['cv'] as num?)?.toDouble(),
   );
 
   /// To Supabase row (snake_case) for finalize_run RPC
@@ -100,5 +115,6 @@ class RunSummary {
     'team_at_run': teamAtRun.name,
     'hex_path': hexPath,
     'yesterday_crew_count': yesterdayCrewCount,
+    'cv': cv,
   };
 }

@@ -328,7 +328,10 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                     Expanded(
                       child: _GlassCard(
                         height: 74,
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -359,7 +362,10 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
                     Expanded(
                       child: _GlassCard(
                         height: 74,
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,

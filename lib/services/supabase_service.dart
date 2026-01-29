@@ -69,6 +69,7 @@ class SupabaseService {
         'p_duration_seconds': runSummary.durationSeconds,
         'p_hex_path': runSummary.hexPath,
         'p_yesterday_crew_count': runSummary.yesterdayCrewCount,
+        'p_cv': runSummary.cv,
       },
     );
     return result as Map<String, dynamic>;

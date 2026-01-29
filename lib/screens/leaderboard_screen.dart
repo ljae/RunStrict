@@ -231,9 +231,48 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     List<LeaderboardRunner> runners;
 
     if (_useMockData || entries.isEmpty) {
+      // Use mock data for development/testing
       runners = List<LeaderboardRunner>.from(_allRunners);
+
+      // Apply mock scope filtering
+      if (_teamFilter != 'ALL') {
+        final teamFilter = _teamFilter == 'RED'
+            ? Team.red
+            : _teamFilter == 'BLUE'
+            ? Team.blue
+            : Team.purple;
+        runners = runners.where((r) => r.team == teamFilter).toList();
+      }
+
+      switch (_scopeFilter) {
+        case GeographicScope.zone:
+          runners = runners.where((r) => r.zoneHexId != null).toList();
+          runners = runners.take(6).toList();
+          break;
+        case GeographicScope.city:
+          runners = runners.where((r) => r.cityHexId != null).toList();
+          runners = runners.take(10).toList();
+          break;
+        case GeographicScope.all:
+          break;
+      }
     } else {
-      runners = entries
+      // Use real data with home-hex-anchored scope filtering
+      final team = _teamFilter == 'ALL'
+          ? null
+          : _teamFilter == 'RED'
+          ? Team.red
+          : _teamFilter == 'BLUE'
+          ? Team.blue
+          : Team.purple;
+
+      // Use provider's scope+team filter for home-hex-anchored filtering
+      final filteredEntries = leaderboardProvider.filterByTeamAndScope(
+        team,
+        _scopeFilter,
+      );
+
+      runners = filteredEntries
           .map(
             (e) => LeaderboardRunner(
               id: e.id,
@@ -248,28 +287,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             ),
           )
           .toList();
-    }
-
-    if (_teamFilter != 'ALL') {
-      final teamFilter = _teamFilter == 'RED'
-          ? Team.red
-          : _teamFilter == 'BLUE'
-          ? Team.blue
-          : Team.purple;
-      runners = runners.where((r) => r.team == teamFilter).toList();
-    }
-
-    switch (_scopeFilter) {
-      case GeographicScope.zone:
-        runners = runners.where((r) => r.zoneHexId != null).toList();
-        runners = runners.take(6).toList();
-        break;
-      case GeographicScope.city:
-        runners = runners.where((r) => r.cityHexId != null).toList();
-        runners = runners.take(10).toList();
-        break;
-      case GeographicScope.all:
-        break;
     }
 
     return runners;

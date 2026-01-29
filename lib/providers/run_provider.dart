@@ -40,6 +40,9 @@ class RunProvider with ChangeNotifier {
   String? _error;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
+  /// Flag to show stop button immediately while GPS initializes
+  bool _isStartingRun = false;
+
   /// Yesterday's crew count for multiplier (fetched on run start)
   int _yesterdayCrewCount = 1;
 
@@ -73,7 +76,11 @@ class RunProvider with ChangeNotifier {
   Map<String, dynamic>? get totalStats => _totalStats;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get isRunning => _activeRun != null && _activeRun!.isActive;
+
+  /// Returns true if run is active OR if we're in the process of starting
+  /// This allows the UI to show stop button immediately while GPS initializes
+  bool get isRunning =>
+      _isStartingRun || (_activeRun != null && _activeRun!.isActive);
 
   // Timer state
   Timer? _tickTimer;
@@ -176,27 +183,16 @@ class RunProvider with ChangeNotifier {
       throw StateError('A run is already in progress');
     }
 
-    _setLoading(true);
     _setError(null);
 
-    try {
-      // Fetch crew multiplier if crewId provided and not already set
-      if (crewId != null && _yesterdayCrewCount == 1) {
-        try {
-          final multiplier = await _supabaseService.getYesterdayCrewCount(
-            crewId,
-          );
-          _yesterdayCrewCount = multiplier > 0 ? multiplier : 1;
-          debugPrint(
-            'RunProvider: Fetched crew multiplier: $_yesterdayCrewCount',
-          );
-        } catch (e) {
-          debugPrint('RunProvider: Failed to fetch multiplier, using 1 - $e');
-          _yesterdayCrewCount = 1;
-        }
-      }
+    // IMMEDIATELY show stop button - before any async work
+    _isStartingRun = true;
+    _duration = Duration.zero;
+    _startTimer();
+    notifyListeners();
 
-      // Request permissions and start location tracking
+    try {
+      // Now start GPS tracking (this may take a moment)
       await _locationService.startTracking();
 
       // Generate unique run ID
@@ -219,15 +215,15 @@ class RunProvider with ChangeNotifier {
         team: team,
       );
 
-      // Start timer
-      _duration = Duration.zero;
-      _startTimer();
-
-      // Create initial run session
+      // Create initial run session - now fully running
       _activeRun = _runTracker.currentRun;
-
-      // Notify listeners immediately so UI can respond
+      _isStartingRun = false; // No longer "starting", now actually running
       notifyListeners();
+
+      // Fetch crew multiplier in BACKGROUND (non-blocking)
+      if (crewId != null && _yesterdayCrewCount == 1) {
+        _fetchCrewMultiplierInBackground(crewId);
+      }
 
       // Listen to location updates for UI sync
       _locationSubscription = _locationService.locationStream.listen((point) {
@@ -244,15 +240,36 @@ class RunProvider with ChangeNotifier {
         notifyListeners();
       });
     } on LocationPermissionException {
+      _isStartingRun = false;
+      _stopTimer();
       await _locationService.stopTracking();
+      notifyListeners();
       rethrow;
     } catch (e) {
+      _isStartingRun = false;
+      _stopTimer();
       _setError('Failed to start run: $e');
       await _locationService.stopTracking();
+      notifyListeners();
       rethrow;
-    } finally {
-      _setLoading(false);
     }
+  }
+
+  /// Fetches crew multiplier in background without blocking UI
+  void _fetchCrewMultiplierInBackground(String crewId) {
+    _supabaseService
+        .getYesterdayCrewCount(crewId)
+        .then((multiplier) {
+          _yesterdayCrewCount = multiplier > 0 ? multiplier : 1;
+          debugPrint(
+            'RunProvider: Fetched crew multiplier: $_yesterdayCrewCount',
+          );
+          notifyListeners(); // Update UI with multiplier
+        })
+        .catchError((e) {
+          debugPrint('RunProvider: Failed to fetch multiplier, using 1 - $e');
+          _yesterdayCrewCount = 1;
+        });
   }
 
   bool _handleHexCapture(String hexId, Team runnerTeam) {
@@ -309,17 +326,19 @@ class RunProvider with ChangeNotifier {
       _locationSubscription = null;
 
       if (result != null) {
-        final completedRun = result.session;
+        // Set CV on the completed run (calculated at stop time)
+        final completedRun = result.session.copyWith(cv: result.cv);
         final capturedHexIds = result.capturedHexIds;
 
         debugPrint(
           'RunProvider: Run completed - '
           'distance=${completedRun.distanceKm.toStringAsFixed(2)}km, '
           'flips=${completedRun.hexesColored}, '
+          'stability=${completedRun.stabilityScore ?? "N/A"}, '
           'hexIds for sync: ${capturedHexIds.length}',
         );
 
-        // Save to local database
+        // Save to local database (includes CV for stability score)
         await _storageService.saveRun(completedRun);
 
         // === THE FINAL SYNC ===

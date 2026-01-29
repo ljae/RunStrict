@@ -12,15 +12,20 @@ import '../services/storage_service.dart';
 /// - RunSummary in 'runs' table (lightweight, for history)
 /// - CompressedRoute in 'routes' table (cold storage, lazy loaded)
 /// - LapModel in 'laps' table (per-km lap data for CV calculation)
+/// - SyncQueue in 'sync_queue' table (failed syncs for offline retry)
 ///
 /// Note: daily_flips table removed - no daily flip limit per spec.
 class LocalStorage implements StorageService {
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 6; // Bumped for CV + laps table
+  static const int _databaseVersion = 8; // Bumped for sync_queue table
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
   static const String _tableLaps = 'laps';
+  static const String _tableHexCache = 'hex_cache';
+  static const String _tableLeaderboardCache = 'leaderboard_cache';
+  static const String _tablePrefetchMeta = 'prefetch_meta';
+  static const String _tableSyncQueue = 'sync_queue';
 
   Database? _database;
 
@@ -89,6 +94,55 @@ class LocalStorage implements StorageService {
     // Index for faster lap queries
     await db.execute('''
       CREATE INDEX idx_laps_runId ON $_tableLaps(runId)
+    ''');
+
+    // Hex cache table (prefetched hex colors)
+    await db.execute('''
+      CREATE TABLE $_tableHexCache (
+        hex_id TEXT PRIMARY KEY,
+        last_runner_team TEXT,
+        last_updated INTEGER
+      )
+    ''');
+
+    // Leaderboard cache table (prefetched rankings)
+    await db.execute('''
+      CREATE TABLE $_tableLeaderboardCache (
+        user_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        avatar TEXT NOT NULL,
+        team TEXT NOT NULL,
+        flip_points INTEGER NOT NULL DEFAULT 0,
+        total_distance_km REAL NOT NULL DEFAULT 0,
+        stability_score INTEGER,
+        home_hex TEXT
+      )
+    ''');
+
+    // Prefetch metadata table (home hex and timestamps)
+    await db.execute('''
+      CREATE TABLE $_tablePrefetchMeta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Sync queue table (for offline retry of failed "Final Sync" operations)
+    await db.execute('''
+      CREATE TABLE $_tableSyncQueue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL UNIQUE,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT
+      )
+    ''');
+
+    // Index for efficient retry queries
+    await db.execute('''
+      CREATE INDEX idx_sync_queue_created ON $_tableSyncQueue(created_at ASC)
     ''');
   }
 
@@ -160,6 +214,60 @@ class LocalStorage implements StorageService {
         ''');
         await db.execute('''
           CREATE INDEX IF NOT EXISTS idx_laps_runId ON $_tableLaps(runId)
+        ''');
+      } catch (e) {
+        // Table may already exist
+      }
+    }
+    if (oldVersion < 7) {
+      // Migrate from v6 to v7: add prefetch cache tables
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS $_tableHexCache (
+            hex_id TEXT PRIMARY KEY,
+            last_runner_team TEXT,
+            last_updated INTEGER
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS $_tableLeaderboardCache (
+            user_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            avatar TEXT NOT NULL,
+            team TEXT NOT NULL,
+            flip_points INTEGER NOT NULL DEFAULT 0,
+            total_distance_km REAL NOT NULL DEFAULT 0,
+            stability_score INTEGER,
+            home_hex TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS $_tablePrefetchMeta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        // Tables may already exist
+      }
+    }
+    if (oldVersion < 8) {
+      // Migrate from v7 to v8: add sync_queue table for offline retry
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS $_tableSyncQueue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL UNIQUE,
+            payload TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_sync_queue_created 
+          ON $_tableSyncQueue(created_at ASC)
         ''');
       } catch (e) {
         // Table may already exist
@@ -454,5 +562,233 @@ class LocalStorage implements StorageService {
       'totalHexes': result.first['totalHexes'] as int,
       'totalDuration': result.first['totalDuration'] as int,
     };
+  }
+
+  // ============ PREFETCH CACHE METHODS ============
+
+  /// Save cached hexes (bulk insert/replace)
+  Future<void> saveHexCache(List<Map<String, dynamic>> hexes) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.transaction((txn) async {
+      // Clear existing cache
+      await txn.delete(_tableHexCache);
+
+      // Insert new hexes
+      for (final hex in hexes) {
+        await txn.insert(
+          _tableHexCache,
+          hex,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  /// Get all cached hexes
+  Future<List<Map<String, dynamic>>> getHexCache() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    return await _database!.query(_tableHexCache);
+  }
+
+  /// Update a single hex in cache
+  Future<void> updateCachedHex(Map<String, dynamic> hex) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.insert(
+      _tableHexCache,
+      hex,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Save cached leaderboard entries (bulk insert/replace)
+  Future<void> saveLeaderboardCache(List<Map<String, dynamic>> entries) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.transaction((txn) async {
+      // Clear existing cache
+      await txn.delete(_tableLeaderboardCache);
+
+      // Insert new entries
+      for (final entry in entries) {
+        await txn.insert(
+          _tableLeaderboardCache,
+          entry,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  /// Get all cached leaderboard entries
+  Future<List<Map<String, dynamic>>> getLeaderboardCache() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    return await _database!.query(
+      _tableLeaderboardCache,
+      orderBy: 'flip_points DESC',
+    );
+  }
+
+  /// Save prefetch metadata (key-value)
+  Future<void> savePrefetchMeta(String key, String value) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.insert(_tablePrefetchMeta, {
+      'key': key,
+      'value': value,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Get prefetch metadata by key
+  Future<String?> getPrefetchMeta(String key) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final result = await _database!.query(
+      _tablePrefetchMeta,
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+
+    if (result.isEmpty) return null;
+    return result.first['value'] as String?;
+  }
+
+  /// Get home hex from prefetch metadata
+  Future<String?> getHomeHex() async {
+    return await getPrefetchMeta('home_hex');
+  }
+
+  /// Save home hex to prefetch metadata
+  Future<void> saveHomeHex(String homeHex) async {
+    await savePrefetchMeta('home_hex', homeHex);
+  }
+
+  /// Clear all prefetch cache data
+  Future<void> clearPrefetchCache() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.transaction((txn) async {
+      await txn.delete(_tableHexCache);
+      await txn.delete(_tableLeaderboardCache);
+      // Note: Don't clear prefetch_meta (home_hex should persist)
+    });
+  }
+
+  // ============ SYNC QUEUE METHODS (Offline Retry) ============
+
+  /// Queue a failed sync operation for retry.
+  ///
+  /// [runId] - Unique run ID (prevents duplicate queue entries)
+  /// [payload] - JSON string of RunSummary data to sync
+  /// [error] - Optional error message from the failed attempt
+  Future<void> queueSync(String runId, String payload, {String? error}) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.insert(_tableSyncQueue, {
+      'run_id': runId,
+      'payload': payload,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'retry_count': 0,
+      'last_error': error,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Get all pending sync operations (oldest first).
+  ///
+  /// Returns list of maps with: run_id, payload, created_at, retry_count, last_error
+  Future<List<Map<String, dynamic>>> getPendingSyncs() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    return await _database!.query(_tableSyncQueue, orderBy: 'created_at ASC');
+  }
+
+  /// Get count of pending sync operations.
+  Future<int> getPendingSyncCount() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final result = await _database!.rawQuery(
+      'SELECT COUNT(*) as count FROM $_tableSyncQueue',
+    );
+    return result.first['count'] as int? ?? 0;
+  }
+
+  /// Update retry count and error for a sync operation.
+  Future<void> updateSyncRetry(
+    String runId,
+    int retryCount,
+    String? error,
+  ) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.update(
+      _tableSyncQueue,
+      {'retry_count': retryCount, 'last_error': error},
+      where: 'run_id = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  /// Remove a sync operation from the queue (after successful sync).
+  Future<void> removeSyncFromQueue(String runId) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.delete(
+      _tableSyncQueue,
+      where: 'run_id = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  /// Remove old sync entries that have exceeded max retries.
+  ///
+  /// [maxRetries] - Maximum retry attempts before discarding (default: 5)
+  /// [maxAge] - Maximum age in days before discarding (default: 7)
+  Future<int> cleanupSyncQueue({int maxRetries = 5, int maxAge = 7}) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final cutoffTime = DateTime.now()
+        .subtract(Duration(days: maxAge))
+        .millisecondsSinceEpoch;
+
+    final deleted = await _database!.delete(
+      _tableSyncQueue,
+      where: 'retry_count >= ? OR created_at < ?',
+      whereArgs: [maxRetries, cutoffTime],
+    );
+
+    return deleted;
   }
 }

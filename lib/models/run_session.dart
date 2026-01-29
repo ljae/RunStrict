@@ -76,6 +76,7 @@ class RunSession {
       teamAtRun: teamAtRun,
       hexPath: List.from(hexesPassed),
       yesterdayCrewCount: yesterdayCrewCount,
+      cv: cv,
     );
   }
 

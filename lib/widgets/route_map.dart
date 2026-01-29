@@ -184,18 +184,21 @@ class _RouteMapState extends State<RouteMap> with TickerProviderStateMixin {
             // Glowing location marker overlay
             // Position is calculated from geo coordinates using pixelForCoordinate
             // This ensures marker aligns perfectly with the route line endpoint
+            // Show marker immediately using _currentUserLocation if route is empty
             if (_isMapReady &&
                 widget.showLiveLocation &&
-                widget.route.isNotEmpty)
+                (widget.route.isNotEmpty || _currentUserLocation != null))
               _NavigationMarkerOverlay(
                 key: ValueKey(
                   'nav_marker_${widget.routeVersion}_$_cameraChangeCounter',
                 ),
                 mapboxMap: _mapboxMap!,
-                userLocation: latlong.LatLng(
-                  widget.route.last.latitude,
-                  widget.route.last.longitude,
-                ),
+                userLocation: widget.route.isNotEmpty
+                    ? latlong.LatLng(
+                        widget.route.last.latitude,
+                        widget.route.last.longitude,
+                      )
+                    : _currentUserLocation!,
                 teamColor: widget.teamColor ?? NeonTheme.neonCyan,
                 navigationMode: widget.navigationMode,
                 mapSize: mapSize, // Use actual map widget size
@@ -464,6 +467,15 @@ class _RouteMapState extends State<RouteMap> with TickerProviderStateMixin {
     // Handle running state changes
     if (oldWidget.isRunning && !widget.isRunning) {
       _resetHexPulse();
+    }
+
+    // Immediately show location marker when run starts (before first GPS point)
+    // This eliminates the lag between pressing start and seeing the glowing ball
+    if (widget.showLiveLocation &&
+        widget.route.isEmpty &&
+        _currentUserLocation == null &&
+        _isMapReady) {
+      _initializeWithCurrentLocation();
     }
 
     // Handle navigation mode toggle

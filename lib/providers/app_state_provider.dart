@@ -259,18 +259,39 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
-  /// Update user's crew membership
+  /// Update user's crew membership with avatar preservation.
   ///
   /// Pass [crewId] to set the crew, or null to leave the crew.
+  /// When joining: Saves current avatar to originalAvatar.
+  /// When leaving: Restores avatar from originalAvatar if available.
   void updateCrewId(String? crewId) {
-    if (_currentUser != null) {
+    if (_currentUser == null) return;
+
+    if (crewId != null) {
+      // JOINING CREW: Save current avatar to originalAvatar
       _currentUser = _currentUser!.copyWith(
         crewId: crewId,
-        clearCrewId: crewId == null,
+        originalAvatar: _currentUser!.avatar,
       );
-      _saveLocalUser(); // Persist change
-      notifyListeners();
+      debugPrint(
+        'AppStateProvider: Joined crew, saved originalAvatar=${_currentUser!.originalAvatar}',
+      );
+    } else {
+      // LEAVING CREW: Restore avatar from originalAvatar if available
+      final restoredAvatar =
+          _currentUser!.originalAvatar ?? _currentUser!.avatar;
+      _currentUser = _currentUser!.copyWith(
+        clearCrewId: true,
+        avatar: restoredAvatar,
+        clearOriginalAvatar: true,
+      );
+      debugPrint(
+        'AppStateProvider: Left crew, restored avatar=$restoredAvatar',
+      );
     }
+
+    _saveLocalUser(); // Persist change
+    notifyListeners();
   }
 
   /// Join Purple Crew (The Traitor's Gate)

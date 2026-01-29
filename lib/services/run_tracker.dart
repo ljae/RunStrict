@@ -5,10 +5,13 @@ import 'package:latlong2/latlong.dart';
 import '../models/location_point.dart';
 import '../models/run_session.dart';
 import '../models/team.dart';
+import '../models/lap_model.dart';
 import '../services/gps_validator.dart';
 import '../services/hex_service.dart';
 import '../services/running_score_service.dart';
 import '../services/accelerometer_service.dart';
+import '../services/lap_service.dart';
+import 'remote_config_service.dart';
 
 typedef HexCaptureCallback = bool Function(String hexId, Team runnerTeam);
 
@@ -20,8 +23,17 @@ typedef TierChangeCallback =
 class RunStopResult {
   final RunSession session;
   final List<String> capturedHexIds;
+  final double? cv;
+  final int? stabilityScore;
+  final List<LapModel> laps;
 
-  const RunStopResult({required this.session, required this.capturedHexIds});
+  const RunStopResult({
+    required this.session,
+    required this.capturedHexIds,
+    this.cv,
+    this.stabilityScore,
+    required this.laps,
+  });
 }
 
 /// Service responsible for tracking runs, calculating distance,
@@ -31,9 +43,11 @@ class RunStopResult {
 class RunTracker {
   // Must match HexagonMap._fixedResolution (9) so captured hex IDs
   // correspond to rendered hex IDs on the map.
-  static const int _hexResolution = 9;
+  static int get _hexResolution =>
+      RemoteConfigService().configSnapshot.hexConfig.baseResolution;
   // Distance required to trigger a capture check within a hex
-  static const double _captureCheckDistanceMeters = 20.0;
+  static double get _captureCheckDistanceMeters =>
+      RemoteConfigService().configSnapshot.hexConfig.captureCheckDistanceMeters;
 
   RunSession? _currentRun;
   LocationPoint? _lastValidPoint;
@@ -57,6 +71,15 @@ class RunTracker {
   /// List of hex IDs captured during this run (for batch upload at "The Final Sync")
   final List<String> _capturedHexIds = [];
 
+  /// List of completed laps (1km each) for CV calculation
+  final List<LapModel> _completedLaps = [];
+
+  /// Distance at which current lap started
+  double _currentLapStartDistance = 0;
+
+  /// Timestamp when current lap started (milliseconds)
+  int? _currentLapStartTimestampMs;
+
   /// Get the current active run session
   RunSession? get currentRun => _currentRun;
 
@@ -65,6 +88,9 @@ class RunTracker {
 
   /// Get the list of captured hex IDs (for batch upload)
   List<String> get capturedHexIds => List.unmodifiable(_capturedHexIds);
+
+  /// Get list of completed laps (immutable)
+  List<LapModel> get completedLaps => List.unmodifiable(_completedLaps);
 
   /// Get current 10-second moving average pace (min/km)
   double get movingAvgPaceMinPerKm => _gpsValidator.movingAvgPaceMinPerKm;
@@ -115,6 +141,9 @@ class RunTracker {
     _maxImpactTierIndex = 0;
     _gpsValidator.reset();
     _capturedHexIds.clear();
+    _completedLaps.clear();
+    _currentLapStartDistance = 0;
+    _currentLapStartTimestampMs = null;
 
     // Start accelerometer for anti-spoofing
     _accelerometerService.startListening();
@@ -281,6 +310,12 @@ class RunTracker {
     _currentRun!.addPoint(point);
     _currentRun!.currentHexId = currentHexId;
 
+    // LAP TRACKING: Check if we've crossed a 1km boundary
+    _checkLapCompletion(
+      newTotalDistance,
+      point.timestamp.millisecondsSinceEpoch,
+    );
+
     _lastValidPoint = point;
   }
 
@@ -308,6 +343,49 @@ class RunTracker {
     return degrees * pi / 180;
   }
 
+  /// Check if a lap (1km) has been completed and record it
+  void _checkLapCompletion(
+    double currentTotalDistance,
+    int currentTimestampMs,
+  ) {
+    // Initialize lap start time on first call
+    if (_currentLapStartTimestampMs == null) {
+      _currentLapStartTimestampMs = currentTimestampMs;
+      _currentLapStartDistance = 0;
+      return;
+    }
+
+    // Check if we've completed 1km since lap start
+    final distanceInLap = currentTotalDistance - _currentLapStartDistance;
+
+    if (distanceInLap >= 1000.0) {
+      // Calculate lap duration
+      final lapDurationMs = currentTimestampMs - _currentLapStartTimestampMs!;
+      final lapDurationSeconds = lapDurationMs / 1000.0;
+
+      // Create lap record
+      final lap = LapModel(
+        lapNumber: _completedLaps.length + 1,
+        distanceMeters: 1000.0, // Fixed at exactly 1km per spec
+        durationSeconds: lapDurationSeconds,
+        startTimestampMs: _currentLapStartTimestampMs!,
+        endTimestampMs: currentTimestampMs,
+      );
+
+      _completedLaps.add(lap);
+
+      debugPrint(
+        'LAP ${lap.lapNumber} COMPLETED: '
+        'pace=${lap.avgPaceSecPerKm.toStringAsFixed(1)} sec/km, '
+        'duration=${lapDurationSeconds.toStringAsFixed(1)}s',
+      );
+
+      // Reset for next lap - start from current position
+      _currentLapStartDistance = currentTotalDistance;
+      _currentLapStartTimestampMs = currentTimestampMs;
+    }
+  }
+
   /// Stop the current run session and return data for "The Final Sync"
   ///
   /// Returns [RunStopResult] containing:
@@ -323,6 +401,17 @@ class RunTracker {
     final completedRun = _currentRun!;
     final hexIds = List<String>.from(_capturedHexIds);
 
+    // Calculate CV from completed laps
+    final laps = List<LapModel>.from(_completedLaps);
+    final cv = LapService.calculateCV(laps);
+    final stabilityScore = LapService.calculateStabilityScore(cv);
+
+    debugPrint(
+      'Run CV: ${cv?.toStringAsFixed(2) ?? "N/A"}, '
+      'Stability: ${stabilityScore ?? "N/A"}, '
+      'Laps: ${laps.length}',
+    );
+
     debugPrint(
       'Run stopped. Total flips: ${completedRun.hexesColored}, '
       'Hex IDs for Final Sync: ${hexIds.length}',
@@ -337,11 +426,20 @@ class RunTracker {
     _maxImpactTierIndex = 0;
     _gpsValidator.reset();
     _capturedHexIds.clear();
+    _completedLaps.clear();
+    _currentLapStartDistance = 0;
+    _currentLapStartTimestampMs = null;
 
     // Stop accelerometer
     _accelerometerService.stopListening();
 
-    return RunStopResult(session: completedRun, capturedHexIds: hexIds);
+    return RunStopResult(
+      session: completedRun,
+      capturedHexIds: hexIds,
+      cv: cv,
+      stabilityScore: stabilityScore,
+      laps: laps,
+    );
   }
 
   /// Clean up resources

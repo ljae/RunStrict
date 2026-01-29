@@ -5,6 +5,7 @@ import '../providers/app_state_provider.dart';
 import '../models/team.dart';
 import '../services/season_service.dart';
 import '../widgets/stat_card.dart';
+import 'traitor_gate_screen.dart';
 
 /// Profile screen displaying user manifesto, avatar, team, and season stats.
 ///
@@ -131,10 +132,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(width: AppTheme.spacingL),
                       Expanded(
-                        child: _SeasonStatsSection(
-                          seasonPoints: user.seasonPoints,
-                          seasonService: _seasonService,
-                          teamColor: teamColor,
+                        child: Column(
+                          children: [
+                            _SeasonStatsSection(
+                              seasonPoints: user.seasonPoints,
+                              seasonService: _seasonService,
+                              teamColor: teamColor,
+                            ),
+                            // Traitor's Gate button (landscape)
+                            if (_seasonService.isPurpleUnlocked &&
+                                user.team != Team.purple) ...[
+                              const SizedBox(height: AppTheme.spacingL),
+                              _TraitorGateButton(),
+                            ],
+                          ],
                         ),
                       ),
                     ],
@@ -174,6 +185,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         seasonService: _seasonService,
                         teamColor: teamColor,
                       ),
+                      // Traitor's Gate button (only show after D-140, not already purple)
+                      if (_seasonService.isPurpleUnlocked &&
+                          user.team != Team.purple) ...[
+                        const SizedBox(height: AppTheme.spacingL),
+                        _TraitorGateButton(),
+                      ],
                     ],
                   ),
           ),
@@ -382,6 +399,50 @@ class _SeasonStatsSection extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Traitor's Gate entry button - navigates to defection screen.
+class _TraitorGateButton extends StatelessWidget {
+  const _TraitorGateButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TraitorGateScreen()),
+          );
+        },
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: AppTheme.chaosPurple.withOpacity(0.6),
+            width: 1.5,
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('💀', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: AppTheme.spacingS),
+            Text(
+              "TRAITOR'S GATE",
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: AppTheme.chaosPurple,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

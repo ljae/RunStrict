@@ -1,14 +1,18 @@
+import 'remote_config_service.dart';
+
 /// Service to manage the 280-day season cycle.
 ///
 /// The season runs for exactly 280 days (gestation period metaphor).
 /// On D-Day (day 0), all territories and scores are reset (The Void).
 /// Server timezone: GMT+2 (Israel Standard Time).
 class SeasonService {
-  /// Total duration of a season in days
-  static const int seasonDurationDays = 280;
+  /// Total duration of a season in days (read from RemoteConfigService)
+  static int get seasonDurationDays =>
+      RemoteConfigService().config.seasonConfig.durationDays;
 
-  /// Server timezone offset (GMT+2)
-  static const int serverTimezoneOffsetHours = 2;
+  /// Server timezone offset (GMT+2) (read from RemoteConfigService)
+  static int get serverTimezoneOffsetHours =>
+      RemoteConfigService().config.seasonConfig.serverTimezoneOffsetHours;
 
   /// Current season number (increments each season)
   final int seasonNumber;
@@ -29,12 +33,12 @@ class SeasonService {
       2026,
       1,
       1,
-    ).subtract(const Duration(hours: serverTimezoneOffsetHours));
+    ).subtract(Duration(hours: serverTimezoneOffsetHours));
   }
 
   /// The date when the season ends (D-Day).
   DateTime get seasonEndDate =>
-      seasonStartDate.add(const Duration(days: seasonDurationDays));
+      seasonStartDate.add(Duration(days: seasonDurationDays));
 
   /// Days remaining until D-Day (The Void).
   /// Returns 0 on D-Day, negative values after D-Day.
@@ -111,7 +115,7 @@ class SeasonService {
   /// Current server time in GMT+2 as DateTime.
   DateTime get serverTime {
     final utc = DateTime.now().toUtc();
-    return utc.add(const Duration(hours: serverTimezoneOffsetHours));
+    return utc.add(Duration(hours: serverTimezoneOffsetHours));
   }
 
   /// Server time displayed as countdown minutes until midnight (daily reset).

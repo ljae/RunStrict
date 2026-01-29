@@ -76,13 +76,14 @@ lib/
 │   └── supabase_config.dart     # Supabase URL & anon key
 ├── models/
 │   ├── team.dart                # Team enum (red/blue/purple)
-│   ├── user_model.dart          # User with seasonPoints
+│   ├── user_model.dart          # User with seasonPoints & CV aggregates
 │   ├── hex_model.dart           # Hex with lastRunnerTeam only
-│   ├── crew_model.dart          # Crew with maxMembers/leaderId
+│   ├── crew_model.dart          # Crew with maxMembers/leaderId (uses RemoteConfigService)
+│   ├── app_config.dart          # Server-configurable constants (Season, Crew, GPS, Scoring, Hex, Timing)
 │   ├── run_session.dart         # Active run session data
-│   ├── run_summary.dart         # Completed run (with hexPath)
+│   ├── run_summary.dart         # Completed run (with hexPath, cv)
+│   ├── lap_model.dart           # Per-km lap data for CV calculation
 │   ├── daily_running_stat.dart  # Daily stats (Warm data)
-
 │   ├── location_point.dart      # GPS point (active run)
 │   └── route_point.dart         # Compact route point (cold storage)
 ├── providers/
@@ -101,17 +102,23 @@ lib/
 │   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers
+│   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
+│   ├── config_cache_service.dart # Local JSON cache for remote config
+│   ├── prefetch_service.dart    # Home hex anchoring & scope data prefetch (3,781 hexes)
 │   ├── hex_service.dart         # H3 hex grid operations
-│   ├── location_service.dart    # GPS tracking
-│   ├── run_tracker.dart         # Run session & hex capture engine
-│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer)
+│   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
+│   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
+│   ├── lap_service.dart         # CV calculation from lap data
+│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer, uses RemoteConfigService)
+│   ├── accelerometer_service.dart # Accelerometer anti-spoofing (5s no-data warning)
 │   ├── storage_service.dart     # Storage interface (abstract)
 │   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
 │   ├── local_storage_service.dart # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 280-day season countdown
+│   ├── season_service.dart      # 280-day season countdown (uses RemoteConfigService)
 │   ├── crew_multiplier_service.dart # Yesterday's check-in multiplier (daily batch)
 │   ├── running_score_service.dart # Pace validation for capture
+│   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite implementation
@@ -376,6 +383,30 @@ bool get canCaptureHex => movingAvgPaceMinPerKm < 8.0;
 // GPS Polling: Fixed 0.5 Hz (every 2 seconds) for battery optimization
 ```
 
+### CV & Stability Score
+```dart
+// CV (Coefficient of Variation) measures pace consistency
+// Calculated from 1km lap paces using sample stdev (n-1 denominator)
+// CV = (stdev / mean) * 100
+// Lower CV = more consistent pace
+
+// LapService calculates CV at run completion
+static double? calculateCV(List<LapModel> laps) {
+  if (laps.isEmpty) return null;
+  if (laps.length == 1) return 0.0; // No variance with single lap
+  // ... sample stdev calculation
+}
+
+// Stability Score = 100 - CV (clamped 0-100, higher = better)
+static int? calculateStabilityScore(double? cv) {
+  if (cv == null) return null;
+  return (100 - cv).round().clamp(0, 100);
+}
+
+// Color coding on leaderboard:
+// Green: ≥80 (excellent), Yellow: 50-79 (good), Red: <50 (needs work)
+```
+
 ---
 
 ## Common Patterns
@@ -532,3 +563,108 @@ await mapboxMap.style.setStyleLayerProperty(
 - No flash: Source data swap is instantaneous
 - Data-driven: Per-feature colors read from GeoJSON properties
 - Performance: GPU-accelerated fill rendering
+
+---
+
+## Remote Configuration System
+
+All game constants (50+) are server-configurable via the `app_config` table in Supabase. This allows tuning without app updates.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    RemoteConfigService                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   Server    │→ │   Cache     │→ │   Defaults          │ │
+│  │ (Supabase)  │  │ (JSON file) │  │ (AppConfig.defaults)│ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│                  Fallback Chain: server → cache → defaults   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `lib/models/app_config.dart` | Typed config model with nested classes (SeasonConfig, CrewConfig, GpsConfig, ScoringConfig, HexConfig, TimingConfig) |
+| `lib/services/remote_config_service.dart` | Singleton service with `config`, `configSnapshot`, `freezeForRun()` |
+| `lib/services/config_cache_service.dart` | Local JSON caching for offline fallback |
+| `supabase/migrations/20260128_create_app_config.sql` | Database table with JSONB schema |
+
+### Usage Pattern
+
+Services access configuration via `RemoteConfigService()`:
+
+```dart
+// For values that should NOT change during a run (use configSnapshot)
+static double get maxSpeedMps =>
+    RemoteConfigService().configSnapshot.gpsConfig.maxSpeedMps;
+
+// For values that can change anytime (use config)
+static int get maxCacheSize =>
+    RemoteConfigService().config.hexConfig.maxCacheSize;
+```
+
+### Run Consistency
+
+During an active run, config is frozen to prevent mid-run changes:
+
+```dart
+// In RunTracker.startNewRun()
+RemoteConfigService().freezeForRun();
+
+// In RunTracker.stopRun()
+RemoteConfigService().unfreezeAfterRun();
+```
+
+### Configurable Constants (by Category)
+
+| Category | Examples |
+|----------|----------|
+| **Season** | `durationDays` (280), `serverTimezoneOffsetHours` (2) |
+| **Crew** | `maxMembersRegular` (12), `maxMembersPurple` (24) |
+| **GPS** | `maxSpeedMps` (6.94), `pollingRateHz` (0.5), `maxAccuracyMeters` (50) |
+| **Scoring** | `maxCapturePaceMinPerKm` (8.0), `minMovingAvgWindowSec` (20) |
+| **Hex** | `baseResolution` (9), `maxCacheSize` (4000) |
+| **Timing** | `refreshThrottleSeconds` (30), `accelerometerSamplingPeriodMs` (200) |
+
+---
+
+## Accelerometer Anti-Spoofing
+
+The `AccelerometerService` validates GPS movement against physical device motion.
+
+### Platform Behavior
+
+| Platform | Behavior |
+|----------|----------|
+| **Real device** | Accelerometer events validate movement |
+| **iOS Simulator** | No hardware → graceful fallback to GPS-only |
+
+### Diagnostics
+
+The service provides clear diagnostic logging:
+
+```
+// On start
+AccelerometerService: Started listening at 5Hz
+
+// If accelerometer works (real device)
+AccelerometerService: First event received - accelerometer active
+
+// If no events after 5 seconds (simulator)
+AccelerometerService: WARNING - No accelerometer events received after 5s.
+Likely running on iOS Simulator or device without accelerometer.
+GPS-only validation will be used (anti-spoofing disabled).
+
+// On stop
+AccelerometerService: Stopped listening (received 0 events)
+```
+
+### Graceful Fallback
+
+When no accelerometer data is available, GPS points are allowed:
+- iOS Simulator: No hardware accelerometer
+- Some Android devices: Sensor may not be available
+- Sensor errors: Gracefully continue with GPS-only validation

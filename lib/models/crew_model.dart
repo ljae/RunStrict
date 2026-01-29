@@ -1,4 +1,5 @@
 import 'team.dart';
+import '../services/remote_config_service.dart';
 
 class CrewModel {
   final String id;
@@ -20,7 +21,9 @@ class CrewModel {
   });
 
   bool get isPurple => team == Team.purple;
-  int get maxMembers => isPurple ? 24 : 12;
+  int get maxMembers => isPurple
+      ? RemoteConfigService().config.crewConfig.maxMembersPurple
+      : RemoteConfigService().config.crewConfig.maxMembersRegular;
   String get leaderId => memberIds.isNotEmpty ? memberIds[0] : '';
   int get memberCount => memberIds.length;
   bool get canAcceptMembers => memberIds.length < maxMembers;

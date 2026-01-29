@@ -60,6 +60,17 @@ class _RunningScreenState extends State<RunningScreen>
   }
 
   Future<void> _startRun() async {
+    // Prevent double-tap - ignore if already starting or running
+    final runProvider = context.read<RunProvider>();
+    debugPrint(
+      '>>> _startRun called, _isInitializing=$_isInitializing, isRunning=${runProvider.isRunning}',
+    );
+    if (_isInitializing || runProvider.isRunning) {
+      debugPrint('>>> _startRun BLOCKED - already initializing or running');
+      return;
+    }
+
+    debugPrint('>>> _startRun STARTING');
     setState(() {
       _isInitializing = true;
       _errorMessage = null;
@@ -70,23 +81,34 @@ class _RunningScreenState extends State<RunningScreen>
       final team = appState.userTeam ?? Team.blue;
       final crewId = appState.currentUser?.crewId;
 
-      await context.read<RunProvider>().startRun(team: team, crewId: crewId);
+      await runProvider.startRun(team: team, crewId: crewId);
 
-      // Run started - stay on RunningScreen
+      // DON'T reset _isInitializing here!
+      // There's a race condition where isRunning might be false briefly
+      // until the first GPS point arrives. Keep showing 'initializing'
+      // until isRunning becomes true (handled in _buildControls).
+      // _isInitializing will be reset in _stopRun when the run ends.
+      debugPrint(
+        '>>> _startRun COMPLETED, keeping _isInitializing=true until isRunning stabilizes',
+      );
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-      });
-    } finally {
-      setState(() {
-        _isInitializing = false;
-      });
+      // Only reset _isInitializing on ERROR - allows retry
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+        });
+      }
     }
   }
 
   Future<void> _stopRun() async {
     if (mounted) {
       await context.read<RunProvider>().stopRun();
+      // Reset _isInitializing for next run cycle
+      setState(() {
+        _isInitializing = false;
+      });
     }
   }
 
@@ -350,6 +372,11 @@ class _RunningScreenState extends State<RunningScreen>
   }
 
   Widget _buildSecondaryStats(RunProvider provider, Color teamColor) {
+    final appState = context.watch<AppStateProvider>();
+    final isInCrew = appState.currentUser?.crewId != null;
+    final multiplier = provider.crewMultiplier;
+    final showMultiplier = isInCrew && multiplier > 1;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -377,6 +404,22 @@ class _RunningScreenState extends State<RunningScreen>
               color: teamColor,
             ),
           ),
+          // Multiplier display (only show for crew members with bonus)
+          if (showMultiplier) ...[
+            Container(
+              width: 1,
+              height: 36,
+              color: Colors.white.withOpacity(0.1),
+            ),
+            Expanded(
+              child: _buildStatItem(
+                icon: Icons.groups,
+                value: '${multiplier}x',
+                label: '어제 크루',
+                color: Colors.amber,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -415,21 +458,60 @@ class _RunningScreenState extends State<RunningScreen>
   }
 
   Widget _buildControls(RunProvider provider, Color teamColor) {
-    if (_isInitializing) {
-      return Container(
-        width: 100,
-        height: 100,
-        decoration: BoxDecoration(
-          color: teamColor.withOpacity(0.2),
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: CircularProgressIndicator(color: teamColor, strokeWidth: 3),
+    // Determine state: running > initializing > ready
+    // PRIORITY: isRunning takes precedence to avoid race condition where
+    // _isInitializing is true but isRunning briefly false before GPS starts
+    final controlState = provider.isRunning
+        ? 'running'
+        : (_isInitializing ? 'initializing' : 'ready');
+
+    debugPrint(
+      '>>> _buildControls: state=$controlState, _isInitializing=$_isInitializing, isRunning=${provider.isRunning}',
+    );
+
+    return KeyedSubtree(
+      key: ValueKey('controls_$controlState'),
+      child: _buildControlsContent(provider, teamColor, controlState),
+    );
+  }
+
+  Widget _buildControlsContent(
+    RunProvider provider,
+    Color teamColor,
+    String state,
+  ) {
+    if (state == 'initializing') {
+      // Show filled button (locked state) with loading spinner
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          height: 80,
+          decoration: BoxDecoration(
+            color: teamColor,
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: [
+              BoxShadow(
+                color: teamColor.withOpacity(0.4),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: const Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 3,
+              ),
+            ),
+          ),
         ),
       );
     }
 
-    if (provider.isRunning) {
+    if (state == 'running') {
       // Running state: Full-width stop button
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -445,7 +527,7 @@ class _RunningScreenState extends State<RunningScreen>
       );
     }
 
-    // Ready state: Pulsing start button
+    // Ready state: Pulsing start button (hold 1.0s)
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {

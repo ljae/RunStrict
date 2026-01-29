@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/hex_model.dart';
 import '../models/team.dart';
 import '../services/hex_service.dart';
+import '../services/remote_config_service.dart';
 import '../utils/lru_cache.dart';
 
 enum HexUpdateResult { flipped, sameTeam, alreadyCapturedSession, error }
@@ -21,7 +22,8 @@ class HexDataProvider with ChangeNotifier {
   /// - CITY: ~331 hexes
   /// - ALL: ~3,781 hexes
   /// With ~100 bytes per hex, 4000 hexes ≈ 400KB memory
-  static const int maxCacheSize = 4000;
+  static int get maxCacheSize =>
+      RemoteConfigService().config.hexConfig.maxCacheSize;
 
   // LRU cache for memory efficiency
   final LruCache<String, HexModel> _hexCache = LruCache<String, HexModel>(

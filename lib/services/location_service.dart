@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/location_point.dart';
+import 'remote_config_service.dart';
 
 /// GPS Signal Quality
 enum GpsSignalQuality { none, poor, fair, good, excellent }
@@ -45,7 +46,8 @@ class LocationService {
 
   /// Polling rate in Hz (fixed: 0.5 = every 2 seconds)
   /// Fixed rate for battery optimization and consistent behavior.
-  static const double _fixedPollingRateHz = 0.5;
+  static double get _fixedPollingRateHz =>
+      RemoteConfigService().configSnapshot.gpsConfig.pollingRateHz;
   double get pollingRateHz => _fixedPollingRateHz;
 
   /// Check and request location permissions
