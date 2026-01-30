@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../config/h3_config.dart';
 import '../theme/app_theme.dart';
@@ -8,8 +9,11 @@ import '../models/team.dart';
 import '../providers/leaderboard_provider.dart';
 import '../providers/app_state_provider.dart';
 
-/// Leaderboard Screen - Season Rankings by Flip Points
-/// Redesigned: "Premium Athletic Minimal"
+/// Period filter for leaderboard rankings
+enum RankingPeriod { total, week, month, year }
+
+/// Leaderboard Screen - Rankings by Flip Points
+/// Redesigned: Minimal design matching History screen
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 
@@ -19,11 +23,135 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
     with TickerProviderStateMixin {
-  String _teamFilter = 'ALL';
+  RankingPeriod _selectedPeriod = RankingPeriod.total;
   GeographicScope _scopeFilter = GeographicScope.all;
   late AnimationController _pulseController;
   late AnimationController _entranceController;
   final bool _useMockData = false;
+
+  // Range-based navigation state
+  DateTime _rangeStart = DateTime.now();
+  DateTime _rangeEnd = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
+
+    // Initialize range based on current date and default period
+    _calculateRange(DateTime.now(), _selectedPeriod);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LeaderboardProvider>().fetchLeaderboard();
+    });
+  }
+
+  /// Calculate range boundaries based on anchor date and period
+  void _calculateRange(DateTime anchorDate, RankingPeriod period) {
+    switch (period) {
+      case RankingPeriod.total:
+        // Total = all time, no range needed
+        _rangeStart = DateTime(2020, 1, 1); // Arbitrary early date
+        _rangeEnd = DateTime.now().add(const Duration(days: 1));
+        break;
+      case RankingPeriod.week:
+        // Week starts Sunday (weekday % 7 gives Sunday = 0)
+        final dayOfWeek = anchorDate.weekday % 7;
+        _rangeStart = DateTime(
+          anchorDate.year,
+          anchorDate.month,
+          anchorDate.day - dayOfWeek,
+        );
+        _rangeEnd = _rangeStart.add(const Duration(days: 6));
+        break;
+      case RankingPeriod.month:
+        // First to last day of month
+        _rangeStart = DateTime(anchorDate.year, anchorDate.month, 1);
+        _rangeEnd = DateTime(anchorDate.year, anchorDate.month + 1, 0);
+        break;
+      case RankingPeriod.year:
+        // Jan 1 to Dec 31
+        _rangeStart = DateTime(anchorDate.year, 1, 1);
+        _rangeEnd = DateTime(anchorDate.year, 12, 31);
+        break;
+    }
+  }
+
+  /// Navigate to previous range (week/month/year)
+  void _navigatePrevious() {
+    if (_selectedPeriod == RankingPeriod.total) return;
+    DateTime newAnchor;
+    switch (_selectedPeriod) {
+      case RankingPeriod.total:
+        return;
+      case RankingPeriod.week:
+        newAnchor = _rangeStart.subtract(const Duration(days: 7));
+        break;
+      case RankingPeriod.month:
+        newAnchor = DateTime(_rangeStart.year, _rangeStart.month - 1, 1);
+        break;
+      case RankingPeriod.year:
+        newAnchor = DateTime(_rangeStart.year - 1, 1, 1);
+        break;
+    }
+    setState(() {
+      _calculateRange(newAnchor, _selectedPeriod);
+    });
+  }
+
+  /// Navigate to next range (week/month/year)
+  void _navigateNext() {
+    if (_selectedPeriod == RankingPeriod.total) return;
+    DateTime newAnchor;
+    switch (_selectedPeriod) {
+      case RankingPeriod.total:
+        return;
+      case RankingPeriod.week:
+        newAnchor = _rangeStart.add(const Duration(days: 7));
+        break;
+      case RankingPeriod.month:
+        newAnchor = DateTime(_rangeStart.year, _rangeStart.month + 1, 1);
+        break;
+      case RankingPeriod.year:
+        newAnchor = DateTime(_rangeStart.year + 1, 1, 1);
+        break;
+    }
+    setState(() {
+      _calculateRange(newAnchor, _selectedPeriod);
+    });
+  }
+
+  /// Format range display based on period
+  String _formatRangeDisplay() {
+    switch (_selectedPeriod) {
+      case RankingPeriod.total:
+        return 'ALL TIME';
+      case RankingPeriod.week:
+        // "Jan 26 - Feb 1" or "Dec 28 - Jan 3, 2027" if years differ
+        final startFormat = DateFormat('MMM d');
+        if (_rangeStart.year != _rangeEnd.year) {
+          return '${startFormat.format(_rangeStart)} - ${DateFormat('MMM d, yyyy').format(_rangeEnd)}';
+        } else if (_rangeStart.month != _rangeEnd.month) {
+          return '${startFormat.format(_rangeStart)} - ${DateFormat('MMM d').format(_rangeEnd)}';
+        } else {
+          return '${startFormat.format(_rangeStart)} - ${_rangeEnd.day}';
+        }
+      case RankingPeriod.month:
+        // "JANUARY 2026"
+        return DateFormat('MMMM yyyy').format(_rangeStart).toUpperCase();
+      case RankingPeriod.year:
+        // "2026"
+        return _rangeStart.year.toString();
+    }
+  }
 
   // Mock Data
   final List<LeaderboardRunner> _allRunners = [
@@ -234,16 +362,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       // Use mock data for development/testing
       runners = List<LeaderboardRunner>.from(_allRunners);
 
-      // Apply mock scope filtering
-      if (_teamFilter != 'ALL') {
-        final teamFilter = _teamFilter == 'RED'
-            ? Team.red
-            : _teamFilter == 'BLUE'
-            ? Team.blue
-            : Team.purple;
-        runners = runners.where((r) => r.team == teamFilter).toList();
-      }
-
+      // Apply mock scope filtering (no team filter - all teams shown)
       switch (_scopeFilter) {
         case GeographicScope.zone:
           runners = runners.where((r) => r.zoneHexId != null).toList();
@@ -257,18 +376,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           break;
       }
     } else {
-      // Use real data with home-hex-anchored scope filtering
-      final team = _teamFilter == 'ALL'
-          ? null
-          : _teamFilter == 'RED'
-          ? Team.red
-          : _teamFilter == 'BLUE'
-          ? Team.blue
-          : Team.purple;
-
-      // Use provider's scope+team filter for home-hex-anchored filtering
+      // Use real data with home-hex-anchored scope filtering (no team filter)
       final filteredEntries = leaderboardProvider.filterByTeamAndScope(
-        team,
+        null, // No team filter - show all teams
         _scopeFilter,
       );
 
@@ -346,24 +456,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
-
-    _entranceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..forward();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<LeaderboardProvider>().fetchLeaderboard();
-    });
-  }
-
-  @override
   void dispose() {
     _pulseController.dispose();
     _entranceController.dispose();
@@ -391,7 +483,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildHeader(),
-                  _buildConsolidatedFilterBar(),
+                  const SizedBox(height: 8),
+                  _buildPeriodToggle(),
+                  const SizedBox(height: 12),
+                  _buildRangeNavigation(),
+                  const SizedBox(height: 8),
+                  _buildFilterBar(),
                   Expanded(
                     child: runners.isEmpty
                         ? _buildEmptyState()
@@ -460,32 +557,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SEASON RANKINGS',
-                style: GoogleFonts.bebasNeue(
-                  fontSize: 28,
-                  color: Colors.white,
-                  letterSpacing: 2.0,
-                ),
-              ),
-              Text(
-                'Ranked by flip points',
-                style: GoogleFonts.sora(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Text(
+        'RANKINGS',
+        style: GoogleFonts.sora(
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          letterSpacing: 1.0,
+        ),
       ),
     );
   }
@@ -494,99 +574,135 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // CONSOLIDATED FILTER BAR
   // ---------------------------------------------------------------------------
 
-  Widget _buildConsolidatedFilterBar() {
+  /// Period toggle: TOTAL | WEEK | MONTH | YEAR
+  Widget _buildPeriodToggle() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceColor.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Row(
-              children: [
-                // Team Filters
-                _buildTeamFilterIcon(Team.red, 'RED'),
-                const SizedBox(width: 4),
-                _buildTeamFilterIcon(Team.blue, 'BLUE'),
-                const SizedBox(width: 4),
-                _buildTeamFilterIcon(Team.purple, 'PURPLE'),
-                const SizedBox(width: 4),
-                _buildAllTeamFilter(),
-
-                // Divider
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Container(
-                    width: 1,
-                    height: 20,
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-
-                // Scope Filter
-                Expanded(child: _buildScopeDropdown()),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTeamFilterIcon(Team team, String filterValue) {
-    final isSelected = _teamFilter == filterValue;
-    return GestureDetector(
-      onTap: () => setState(() => _teamFilter = filterValue),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
         height: 36,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected
-              ? team.color.withValues(alpha: 0.2)
-              : Colors.transparent,
-          border: isSelected
-              ? Border.all(color: team.color, width: 1.5)
-              : Border.all(color: Colors.transparent),
+          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: Center(
-          child: Text(team.emoji, style: const TextStyle(fontSize: 16)),
+        child: Row(
+          children: RankingPeriod.values.map((period) {
+            final isSelected = _selectedPeriod == period;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedPeriod = period;
+                    _calculateRange(DateTime.now(), period);
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    period.name.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.white38,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
   }
 
-  Widget _buildAllTeamFilter() {
-    final isSelected = _teamFilter == 'ALL';
-    return GestureDetector(
-      onTap: () => setState(() => _teamFilter = 'ALL'),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          color: isSelected
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.transparent,
-        ),
-        child: Text(
-          'ALL',
-          style: GoogleFonts.bebasNeue(
-            fontSize: 16,
-            color: isSelected ? Colors.white : AppTheme.textSecondary,
-            letterSpacing: 1.0,
+  /// Range navigation: < Jan 26 - Feb 1 >
+  Widget _buildRangeNavigation() {
+    final isTotal = _selectedPeriod == RankingPeriod.total;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Previous arrow
+          GestureDetector(
+            onTap: isTotal ? null : _navigatePrevious,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.chevron_left_rounded,
+                color: isTotal ? Colors.white12 : Colors.white54,
+                size: 24,
+              ),
+            ),
           ),
-        ),
+
+          const SizedBox(width: 8),
+
+          // Range display
+          Expanded(
+            child: Text(
+              _formatRangeDisplay(),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Next arrow
+          GestureDetector(
+            onTap: isTotal ? null : _navigateNext,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.chevron_right_rounded,
+                color: isTotal ? Colors.white12 : Colors.white54,
+                size: 24,
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// Combined filter bar: Scope dropdown only (team filter removed)
+  Widget _buildFilterBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [_buildScopeDropdown()],
+      ),
+    );
+  }
+
+  /// Get the icon for a geographic scope (matching MapScreen's _ZoomLevelSelector)
+  IconData _getScopeIcon(GeographicScope scope) {
+    return switch (scope) {
+      GeographicScope.zone => Icons.grid_view_rounded,
+      GeographicScope.city => Icons.location_city_rounded,
+      GeographicScope.all => Icons.public_rounded,
+    };
   }
 
   Widget _buildScopeDropdown() {
@@ -611,13 +727,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Text(
-              _scopeFilter.label.toUpperCase(),
-              style: GoogleFonts.sora(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+            Icon(
+              _getScopeIcon(_scopeFilter),
+              color: AppTheme.electricBlue,
+              size: 18,
             ),
             const SizedBox(width: 4),
             Icon(
@@ -836,7 +949,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final isCurrentUser = runner.id == currentUserId;
     final teamColor = runner.team.color;
     final isPurple = runner.team == Team.purple;
-    final showPurpleGlow = isPurple && _teamFilter == 'ALL';
+    // Always show purple glow since all teams are displayed (no team filter)
+    final showPurpleGlow = isPurple;
 
     // Staggered entrance
     final startInterval = 0.4 + (index * 0.05).clamp(0.0, 0.4);

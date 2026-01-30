@@ -1,21 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../models/run_session.dart';
 import '../theme/app_theme.dart';
 
+/// Display mode for the calendar - adapts shape based on period selection
+enum CalendarDisplayMode { week, month, year }
+
 /// A calendar widget displaying running activity by day.
 ///
-/// Shows a month grid with dot indicators for days with runs,
-/// intensity based on distance/flips earned.
+/// Shows different layouts based on displayMode:
+/// - week: Single row showing 7 days
+/// - month: Full month grid (default)
+/// - year: 12 mini-month overview
+///
+/// Supports two modes:
+/// - Internal navigation (default): Widget manages its own navigation state
+/// - External navigation: Parent controls range via [externalRangeStart]/[externalRangeEnd]
 class RunCalendar extends StatefulWidget {
   final List<RunSession> runs;
   final DateTime? selectedDate;
   final ValueChanged<DateTime>? onDateSelected;
   final ValueChanged<DateTime>? onMonthChanged;
 
+  /// Display mode: week shows 7 days, month shows full grid, year shows 12 mini months
+  final CalendarDisplayMode displayMode;
+
   /// Optional function to convert UTC time to display timezone.
   /// If not provided, times are displayed as-is (local time).
   final DateTime Function(DateTime)? timezoneConverter;
+
+  /// External range start for parent-controlled navigation (optional).
+  /// When provided, internal navigation controls are hidden.
+  final DateTime? externalRangeStart;
+
+  /// External range end for parent-controlled navigation (optional).
+  final DateTime? externalRangeEnd;
+
+  /// Callback when user wants to navigate to previous range (external control mode)
+  final VoidCallback? onNavigatePrevious;
+
+  /// Callback when user wants to navigate to next range (external control mode)
+  final VoidCallback? onNavigateNext;
 
   const RunCalendar({
     super.key,
@@ -23,7 +49,12 @@ class RunCalendar extends StatefulWidget {
     this.selectedDate,
     this.onDateSelected,
     this.onMonthChanged,
+    this.displayMode = CalendarDisplayMode.month,
     this.timezoneConverter,
+    this.externalRangeStart,
+    this.externalRangeEnd,
+    this.onNavigatePrevious,
+    this.onNavigateNext,
   });
 
   @override
@@ -33,12 +64,21 @@ class RunCalendar extends StatefulWidget {
 class _RunCalendarState extends State<RunCalendar> {
   late DateTime _currentMonth;
   late DateTime _selectedDate;
+  late DateTime _currentWeekStart;
+  late int _currentYear;
+
+  /// Check if navigation is externally controlled by parent
+  bool get _isExternallyControlled => widget.externalRangeStart != null;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = widget.selectedDate ?? DateTime.now();
     _currentMonth = DateTime(_selectedDate.year, _selectedDate.month);
+    _currentYear = _selectedDate.year;
+    // Calculate week start (Sunday)
+    final now = DateTime.now();
+    _currentWeekStart = now.subtract(Duration(days: now.weekday % 7));
   }
 
   @override
@@ -47,6 +87,13 @@ class _RunCalendarState extends State<RunCalendar> {
     if (widget.selectedDate != null &&
         widget.selectedDate != oldWidget.selectedDate) {
       _selectedDate = widget.selectedDate!;
+    }
+    // Reset navigation when display mode changes
+    if (widget.displayMode != oldWidget.displayMode) {
+      final now = DateTime.now();
+      _currentMonth = DateTime(now.year, now.month);
+      _currentYear = now.year;
+      _currentWeekStart = now.subtract(Duration(days: now.weekday % 7));
     }
   }
 
@@ -88,20 +135,401 @@ class _RunCalendarState extends State<RunCalendar> {
 
   @override
   Widget build(BuildContext context) {
+    switch (widget.displayMode) {
+      case CalendarDisplayMode.week:
+        return _buildWeekView();
+      case CalendarDisplayMode.year:
+        return _buildYearView();
+      case CalendarDisplayMode.month:
+      default:
+        return Column(
+          children: [
+            _buildMonthHeader(),
+            const SizedBox(height: 16),
+            _buildWeekdayHeaders(),
+            const SizedBox(height: 8),
+            _buildCalendarGrid(),
+          ],
+        );
+    }
+  }
+
+  // ============ WEEK VIEW ============
+  Widget _buildWeekView() {
     return Column(
       children: [
-        _buildMonthHeader(),
+        _buildWeekHeader(),
         const SizedBox(height: 16),
         _buildWeekdayHeaders(),
         const SizedBox(height: 8),
-        _buildCalendarGrid(),
+        _buildWeekRow(),
       ],
     );
   }
 
+  Widget _buildWeekHeader() {
+    // Use external range if provided, otherwise internal state
+    final weekStart = _isExternallyControlled
+        ? widget.externalRangeStart!
+        : _currentWeekStart;
+    final weekEnd = _isExternallyControlled
+        ? widget.externalRangeEnd!
+        : _currentWeekStart.add(const Duration(days: 6));
+
+    final startFormat = DateFormat('MMM d');
+    final endFormat = weekStart.month == weekEnd.month
+        ? DateFormat('d, yyyy')
+        : DateFormat('MMM d, yyyy');
+
+    // When externally controlled, don't show navigation (parent handles it)
+    if (_isExternallyControlled) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Center(
+          child: Text(
+            '${startFormat.format(weekStart)} - ${endFormat.format(weekEnd)}',
+            style: GoogleFonts.bebasNeue(
+              fontSize: 22,
+              color: Colors.white,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            onPressed: _previousWeek,
+            icon: const Icon(Icons.chevron_left_rounded),
+            color: Colors.white54,
+            iconSize: 28,
+          ),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                final now = DateTime.now();
+                _currentWeekStart = now.subtract(
+                  Duration(days: now.weekday % 7),
+                );
+              });
+            },
+            child: Text(
+              '${startFormat.format(weekStart)} - ${endFormat.format(weekEnd)}',
+              style: GoogleFonts.bebasNeue(
+                fontSize: 22,
+                color: Colors.white,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _nextWeek,
+            icon: const Icon(Icons.chevron_right_rounded),
+            color: Colors.white54,
+            iconSize: 28,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _previousWeek() {
+    setState(() {
+      _currentWeekStart = _currentWeekStart.subtract(const Duration(days: 7));
+    });
+  }
+
+  void _nextWeek() {
+    setState(() {
+      _currentWeekStart = _currentWeekStart.add(const Duration(days: 7));
+    });
+  }
+
+  Widget _buildWeekRow() {
+    // Use external range if provided, otherwise internal state
+    final weekStart = _isExternallyControlled
+        ? widget.externalRangeStart!
+        : _currentWeekStart;
+    final days = <Widget>[];
+    for (int i = 0; i < 7; i++) {
+      final date = weekStart.add(Duration(days: i));
+      days.add(_buildWeekDayCell(date));
+    }
+    return Row(children: days);
+  }
+
+  Widget _buildWeekDayCell(DateTime date) {
+    final runs = _runsForDate(date);
+    final hasRuns = runs.isNotEmpty;
+    final isToday = _isToday(date);
+    final isSelected = _isSameDay(date, _selectedDate);
+    final isFuture = date.isAfter(DateTime.now());
+
+    // Calculate total distance for display
+    final totalDistance = runs.fold(0.0, (sum, run) => sum + run.distanceKm);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: isFuture
+            ? null
+            : () {
+                setState(() => _selectedDate = date);
+                widget.onDateSelected?.call(date);
+              },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.electricBlue.withValues(alpha: 0.2)
+                : hasRuns
+                ? AppTheme.surfaceColor.withValues(alpha: 0.5)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isSelected
+                ? Border.all(color: AppTheme.electricBlue, width: 1.5)
+                : isToday
+                ? Border.all(color: Colors.white24, width: 1)
+                : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                date.day.toString(),
+                style: GoogleFonts.sora(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: isFuture
+                      ? Colors.white12
+                      : isSelected
+                      ? AppTheme.electricBlue
+                      : isToday
+                      ? Colors.white
+                      : Colors.white70,
+                ),
+              ),
+              if (hasRuns) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${totalDistance.toStringAsFixed(1)}k',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.electricBlue.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============ YEAR VIEW ============
+  Widget _buildYearView() {
+    return Column(
+      children: [
+        _buildYearHeader(),
+        const SizedBox(height: 20),
+        _buildYearGrid(),
+      ],
+    );
+  }
+
+  Widget _buildYearHeader() {
+    // Use external range if provided, otherwise internal state
+    final displayYear = _isExternallyControlled
+        ? widget.externalRangeStart!.year
+        : _currentYear;
+
+    // When externally controlled, don't show navigation (parent handles it)
+    if (_isExternallyControlled) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Center(
+          child: Text(
+            displayYear.toString(),
+            style: GoogleFonts.bebasNeue(
+              fontSize: 32,
+              color: Colors.white,
+              letterSpacing: 2.0,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            onPressed: () => setState(() => _currentYear--),
+            icon: const Icon(Icons.chevron_left_rounded),
+            color: Colors.white54,
+            iconSize: 28,
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _currentYear = DateTime.now().year),
+            child: Text(
+              _currentYear.toString(),
+              style: GoogleFonts.bebasNeue(
+                fontSize: 32,
+                color: Colors.white,
+                letterSpacing: 2.0,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _currentYear++),
+            icon: const Icon(Icons.chevron_right_rounded),
+            color: Colors.white54,
+            iconSize: 28,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildYearGrid() {
+    // Use external range year if provided, otherwise internal state
+    final displayYear = _isExternallyControlled
+        ? widget.externalRangeStart!.year
+        : _currentYear;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: 12,
+      itemBuilder: (context, index) {
+        final month = index + 1;
+        return _buildMiniMonth(month, displayYear);
+      },
+    );
+  }
+
+  Widget _buildMiniMonth(int month, [int? yearOverride]) {
+    final year = yearOverride ?? _currentYear;
+    final monthDate = DateTime(year, month);
+    final isCurrentMonth =
+        DateTime.now().year == year && DateTime.now().month == month;
+
+    // Count runs in this month
+    final monthRuns = widget.runs.where((run) {
+      final displayTime = _convertTime(run.startTime);
+      return displayTime.year == year && displayTime.month == month;
+    }).toList();
+
+    final hasRuns = monthRuns.isNotEmpty;
+    final totalDistance = monthRuns.fold(
+      0.0,
+      (sum, run) => sum + run.distanceKm,
+    );
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _currentMonth = monthDate;
+        });
+        widget.onMonthChanged?.call(monthDate);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: hasRuns
+              ? AppTheme.electricBlue.withValues(alpha: 0.1)
+              : AppTheme.surfaceColor.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(12),
+          border: isCurrentMonth
+              ? Border.all(color: AppTheme.electricBlue, width: 1.5)
+              : Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              DateFormat('MMM').format(monthDate).toUpperCase(),
+              style: GoogleFonts.bebasNeue(
+                fontSize: 14,
+                color: isCurrentMonth ? AppTheme.electricBlue : Colors.white70,
+                letterSpacing: 0.5,
+              ),
+            ),
+            if (hasRuns) ...[
+              const SizedBox(height: 2),
+              Text(
+                '${totalDistance.toStringAsFixed(0)}km',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.electricBlue.withValues(alpha: 0.8),
+                ),
+              ),
+              Text(
+                '${monthRuns.length}r',
+                style: GoogleFonts.inter(fontSize: 8, color: Colors.white38),
+              ),
+            ] else
+              Text(
+                '—',
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.white24),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMonthHeader() {
-    final monthName = _getMonthName(_currentMonth.month);
-    final year = _currentMonth.year;
+    // Use external range if provided, otherwise internal state
+    final displayMonth = _isExternallyControlled
+        ? widget.externalRangeStart!
+        : _currentMonth;
+    final monthName = _getMonthName(displayMonth.month);
+    final year = displayMonth.year;
+
+    // When externally controlled, don't show navigation (parent handles it)
+    if (_isExternallyControlled) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Center(
+          child: Column(
+            children: [
+              Text(
+                monthName.toUpperCase(),
+                style: GoogleFonts.bebasNeue(
+                  fontSize: 28,
+                  color: Colors.white,
+                  letterSpacing: 2.0,
+                ),
+              ),
+              Text(
+                year.toString(),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: Colors.white38,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -179,16 +607,17 @@ class _RunCalendarState extends State<RunCalendar> {
   }
 
   Widget _buildCalendarGrid() {
+    // Use external range if provided, otherwise internal state
+    final displayMonth = _isExternallyControlled
+        ? widget.externalRangeStart!
+        : _currentMonth;
+
     final daysInMonth = DateTime(
-      _currentMonth.year,
-      _currentMonth.month + 1,
+      displayMonth.year,
+      displayMonth.month + 1,
       0,
     ).day;
-    final firstDayOfMonth = DateTime(
-      _currentMonth.year,
-      _currentMonth.month,
-      1,
-    );
+    final firstDayOfMonth = DateTime(displayMonth.year, displayMonth.month, 1);
     final startingWeekday = firstDayOfMonth.weekday % 7; // Sunday = 0
 
     final cells = <Widget>[];
@@ -200,7 +629,7 @@ class _RunCalendarState extends State<RunCalendar> {
 
     // Day cells
     for (int day = 1; day <= daysInMonth; day++) {
-      final date = DateTime(_currentMonth.year, _currentMonth.month, day);
+      final date = DateTime(displayMonth.year, displayMonth.month, day);
       cells.add(_buildDayCell(date, day));
     }
 
@@ -220,12 +649,10 @@ class _RunCalendarState extends State<RunCalendar> {
     final isSelected = _isSameDay(date, _selectedDate);
     final isFuture = date.isAfter(DateTime.now());
 
-    // Calculate intensity based on total distance
-    double intensity = 0;
-    if (hasRuns) {
-      final totalDistance = runs.fold(0.0, (sum, run) => sum + run.distanceKm);
-      intensity = (totalDistance / 10).clamp(0.2, 1.0); // 10km = full intensity
-    }
+    // Calculate total distance for the day
+    final totalDistance = hasRuns
+        ? runs.fold(0.0, (sum, run) => sum + run.distanceKm)
+        : 0.0;
 
     return GestureDetector(
       onTap: isFuture
@@ -247,8 +674,8 @@ class _RunCalendarState extends State<RunCalendar> {
               ? Border.all(color: Colors.white24, width: 1)
               : null,
         ),
-        child: Stack(
-          alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Day number
             Text(
@@ -268,55 +695,20 @@ class _RunCalendarState extends State<RunCalendar> {
               ),
             ),
 
-            // Activity indicator (dot or ring)
-            if (hasRuns)
-              Positioned(
-                bottom: 6,
-                child: _buildActivityIndicator(runs, intensity),
+            // Distance indicator (like week view)
+            if (hasRuns) ...[
+              const SizedBox(height: 2),
+              Text(
+                '${totalDistance.toStringAsFixed(1)}k',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.electricBlue.withValues(alpha: 0.8),
+                ),
               ),
+            ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildActivityIndicator(List<RunSession> runs, double intensity) {
-    final totalFlips = runs.fold(0, (sum, run) => sum + run.hexesColored);
-    final color = totalFlips > 0 ? AppTheme.athleticRed : AppTheme.electricBlue;
-
-    if (runs.length > 1) {
-      // Multiple runs: show count badge
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: intensity),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          '${runs.length}',
-          style: GoogleFonts.inter(
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    // Single run: show dot
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: intensity),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: intensity * 0.5),
-            blurRadius: 4,
-            spreadRadius: 1,
-          ),
-        ],
       ),
     );
   }

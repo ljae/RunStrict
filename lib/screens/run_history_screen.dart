@@ -23,9 +23,13 @@ class RunHistoryScreen extends StatefulWidget {
 
 class _RunHistoryScreenState extends State<RunHistoryScreen> {
   HistoryPeriod _selectedPeriod = HistoryPeriod.month;
-  HistoryViewMode _viewMode = HistoryViewMode.calendar;
+  HistoryViewMode _viewMode = HistoryViewMode.list;
   DateTime? _selectedDate;
   String _timezone = 'Local';
+
+  // Range-based navigation state
+  DateTime _rangeStart = DateTime.now();
+  DateTime _rangeEnd = DateTime.now();
 
   static const List<String> _timezones = [
     'Local',
@@ -70,10 +74,107 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     return utc.add(Duration(hours: offsetHours));
   }
 
+  /// Calculate range boundaries based on anchor date and period
+  void _calculateRange(DateTime anchorDate, HistoryPeriod period) {
+    switch (period) {
+      case HistoryPeriod.week:
+        // Week starts Sunday (weekday % 7 gives Sunday = 0)
+        final dayOfWeek = anchorDate.weekday % 7;
+        _rangeStart = DateTime(
+          anchorDate.year,
+          anchorDate.month,
+          anchorDate.day - dayOfWeek,
+        );
+        _rangeEnd = _rangeStart.add(const Duration(days: 6));
+        break;
+      case HistoryPeriod.month:
+        // First to last day of month
+        _rangeStart = DateTime(anchorDate.year, anchorDate.month, 1);
+        _rangeEnd = DateTime(anchorDate.year, anchorDate.month + 1, 0);
+        break;
+      case HistoryPeriod.year:
+        // Jan 1 to Dec 31
+        _rangeStart = DateTime(anchorDate.year, 1, 1);
+        _rangeEnd = DateTime(anchorDate.year, 12, 31);
+        break;
+    }
+    // Clear selection - entire range is selected (range mode)
+    _selectedDate = null;
+  }
+
+  /// Navigate to previous range (week/month/year)
+  void _navigatePrevious() {
+    DateTime newAnchor;
+    switch (_selectedPeriod) {
+      case HistoryPeriod.week:
+        newAnchor = _rangeStart.subtract(const Duration(days: 7));
+        break;
+      case HistoryPeriod.month:
+        newAnchor = DateTime(_rangeStart.year, _rangeStart.month - 1, 1);
+        break;
+      case HistoryPeriod.year:
+        newAnchor = DateTime(_rangeStart.year - 1, 1, 1);
+        break;
+    }
+    setState(() {
+      _calculateRange(newAnchor, _selectedPeriod);
+    });
+  }
+
+  /// Navigate to next range (week/month/year)
+  void _navigateNext() {
+    DateTime newAnchor;
+    switch (_selectedPeriod) {
+      case HistoryPeriod.week:
+        newAnchor = _rangeStart.add(const Duration(days: 7));
+        break;
+      case HistoryPeriod.month:
+        newAnchor = DateTime(_rangeStart.year, _rangeStart.month + 1, 1);
+        break;
+      case HistoryPeriod.year:
+        newAnchor = DateTime(_rangeStart.year + 1, 1, 1);
+        break;
+    }
+    setState(() {
+      _calculateRange(newAnchor, _selectedPeriod);
+    });
+  }
+
+  /// Jump to current period containing today
+  void _jumpToToday() {
+    setState(() {
+      _calculateRange(DateTime.now(), _selectedPeriod);
+    });
+  }
+
+  /// Format range display based on period
+  String _formatRangeDisplay() {
+    switch (_selectedPeriod) {
+      case HistoryPeriod.week:
+        // "Jan 26 - Feb 1" or "Dec 28 - Jan 3, 2027" if years differ
+        final startFormat = DateFormat('MMM d');
+        if (_rangeStart.year != _rangeEnd.year) {
+          return '${startFormat.format(_rangeStart)} - ${DateFormat('MMM d, yyyy').format(_rangeEnd)}';
+        } else if (_rangeStart.month != _rangeEnd.month) {
+          return '${startFormat.format(_rangeStart)} - ${DateFormat('MMM d').format(_rangeEnd)}';
+        } else {
+          return '${startFormat.format(_rangeStart)} - ${_rangeEnd.day}';
+        }
+      case HistoryPeriod.month:
+        // "JANUARY 2026"
+        return DateFormat('MMMM yyyy').format(_rangeStart).toUpperCase();
+      case HistoryPeriod.year:
+        // "2026"
+        return _rangeStart.year.toString();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
+    // Initialize range based on current date and default period
+    _calculateRange(_selectedDate!, _selectedPeriod);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RunProvider>().loadRunHistory();
     });
@@ -93,7 +194,26 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             final allRuns = provider.runHistory;
             final periodRuns = _filterRunsByPeriod(allRuns, _selectedPeriod);
 
-            // Calculate Stats
+            // Calculate OVERALL (all-time) Stats
+            final overallDistance = allRuns.fold(
+              0.0,
+              (sum, run) => sum + run.distanceKm,
+            );
+            final overallPoints = allRuns.fold(
+              0,
+              (sum, run) => sum + run.hexesColored,
+            );
+            final overallRunCount = allRuns.length;
+            double overallPace = 0.0;
+            if (overallDistance > 0) {
+              final overallSeconds = allRuns.fold(
+                0,
+                (sum, run) => sum + run.duration.inSeconds,
+              );
+              overallPace = (overallSeconds / 60.0) / overallDistance;
+            }
+
+            // Calculate PERIOD Stats
             final totalDistance = periodRuns.fold(
               0.0,
               (sum, run) => sum + run.distanceKm,
@@ -104,7 +224,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             );
             final runCount = periodRuns.length;
 
-            // Weighted average pace
+            // Weighted average pace for period
             double avgPace = 0.0;
             if (totalDistance > 0) {
               final totalSeconds = periodRuns.fold(
@@ -122,8 +242,21 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   _buildHeader(),
                   SizedBox(height: isLandscape ? 4 : 10),
                   if (!isLandscape) ...[
+                    // ALL-TIME stats at top (fixed, outside scroll)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _buildOverallStatsSection(
+                        overallDistance,
+                        overallPace,
+                        overallPoints,
+                        overallRunCount,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     _buildPeriodToggle(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 8),
+                    _buildRangeNavigation(),
+                    const SizedBox(height: 16),
                   ],
                   Expanded(
                     child: isLandscape
@@ -134,21 +267,26 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                             avgPace,
                             totalPoints,
                             runCount,
+                            overallDistance,
+                            overallPace,
+                            overallPoints,
+                            overallRunCount,
                           )
                         : CustomScrollView(
                             physics: const BouncingScrollPhysics(),
                             slivers: [
-                              // Stats Row
+                              // Period Stats Panel
                               SliverToBoxAdapter(
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 24,
                                   ),
-                                  child: _buildStatsRow(
+                                  child: _buildPeriodStatsSection(
                                     totalDistance,
                                     avgPace,
                                     totalPoints,
                                     runCount,
+                                    _selectedPeriod.name.toUpperCase(),
                                   ),
                                 ),
                               ),
@@ -173,21 +311,23 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                                   child: SizedBox(height: 20),
                                 ),
 
-                                // Selected Date Runs
+                                // Selected Date/Range Runs
                                 SliverToBoxAdapter(
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 24,
                                     ),
-                                    child: SelectedDateRuns(
-                                      date: _selectedDate ?? DateTime.now(),
-                                      runs: _runsForDate(
-                                        allRuns,
-                                        _selectedDate ?? DateTime.now(),
-                                      ),
-                                      timezoneConverter:
-                                          _convertToDisplayTimezone,
-                                    ),
+                                    child: _selectedDate != null
+                                        ? SelectedDateRuns(
+                                            date: _selectedDate!,
+                                            runs: _runsForDate(
+                                              allRuns,
+                                              _selectedDate!,
+                                            ),
+                                            timezoneConverter:
+                                                _convertToDisplayTimezone,
+                                          )
+                                        : _buildRangeRunsList(periodRuns),
                                   ),
                                 ),
                               ] else ...[
@@ -272,6 +412,10 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     double avgPace,
     int totalPoints,
     int runCount,
+    double overallDistance,
+    double overallPace,
+    int overallPoints,
+    int overallRunCount,
   ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,9 +427,24 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             padding: const EdgeInsets.fromLTRB(24, 0, 12, 24),
             child: Column(
               children: [
+                _buildOverallStatsSection(
+                  overallDistance,
+                  overallPace,
+                  overallPoints,
+                  overallRunCount,
+                ),
+                const SizedBox(height: 12),
                 _buildPeriodToggle(),
+                const SizedBox(height: 8),
+                _buildRangeNavigation(),
                 const SizedBox(height: 16),
-                _buildStatsRow(totalDistance, avgPace, totalPoints, runCount),
+                _buildPeriodStatsSection(
+                  totalDistance,
+                  avgPace,
+                  totalPoints,
+                  runCount,
+                  _selectedPeriod.name.toUpperCase(),
+                ),
                 const SizedBox(height: 16),
                 if (_viewMode == HistoryViewMode.calendar)
                   _buildCalendarContainer(allRuns)
@@ -301,14 +460,13 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           child: _viewMode == HistoryViewMode.calendar
               ? SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(12, 0, 24, 24),
-                  child: SelectedDateRuns(
-                    date: _selectedDate ?? DateTime.now(),
-                    runs: _runsForDate(
-                      allRuns,
-                      _selectedDate ?? DateTime.now(),
-                    ),
-                    timezoneConverter: _convertToDisplayTimezone,
-                  ),
+                  child: _selectedDate != null
+                      ? SelectedDateRuns(
+                          date: _selectedDate!,
+                          runs: _runsForDate(allRuns, _selectedDate!),
+                          timezoneConverter: _convertToDisplayTimezone,
+                        )
+                      : _buildRangeRunsList(periodRuns),
                 )
               : Column(
                   children: [
@@ -338,6 +496,20 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   Widget _buildCalendarContainer(List<RunSession> allRuns) {
+    // Map period selection to calendar display mode
+    CalendarDisplayMode displayMode;
+    switch (_selectedPeriod) {
+      case HistoryPeriod.week:
+        displayMode = CalendarDisplayMode.week;
+        break;
+      case HistoryPeriod.year:
+        displayMode = CalendarDisplayMode.year;
+        break;
+      case HistoryPeriod.month:
+      default:
+        displayMode = CalendarDisplayMode.month;
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -348,6 +520,11 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       child: RunCalendar(
         runs: allRuns,
         selectedDate: _selectedDate,
+        displayMode: displayMode,
+        externalRangeStart: _rangeStart,
+        externalRangeEnd: _rangeEnd,
+        onNavigatePrevious: _navigatePrevious,
+        onNavigateNext: _navigateNext,
         onDateSelected: (date) {
           setState(() => _selectedDate = date);
         },
@@ -393,45 +570,16 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Flexible(
-            child: isLandscape
-                // Landscape: Single line compact header
-                ? Text(
-                    'MY HISTORY',
-                    style: GoogleFonts.sora(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  )
-                // Portrait: Two-line header with subtitle
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'MY HISTORY',
-                        style: GoogleFonts.sora(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Personal running statistics',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+          // Title - minimal
+          Text(
+            'HISTORY',
+            style: GoogleFonts.sora(
+              fontSize: isLandscape ? 18 : 22,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 1.0,
+            ),
           ),
-          const SizedBox(width: 8),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -456,7 +604,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   ),
                   child: Icon(
                     _viewMode == HistoryViewMode.calendar
-                        ? Icons.list_rounded
+                        ? Icons.bar_chart_rounded
                         : Icons.calendar_month_rounded,
                     color: AppTheme.electricBlue,
                     size: 20,
@@ -533,155 +681,360 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
-  Widget _buildPeriodToggle() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
+  /// Unified range navigation with prev/next controls
+  Widget _buildRangeNavigation() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
-        children: HistoryPeriod.values.map((period) {
-          final isSelected = _selectedPeriod == period;
-          return Expanded(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Previous arrow
+          GestureDetector(
+            onTap: _navigatePrevious,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.chevron_left_rounded,
+                color: Colors.white54,
+                size: 24,
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Range display - tap to toggle range mode / jump to today
+          Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _selectedPeriod = period),
-              child: AnimatedContainer(
-                duration: AppTheme.fastDuration,
-                curve: AppTheme.defaultCurve,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.white.withOpacity(0.1)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  border: isSelected
-                      ? Border.all(color: Colors.white.withOpacity(0.15))
-                      : null,
-                ),
-                child: Text(
-                  period.name.toUpperCase(),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: isSelected ? Colors.white : AppTheme.textSecondary,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
+              onTap: () {
+                if (_selectedDate != null) {
+                  // Exit day mode, enter range mode
+                  setState(() => _selectedDate = null);
+                } else {
+                  // Jump to today's range
+                  _jumpToToday();
+                }
+              },
+              child: Text(
+                _formatRangeDisplay(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
-          );
-        }).toList(),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Next arrow
+          GestureDetector(
+            onTap: _navigateNext,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white54,
+                size: 24,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStatsRow(
-    double totalDistance,
-    double avgPace,
-    int totalPoints,
-    int runCount,
+  Widget _buildPeriodToggle() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        height: 36,
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: HistoryPeriod.values.map((period) {
+            final isSelected = _selectedPeriod == period;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedPeriod = period;
+                    // Recalculate range when period changes
+                    _calculateRange(_selectedDate ?? DateTime.now(), period);
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    period.name.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.white38,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  /// Period stats section - smaller version of ALL TIME panel
+  Widget _buildPeriodStatsSection(
+    double distance,
+    double pace,
+    int flips,
+    int runs,
+    String periodLabel,
   ) {
-    return Row(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.03)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Period label
+          Text(
+            periodLabel,
+            style: GoogleFonts.inter(
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withOpacity(0.2),
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Stats in a row with separators
+          Row(
+            children: [
+              // Distance - primary highlight
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          distance.toStringAsFixed(1),
+                          style: GoogleFonts.sora(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.0,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          'km',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white30,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Vertical divider
+              Container(
+                width: 1,
+                height: 24,
+                color: Colors.white.withOpacity(0.06),
+              ),
+              // Secondary stats
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildMiniStatSmall(_formatPace(pace), '/km'),
+                      _buildMiniStatSmall(flips.toString(), 'flips'),
+                      _buildMiniStatSmall(runs.toString(), 'runs'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mini stat for period section (smaller than ALL TIME)
+  Widget _buildMiniStatSmall(String value, String label) {
+    return Column(
       children: [
-        Expanded(
-          child: _buildStatCard(
-            'DISTANCE',
-            totalDistance.toStringAsFixed(1),
-            'km',
-            AppTheme.electricBlue,
+        Text(
+          value,
+          style: GoogleFonts.sora(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+            height: 1.0,
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildStatCard(
-            'AVG PACE',
-            _formatPace(avgPace),
-            '/km',
-            Colors.white,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildStatCard(
-            'FLIPS',
-            totalPoints.toString(),
-            'pts',
-            AppTheme.athleticRed,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildStatCard(
-            'RUNS',
-            runCount.toString(),
-            '',
-            Colors.white54,
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 8,
+            fontWeight: FontWeight.w500,
+            color: Colors.white24,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStatCard(
-    String label,
-    String value,
-    String unit,
-    Color valueColor,
+  /// Overall (all-time) stats section - minimal horizontal display
+  Widget _buildOverallStatsSection(
+    double distance,
+    double pace,
+    int flips,
+    int runs,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
+        color: AppTheme.surfaceColor.withOpacity(0.3),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.03)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  value,
-                  style: GoogleFonts.sora(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: valueColor,
-                  ),
-                ),
-                if (unit.isNotEmpty) ...[
-                  const SizedBox(width: 2),
-                  Text(
-                    unit,
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white38,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
+          // Overall label
           Text(
-            label,
+            'ALL TIME',
             style: GoogleFonts.inter(
               fontSize: 9,
               fontWeight: FontWeight.w600,
-              color: Colors.white30,
-              letterSpacing: 0.8,
+              color: Colors.white.withOpacity(0.2),
+              letterSpacing: 2.0,
             ),
+          ),
+          const SizedBox(height: 12),
+          // Stats in a row with separators
+          Row(
+            children: [
+              // Distance - primary highlight
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          distance.toStringAsFixed(0),
+                          style: GoogleFonts.sora(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.0,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'km',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white30,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Vertical divider
+              Container(
+                width: 1,
+                height: 32,
+                color: Colors.white.withOpacity(0.06),
+              ),
+              // Secondary stats
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildMiniStat(_formatPace(pace), '/km'),
+                      _buildMiniStat(flips.toString(), 'flips'),
+                      _buildMiniStat(runs.toString(), 'runs'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  /// Mini stat for overall section
+  Widget _buildMiniStat(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.sora(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+            color: Colors.white24,
+          ),
+        ),
+      ],
     );
   }
 
@@ -715,90 +1068,161 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   Widget _buildChart(List<RunSession> runs, HistoryPeriod period) {
-    // Prepare data buckets
-    final Map<int, double> buckets = {};
+    // Prepare data buckets for distance and pace
+    final Map<int, double> distanceBuckets = {};
+    final Map<int, double> durationBuckets = {}; // in minutes
     int minX = 0;
     int maxX = 6;
 
-    // Use current time in selected timezone
-    final today = _convertToDisplayTimezone(DateTime.now().toUtc());
-
+    // Use range boundaries for bucketing
     if (period == HistoryPeriod.week) {
+      // Week: 7 days starting from _rangeStart (index 0-6)
       minX = 0;
       maxX = 6;
+      final rangeStartDate = DateTime(
+        _rangeStart.year,
+        _rangeStart.month,
+        _rangeStart.day,
+      );
       for (var run in runs) {
         final displayTime = _convertToDisplayTimezone(run.startTime);
-        final diff = today.difference(displayTime).inDays;
-        if (diff >= 0 && diff <= 6) {
-          final x = 6 - diff;
-          buckets[x] = (buckets[x] ?? 0) + run.distanceKm;
+        final runDate = DateTime(
+          displayTime.year,
+          displayTime.month,
+          displayTime.day,
+        );
+        final dayOffset = runDate.difference(rangeStartDate).inDays;
+        if (dayOffset >= 0 && dayOffset <= 6) {
+          distanceBuckets[dayOffset] =
+              (distanceBuckets[dayOffset] ?? 0) + run.distanceKm;
+          durationBuckets[dayOffset] =
+              (durationBuckets[dayOffset] ?? 0) + run.duration.inSeconds / 60.0;
         }
       }
     } else if (period == HistoryPeriod.month) {
+      // Month: days 1-N based on _rangeStart's month
       minX = 1;
-      maxX = 31;
+      final daysInMonth = DateTime(
+        _rangeStart.year,
+        _rangeStart.month + 1,
+        0,
+      ).day;
+      maxX = daysInMonth;
       for (var run in runs) {
         final displayTime = _convertToDisplayTimezone(run.startTime);
-        final day = displayTime.day;
-        buckets[day] = (buckets[day] ?? 0) + run.distanceKm;
+        // Only include runs from the range's month
+        if (displayTime.year == _rangeStart.year &&
+            displayTime.month == _rangeStart.month) {
+          final day = displayTime.day;
+          distanceBuckets[day] = (distanceBuckets[day] ?? 0) + run.distanceKm;
+          durationBuckets[day] =
+              (durationBuckets[day] ?? 0) + run.duration.inSeconds / 60.0;
+        }
       }
     } else {
+      // Year: months 1-12 based on _rangeStart's year
       minX = 1;
       maxX = 12;
       for (var run in runs) {
         final displayTime = _convertToDisplayTimezone(run.startTime);
-        final month = displayTime.month;
-        buckets[month] = (buckets[month] ?? 0) + run.distanceKm;
+        // Only include runs from the range's year
+        if (displayTime.year == _rangeStart.year) {
+          final month = displayTime.month;
+          distanceBuckets[month] =
+              (distanceBuckets[month] ?? 0) + run.distanceKm;
+          durationBuckets[month] =
+              (durationBuckets[month] ?? 0) + run.duration.inSeconds / 60.0;
+        }
       }
     }
 
-    // Calculate max value for normalization
+    // Calculate max distance for normalization
     double maxY = 0;
     for (int i = minX; i <= maxX; i++) {
-      final val = buckets[i] ?? 0.0;
+      final val = distanceBuckets[i] ?? 0.0;
       if (val > maxY) maxY = val;
     }
     if (maxY == 0) maxY = 5;
 
-    // Build bar entries (show all positions for consistent spacing)
+    // Build bar entries with pace (show all positions for consistent spacing)
     final entries = <_BarEntry>[];
+    double minPace = double.infinity;
+    double maxPace = 0;
+
     for (int i = minX; i <= maxX; i++) {
-      final val = buckets[i] ?? 0.0;
-      entries.add(_BarEntry(x: i, value: val, label: _getLabel(i, period)));
+      final distance = distanceBuckets[i] ?? 0.0;
+      final duration = durationBuckets[i] ?? 0.0;
+      double? pace;
+
+      if (distance > 0 && duration > 0) {
+        pace = duration / distance; // min/km
+        // Cap pace at 10 min/km (slower paces show at bottom)
+        if (pace > 10.0) pace = 10.0;
+      }
+
+      entries.add(
+        _BarEntry(
+          x: i,
+          value: distance,
+          pace: pace,
+          label: _getLabel(i, period),
+        ),
+      );
     }
+
+    // Fixed pace range: 0-10 min/km
+    // 0 min/km at top (fastest), 10 min/km at bottom (slowest)
+    minPace = 0.0;
+    maxPace = 10.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(
         children: [
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: entries.map((entry) {
-                final fraction = entry.value / maxY;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1),
-                    child: FractionallySizedBox(
-                      heightFactor: fraction.clamp(0.02, 1.0),
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: entry.value > 0
-                              ? AppTheme.electricBlue
-                              : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4),
+            child: Stack(
+              children: [
+                // Bar chart layer
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: entries.map((entry) {
+                    final fraction = entry.value / maxY;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1),
+                        child: FractionallySizedBox(
+                          heightFactor: fraction.clamp(0.02, 1.0),
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: entry.value > 0
+                                  ? AppTheme.electricBlue.withValues(alpha: 0.7)
+                                  : Colors.white.withValues(alpha: 0.05),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(4),
+                              ),
+                            ),
                           ),
                         ),
                       ),
+                    );
+                  }).toList(),
+                ),
+                // Pace line overlay
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _PaceLinePainter(
+                      entries: entries,
+                      maxPace: maxPace,
+                      minPace: minPace,
                     ),
                   ),
-                );
-              }).toList(),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 4),
+          // X-axis labels
           Row(
             children: entries.map((entry) {
               return Expanded(
@@ -815,6 +1239,40 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               );
             }).toList(),
           ),
+          // Legend
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: AppTheme.electricBlue.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Distance',
+                style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                width: 12,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Pace',
+                style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -822,16 +1280,15 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   String _getLabel(int value, HistoryPeriod period) {
     if (period == HistoryPeriod.week) {
-      // Use current time in selected timezone
-      final today = _convertToDisplayTimezone(DateTime.now().toUtc());
-      final date = today.subtract(Duration(days: 6 - value));
+      // Use range start to calculate the date for each bar
+      final date = _rangeStart.add(Duration(days: value));
       return DateFormat.E().format(date)[0];
     } else if (period == HistoryPeriod.month) {
       // Show labels at day 1, 7, 14, 21, 28
       return (value == 1 || value % 7 == 0) ? '$value' : '';
     } else {
       if (value >= 1 && value <= 12) {
-        final d = DateTime(2024, value);
+        final d = DateTime(_rangeStart.year, value);
         return DateFormat.MMM().format(d)[0];
       }
       return '';
@@ -1027,6 +1484,95 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
+  /// Build run list for entire range (when no specific day is selected)
+  Widget _buildRangeRunsList(List<RunSession> runs) {
+    if (runs.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.date_range_rounded,
+              size: 32,
+              color: Colors.white.withOpacity(0.1),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No runs in this ${_selectedPeriod.name}',
+              style: GoogleFonts.inter(fontSize: 13, color: Colors.white30),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Range header - minimal
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _formatRangeDisplay(),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white54,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '${runs.length} run${runs.length > 1 ? 's' : ''}',
+              style: GoogleFonts.inter(fontSize: 11, color: Colors.white30),
+            ),
+            const Spacer(),
+            // Subtle hint
+            Text(
+              'tap day',
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                color: Colors.white.withOpacity(0.2),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Compact run list
+        ...runs
+            .take(10)
+            .map(
+              (run) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildRunTile(run),
+              ),
+            ),
+        if (runs.length > 10)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Center(
+              child: Text(
+                '+${runs.length - 10} more runs',
+                style: GoogleFonts.inter(fontSize: 12, color: Colors.white30),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   String _formatPace(double paceMinPerKm) {
     if (paceMinPerKm.isInfinite || paceMinPerKm.isNaN || paceMinPerKm == 0) {
       return "-'--\"";
@@ -1071,28 +1617,133 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     List<RunSession> runs,
     HistoryPeriod period,
   ) {
-    // Use current time in selected timezone for filtering
-    final now = _convertToDisplayTimezone(DateTime.now().toUtc());
+    // Filter runs by the current range boundaries
     return runs.where((run) {
       final displayTime = _convertToDisplayTimezone(run.startTime);
-      final diff = now.difference(displayTime);
-      switch (period) {
-        case HistoryPeriod.week:
-          return diff.inDays < 7;
-        case HistoryPeriod.month:
-          return diff.inDays < 30;
-        case HistoryPeriod.year:
-          return diff.inDays < 365;
-      }
+      final runDate = DateTime(
+        displayTime.year,
+        displayTime.month,
+        displayTime.day,
+      );
+      final rangeStartDate = DateTime(
+        _rangeStart.year,
+        _rangeStart.month,
+        _rangeStart.day,
+      );
+      final rangeEndDate = DateTime(
+        _rangeEnd.year,
+        _rangeEnd.month,
+        _rangeEnd.day,
+      );
+      return !runDate.isBefore(rangeStartDate) &&
+          !runDate.isAfter(rangeEndDate);
     }).toList();
   }
 }
 
-/// Simple data class for bar chart entries.
+/// Simple data class for bar chart entries with distance and pace.
 class _BarEntry {
   final int x;
-  final double value;
+  final double value; // distance in km
+  final double? pace; // pace in min/km (null if no runs)
   final String label;
 
-  const _BarEntry({required this.x, required this.value, required this.label});
+  const _BarEntry({
+    required this.x,
+    required this.value,
+    this.pace,
+    required this.label,
+  });
+}
+
+/// CustomPainter for drawing the pace line overlay on the bar chart.
+class _PaceLinePainter extends CustomPainter {
+  final List<_BarEntry> entries;
+  final double maxPace;
+  final double minPace;
+
+  _PaceLinePainter({
+    required this.entries,
+    required this.maxPace,
+    required this.minPace,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (entries.isEmpty) return;
+
+    // Filter entries with valid pace values
+    final pacePoints = <Offset>[];
+    final barWidth = size.width / entries.length;
+
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      if (entry.pace != null && entry.value > 0) {
+        final x = (i + 0.5) * barWidth;
+        // Invert Y: lower pace = higher position (better performance)
+        // Normalize pace between minPace and maxPace
+        final paceRange = maxPace - minPace;
+        final normalizedPace = paceRange > 0
+            ? (entry.pace! - minPace) / paceRange
+            : 0.5;
+        // Inverted: lower pace (faster) = higher Y position
+        final y = size.height * normalizedPace;
+        pacePoints.add(Offset(x, y));
+      }
+    }
+
+    if (pacePoints.length < 2) return;
+
+    // Draw the pace line with glow effect
+    final glowPaint = Paint()
+      ..color = const Color(0xFFF59E0B).withValues(alpha: 0.3)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final linePaint = Paint()
+      ..color = const Color(0xFFF59E0B).withValues(alpha: 0.8)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final dotPaint = Paint()
+      ..color = const Color(0xFFF59E0B)
+      ..style = PaintingStyle.fill;
+
+    final dotBorderPaint = Paint()
+      ..color = const Color(0xFF0A0E1A)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    // Create smooth path
+    final path = Path();
+    path.moveTo(pacePoints[0].dx, pacePoints[0].dy);
+
+    for (int i = 1; i < pacePoints.length; i++) {
+      final p0 = pacePoints[i - 1];
+      final p1 = pacePoints[i];
+      // Simple line connection (can be enhanced with bezier curves)
+      path.lineTo(p1.dx, p1.dy);
+    }
+
+    // Draw glow then line
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, linePaint);
+
+    // Draw dots at each data point
+    for (final point in pacePoints) {
+      canvas.drawCircle(point, 5, dotPaint);
+      canvas.drawCircle(point, 5, dotBorderPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PaceLinePainter oldDelegate) {
+    return oldDelegate.entries != entries ||
+        oldDelegate.maxPace != maxPace ||
+        oldDelegate.minPace != minPace;
+  }
 }

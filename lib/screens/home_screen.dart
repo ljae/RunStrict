@@ -152,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final pointsService = context.watch<PointsService>();
     final topPadding = MediaQuery.of(context).padding.top;
-    final contentHeight = isLandscape ? 48.0 : 68.0;
+    final contentHeight = isLandscape ? 52.0 : 68.0;
 
     return PreferredSize(
       preferredSize: Size.fromHeight(topPadding + contentHeight),

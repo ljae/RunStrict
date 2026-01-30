@@ -322,6 +322,7 @@ class _CrewScreenState extends State<CrewScreen> with TickerProviderStateMixin {
           Expanded(
             flex: 4,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
