@@ -1,32 +1,15 @@
 import 'team.dart';
 
-/// RunSummary - Server upload payload for "The Final Sync"
-///
-/// Contains all data needed for batch upload at run completion:
-/// - Run metadata (id, endTime, distance, duration, pace)
-/// - Hex data (hexesColored count, hexPath for flip calculation)
-/// - Multiplier (yesterdayCrewCount for points calculation)
 class RunSummary {
   final String id;
-
-  /// Run completion time (used for conflict resolution: "Later run wins")
   final DateTime endTime;
-
   final double distanceKm;
   final int durationSeconds;
   final double avgPaceMinPerKm;
   final int hexesColored;
   final Team teamAtRun;
-
-  /// Deduplicated H3 IDs of hexes passed during run
   final List<String> hexPath;
-
-  /// Yesterday's crew check-in count (applied multiplier for points calculation)
-  /// Default to 1 for solo runners or new users/crews
-  final int yesterdayCrewCount;
-
-  /// Coefficient of Variation (null for runs < 1km)
-  /// Measures pace consistency: lower = more stable
+  final int buffMultiplier;
   final double? cv;
 
   const RunSummary({
@@ -38,7 +21,7 @@ class RunSummary {
     required this.hexesColored,
     required this.teamAtRun,
     this.hexPath = const [],
-    this.yesterdayCrewCount = 1,
+    this.buffMultiplier = 1,
     this.cv,
   });
 
@@ -48,8 +31,7 @@ class RunSummary {
   DateTime get startTime =>
       endTime.subtract(Duration(seconds: durationSeconds));
 
-  /// Calculate flip points (for display only - server validates)
-  int get flipPoints => hexesColored * yesterdayCrewCount;
+  int get flipPoints => hexesColored * buffMultiplier;
 
   /// Stability score (100 - CV, clamped 0-100)
   /// Higher = more consistent pace
@@ -86,8 +68,8 @@ class RunSummary {
         60, // Convert sec/km back to min/km
     hexesColored: (map['hexesColored'] as num?)?.toInt() ?? 0,
     teamAtRun: Team.values.byName(map['teamAtRun'] as String),
-    hexPath: const [], // Not stored in SQLite (only for server sync)
-    yesterdayCrewCount: 1, // Not stored in SQLite (only for server sync)
+    hexPath: const [],
+    buffMultiplier: 1,
     cv: (map['cv'] as num?)?.toDouble(),
   );
 
@@ -101,7 +83,7 @@ class RunSummary {
     hexesColored: (row['hexes_colored'] as num?)?.toInt() ?? 0,
     teamAtRun: Team.values.byName(row['team_at_run'] as String),
     hexPath: List<String>.from(row['hex_path'] as List? ?? []),
-    yesterdayCrewCount: (row['yesterday_crew_count'] as num?)?.toInt() ?? 1,
+    buffMultiplier: (row['buff_multiplier'] as num?)?.toInt() ?? 1,
     cv: (row['cv'] as num?)?.toDouble(),
   );
 
@@ -114,7 +96,7 @@ class RunSummary {
     'hexes_colored': hexesColored,
     'team_at_run': teamAtRun.name,
     'hex_path': hexPath,
-    'yesterday_crew_count': yesterdayCrewCount,
+    'buff_multiplier': buffMultiplier,
     'cv': cv,
   };
 }

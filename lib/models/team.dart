@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 /// Team enum for RunStrict game
 /// - Red/Blue: Starting teams (compete for territory)
-/// - Purple: Mid-season chaos mechanic (unlocks D-140)
+/// - Purple: Chaos mechanic (available anytime)
 enum Team {
   red, // Display: "FLAME" - Passion & Energy
   blue, // Display: "WAVE" - Trust & Harmony
-  purple; // Display: "CHAOS" - The Betrayer's Path (D-140 unlock)
+  purple; // Display: "CHAOS" - The Betrayer's Path (available anytime)
 
   String get displayName {
     switch (this) {

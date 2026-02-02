@@ -6,10 +6,9 @@ import '../services/season_service.dart';
 
 /// Traitor's Gate - Purple team defection screen.
 ///
-/// Per spec §2.8: Users can defect to Purple (CHAOS) after D-140.
+/// Per spec §2.8: Users can defect to Purple (CHAOS) anytime during the season.
 /// Requirements:
-/// - Must leave crew first (crewId == null)
-/// - All Flip Points reset to 0
+/// - Flip Points are PRESERVED (not reset)
 /// - Cannot return to Red/Blue for remainder of season
 class TraitorGateScreen extends StatefulWidget {
   const TraitorGateScreen({super.key});
@@ -30,7 +29,7 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: BorderSide(
-            color: AppTheme.chaosPurple.withOpacity(0.5),
+            color: AppTheme.chaosPurple.withValues(alpha: 0.5),
             width: 1,
           ),
         ),
@@ -150,9 +149,8 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
           );
         }
 
-        final isInCrew = user.crewId != null;
         final currentPoints = user.seasonPoints;
-        final canDefect = !isInCrew && !_isDefecting;
+        final canDefect = !_isDefecting;
 
         return Scaffold(
           backgroundColor: AppTheme.backgroundStart,
@@ -179,11 +177,11 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                   height: 120,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.chaosPurple.withOpacity(0.15),
+                    color: AppTheme.chaosPurple.withValues(alpha: 0.15),
                     border: Border.all(color: AppTheme.chaosPurple, width: 3),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.chaosPurple.withOpacity(0.3),
+                        color: AppTheme.chaosPurple.withValues(alpha: 0.3),
                         blurRadius: 30,
                         spreadRadius: 5,
                       ),
@@ -202,7 +200,7 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                   padding: const EdgeInsets.all(AppTheme.spacingL),
                   decoration: AppTheme.meshDecoration().copyWith(
                     border: Border.all(
-                      color: AppTheme.chaosPurple.withOpacity(0.3),
+                      color: AppTheme.chaosPurple.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -228,27 +226,27 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                       Container(
                         padding: const EdgeInsets.all(AppTheme.spacingM),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
+                          color: AppTheme.chaosPurple.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.orange.withOpacity(0.3),
+                            color: AppTheme.chaosPurple.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.orange,
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: AppTheme.chaosPurple,
                               size: 24,
                             ),
                             const SizedBox(width: AppTheme.spacingS),
                             Flexible(
                               child: Text(
-                                'Your Flip Points will be reset to ZERO',
+                                'Your Flip Points will be PRESERVED',
                                 style: Theme.of(context).textTheme.bodyMedium
                                     ?.copyWith(
-                                      color: Colors.orange,
+                                      color: AppTheme.chaosPurple,
                                       fontWeight: FontWeight.w600,
                                     ),
                               ),
@@ -270,7 +268,7 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                   child: Column(
                     children: [
                       Text(
-                        'CURRENT FLIP POINTS',
+                        'YOUR FLIP POINTS',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: AppTheme.textSecondary,
                         ),
@@ -281,16 +279,20 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                         style: Theme.of(context).textTheme.displayMedium
                             ?.copyWith(
                               color: currentPoints > 0
-                                  ? Colors.red
+                                  ? AppTheme.chaosPurple
                                   : AppTheme.textMuted,
                             ),
                       ),
                       if (currentPoints > 0) ...[
                         const SizedBox(height: AppTheme.spacingXS),
                         Text(
-                          'Will be lost forever',
+                          'Will continue in CHAOS',
                           style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.red.withOpacity(0.7)),
+                              ?.copyWith(
+                                color: AppTheme.chaosPurple.withValues(
+                                  alpha: 0.7,
+                                ),
+                              ),
                         ),
                       ],
                     ],
@@ -299,108 +301,51 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
 
                 const SizedBox(height: AppTheme.spacingL),
 
-                // Crew check / Defect button
-                if (isInCrew) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppTheme.spacingM),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.group_off,
-                          color: Colors.red,
-                          size: 32,
-                        ),
-                        const SizedBox(height: AppTheme.spacingS),
-                        Text(
-                          'You must leave your crew first',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodyLarge?.copyWith(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: AppTheme.spacingXS),
-                        Text(
-                          'Go to Crew screen to leave your current crew',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppTheme.textSecondary),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppTheme.spacingL),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: null, // Disabled
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.surfaceColor,
-                        disabledBackgroundColor: AppTheme.surfaceColor
-                            .withOpacity(0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                // Defect button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: canDefect
+                        ? () => _showConfirmationDialog(context)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.chaosPurple,
+                      disabledBackgroundColor: AppTheme.chaosPurple.withValues(
+                        alpha: 0.5,
                       ),
-                      child: Text(
-                        'LEAVE CREW FIRST',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: AppTheme.textMuted,
-                        ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                  ),
-                ] else ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: canDefect
-                          ? () => _showConfirmationDialog(context)
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.chaosPurple,
-                        disabledBackgroundColor: AppTheme.chaosPurple
-                            .withOpacity(0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: _isDefecting
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
+                    child: _isDefecting
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
                               ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('💀'),
-                                const SizedBox(width: AppTheme.spacingS),
-                                Text(
-                                  'DEFECT TO CHAOS',
-                                  style: Theme.of(context).textTheme.labelLarge
-                                      ?.copyWith(
-                                        color: Colors.white,
-                                        letterSpacing: 1.0,
-                                      ),
-                                ),
-                              ],
                             ),
-                    ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('💀'),
+                              const SizedBox(width: AppTheme.spacingS),
+                              Text(
+                                'DEFECT TO CHAOS',
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      letterSpacing: 1.0,
+                                    ),
+                              ),
+                            ],
+                          ),
                   ),
-                ],
+                ),
 
                 const SizedBox(height: AppTheme.spacingXL),
 
@@ -408,7 +353,7 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                 Text(
                   '"Order is a lie. Chaos is the only truth."',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.chaosPurple.withOpacity(0.7),
+                    color: AppTheme.chaosPurple.withValues(alpha: 0.7),
                     fontStyle: FontStyle.italic,
                   ),
                   textAlign: TextAlign.center,

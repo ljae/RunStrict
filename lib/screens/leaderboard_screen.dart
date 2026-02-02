@@ -1,19 +1,16 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../config/h3_config.dart';
 import '../theme/app_theme.dart';
 import '../models/team.dart';
 import '../providers/leaderboard_provider.dart';
 import '../providers/app_state_provider.dart';
 
-/// Period filter for leaderboard rankings
-enum RankingPeriod { total, week, month, year }
+/// League scope for leaderboard rankings
+enum LeagueScope { myLeague, globalTop100 }
 
-/// Leaderboard Screen - Rankings by Flip Points
-/// Redesigned: Minimal design matching History screen
+/// Leaderboard Screen - Rankings by Flip Points (Season-based)
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 
@@ -23,15 +20,14 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen>
     with TickerProviderStateMixin {
-  RankingPeriod _selectedPeriod = RankingPeriod.total;
-  GeographicScope _scopeFilter = GeographicScope.all;
   late AnimationController _pulseController;
   late AnimationController _entranceController;
   final bool _useMockData = false;
 
-  // Range-based navigation state
-  DateTime _rangeStart = DateTime.now();
-  DateTime _rangeEnd = DateTime.now();
+  // League and season state
+  LeagueScope _selectedScope = LeagueScope.myLeague;
+  int _currentSeason = 1; // Current season number
+  static const int _totalSeasons = 1; // Total available seasons (will grow)
 
   @override
   void initState() {
@@ -46,111 +42,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       duration: const Duration(milliseconds: 800),
     )..forward();
 
-    // Initialize range based on current date and default period
-    _calculateRange(DateTime.now(), _selectedPeriod);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<LeaderboardProvider>().fetchLeaderboard();
     });
   }
 
-  /// Calculate range boundaries based on anchor date and period
-  void _calculateRange(DateTime anchorDate, RankingPeriod period) {
-    switch (period) {
-      case RankingPeriod.total:
-        // Total = all time, no range needed
-        _rangeStart = DateTime(2020, 1, 1); // Arbitrary early date
-        _rangeEnd = DateTime.now().add(const Duration(days: 1));
-        break;
-      case RankingPeriod.week:
-        // Week starts Sunday (weekday % 7 gives Sunday = 0)
-        final dayOfWeek = anchorDate.weekday % 7;
-        _rangeStart = DateTime(
-          anchorDate.year,
-          anchorDate.month,
-          anchorDate.day - dayOfWeek,
-        );
-        _rangeEnd = _rangeStart.add(const Duration(days: 6));
-        break;
-      case RankingPeriod.month:
-        // First to last day of month
-        _rangeStart = DateTime(anchorDate.year, anchorDate.month, 1);
-        _rangeEnd = DateTime(anchorDate.year, anchorDate.month + 1, 0);
-        break;
-      case RankingPeriod.year:
-        // Jan 1 to Dec 31
-        _rangeStart = DateTime(anchorDate.year, 1, 1);
-        _rangeEnd = DateTime(anchorDate.year, 12, 31);
-        break;
+  void _navigatePreviousSeason() {
+    if (_currentSeason > 1) {
+      setState(() => _currentSeason--);
     }
   }
 
-  /// Navigate to previous range (week/month/year)
-  void _navigatePrevious() {
-    if (_selectedPeriod == RankingPeriod.total) return;
-    DateTime newAnchor;
-    switch (_selectedPeriod) {
-      case RankingPeriod.total:
-        return;
-      case RankingPeriod.week:
-        newAnchor = _rangeStart.subtract(const Duration(days: 7));
-        break;
-      case RankingPeriod.month:
-        newAnchor = DateTime(_rangeStart.year, _rangeStart.month - 1, 1);
-        break;
-      case RankingPeriod.year:
-        newAnchor = DateTime(_rangeStart.year - 1, 1, 1);
-        break;
+  void _navigateNextSeason() {
+    if (_currentSeason < _totalSeasons) {
+      setState(() => _currentSeason++);
     }
-    setState(() {
-      _calculateRange(newAnchor, _selectedPeriod);
-    });
   }
 
-  /// Navigate to next range (week/month/year)
-  void _navigateNext() {
-    if (_selectedPeriod == RankingPeriod.total) return;
-    DateTime newAnchor;
-    switch (_selectedPeriod) {
-      case RankingPeriod.total:
-        return;
-      case RankingPeriod.week:
-        newAnchor = _rangeStart.add(const Duration(days: 7));
-        break;
-      case RankingPeriod.month:
-        newAnchor = DateTime(_rangeStart.year, _rangeStart.month + 1, 1);
-        break;
-      case RankingPeriod.year:
-        newAnchor = DateTime(_rangeStart.year + 1, 1, 1);
-        break;
-    }
-    setState(() {
-      _calculateRange(newAnchor, _selectedPeriod);
-    });
-  }
-
-  /// Format range display based on period
-  String _formatRangeDisplay() {
-    switch (_selectedPeriod) {
-      case RankingPeriod.total:
-        return 'ALL TIME';
-      case RankingPeriod.week:
-        // "Jan 26 - Feb 1" or "Dec 28 - Jan 3, 2027" if years differ
-        final startFormat = DateFormat('MMM d');
-        if (_rangeStart.year != _rangeEnd.year) {
-          return '${startFormat.format(_rangeStart)} - ${DateFormat('MMM d, yyyy').format(_rangeEnd)}';
-        } else if (_rangeStart.month != _rangeEnd.month) {
-          return '${startFormat.format(_rangeStart)} - ${DateFormat('MMM d').format(_rangeEnd)}';
-        } else {
-          return '${startFormat.format(_rangeStart)} - ${_rangeEnd.day}';
-        }
-      case RankingPeriod.month:
-        // "JANUARY 2026"
-        return DateFormat('MMMM yyyy').format(_rangeStart).toUpperCase();
-      case RankingPeriod.year:
-        // "2026"
-        return _rangeStart.year.toString();
-    }
+  String _formatSeasonDisplay() {
+    return 'SEASON $_currentSeason';
   }
 
   // Mock Data
@@ -162,7 +72,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 2847,
       totalDistanceKm: 154.2,
       avatar: '🦊',
-      crewName: 'Phoenix Squad',
       lastHexId: '89283082803ffff',
       zoneHexId: '88283082807ffff',
       cityHexId: '86283080fffffff',
@@ -176,7 +85,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 2654,
       totalDistanceKm: 148.5,
       avatar: '🐬',
-      crewName: 'Tidal Force',
       lastHexId: '89283082813ffff',
       zoneHexId: '88283082817ffff',
       cityHexId: '86283080fffffff',
@@ -190,7 +98,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 2412,
       totalDistanceKm: 142.8,
       avatar: '🔥',
-      crewName: 'Phoenix Squad',
       lastHexId: '89283082823ffff',
       zoneHexId: '88283082827ffff',
       cityHexId: '86283080fffffff',
@@ -204,7 +111,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 2198,
       totalDistanceKm: 135.0,
       avatar: '🌊',
-      crewName: 'Ocean Runners',
       lastHexId: '89283082833ffff',
       zoneHexId: '88283082837ffff',
       cityHexId: '86283080fffffff',
@@ -218,7 +124,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 2156,
       totalDistanceKm: 68.2,
       avatar: '💀',
-      crewName: 'Void Walkers',
       lastHexId: '89283082843ffff',
       zoneHexId: '88283082847ffff',
       cityHexId: '86283080fffffff',
@@ -232,7 +137,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1987,
       totalDistanceKm: 128.4,
       avatar: '🦉',
-      crewName: 'Night Runners',
       lastHexId: '89283082853ffff',
       zoneHexId: '88283082857ffff',
       cityHexId: '86283080fffffff',
@@ -246,7 +150,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1845,
       totalDistanceKm: 122.1,
       avatar: '⚡',
-      crewName: 'Thunder Crew',
       lastHexId: '89283082863ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
@@ -260,7 +163,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1756,
       totalDistanceKm: 44.5,
       avatar: '🌀',
-      crewName: 'Void Walkers',
       lastHexId: '89283082873ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
@@ -274,7 +176,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1634,
       totalDistanceKm: 115.7,
       avatar: '🌟',
-      crewName: 'Blaze Squad',
       lastHexId: '89283082883ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
@@ -288,7 +189,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1523,
       totalDistanceKm: 109.3,
       avatar: '🐋',
-      crewName: 'Ocean Runners',
       lastHexId: '89283082893ffff',
       zoneHexId: null,
       cityHexId: '86283080fffffff',
@@ -302,7 +202,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1412,
       totalDistanceKm: 105.0,
       avatar: '🦅',
-      crewName: 'Phoenix Squad',
       avgPaceMinPerKm: 5.40,
       stabilityScore: 80,
     ),
@@ -313,7 +212,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1298,
       totalDistanceKm: 98.6,
       avatar: '🐙',
-      crewName: 'Tidal Force',
       avgPaceMinPerKm: 5.90,
       stabilityScore: 72,
     ),
@@ -324,7 +222,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1245,
       totalDistanceKm: 32.1,
       avatar: '👁️',
-      crewName: 'Shadow Protocol',
       avgPaceMinPerKm: 4.30,
       stabilityScore: 28,
     ),
@@ -335,7 +232,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1156,
       totalDistanceKm: 95.2,
       avatar: '✨',
-      crewName: 'Blaze Squad',
       avgPaceMinPerKm: 5.70,
       stabilityScore: 68,
     ),
@@ -346,7 +242,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       flipPoints: 1087,
       totalDistanceKm: 92.1,
       avatar: '🌊',
-      crewName: 'Thunder Crew',
       avgPaceMinPerKm: 6.10,
       stabilityScore: 60,
     ),
@@ -361,28 +256,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     if (_useMockData || entries.isEmpty) {
       // Use mock data for development/testing
       runners = List<LeaderboardRunner>.from(_allRunners);
-
-      // Apply mock scope filtering (no team filter - all teams shown)
-      switch (_scopeFilter) {
-        case GeographicScope.zone:
-          runners = runners.where((r) => r.zoneHexId != null).toList();
-          runners = runners.take(6).toList();
-          break;
-        case GeographicScope.city:
-          runners = runners.where((r) => r.cityHexId != null).toList();
-          runners = runners.take(10).toList();
-          break;
-        case GeographicScope.all:
-          break;
-      }
     } else {
-      // Use real data with home-hex-anchored scope filtering (no team filter)
-      final filteredEntries = leaderboardProvider.filterByTeamAndScope(
-        null, // No team filter - show all teams
-        _scopeFilter,
-      );
-
-      runners = filteredEntries
+      // Use real data - all users, no geographic filtering
+      runners = entries
           .map(
             (e) => LeaderboardRunner(
               id: e.id,
@@ -391,7 +267,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               flipPoints: e.seasonPoints,
               totalDistanceKm: e.totalDistanceKm,
               avatar: e.avatar,
-              crewName: null,
               avgPaceMinPerKm: e.avgPaceMinPerKm,
               stabilityScore: e.stabilityScore,
             ),
@@ -426,32 +301,40 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   LeaderboardRunner? _getCurrentUserData(BuildContext context) {
-    final userId = _getCurrentUserId(context);
-    if (userId == null) return null;
+    final appState = context.read<AppStateProvider>();
+    final currentUser = appState.currentUser;
+    if (currentUser == null) return null;
 
     final leaderboardProvider = context.read<LeaderboardProvider>();
     final entries = leaderboardProvider.entries;
 
-    if (_useMockData || entries.isEmpty) {
-      try {
-        return _allRunners.firstWhere((r) => r.id == userId);
-      } catch (_) {
-        return null;
+    // Try to get from leaderboard provider first
+    if (!_useMockData && entries.isNotEmpty) {
+      final entry = leaderboardProvider.getUser(currentUser.id);
+      if (entry != null) {
+        return LeaderboardRunner(
+          id: entry.id,
+          name: entry.name,
+          team: entry.team,
+          flipPoints: entry.seasonPoints,
+          totalDistanceKm: entry.totalDistanceKm,
+          avatar: entry.avatar,
+          avgPaceMinPerKm: entry.avgPaceMinPerKm,
+          stabilityScore: entry.stabilityScore,
+        );
       }
     }
 
-    final entry = leaderboardProvider.getUser(userId);
-    if (entry == null) return null;
-
+    // Fallback: create from AppStateProvider's currentUser
     return LeaderboardRunner(
-      id: entry.id,
-      name: entry.name,
-      team: entry.team,
-      flipPoints: entry.seasonPoints,
-      totalDistanceKm: entry.totalDistanceKm,
-      avatar: entry.avatar,
-      avgPaceMinPerKm: entry.avgPaceMinPerKm,
-      stabilityScore: entry.stabilityScore,
+      id: currentUser.id,
+      name: currentUser.name,
+      team: currentUser.team,
+      flipPoints: currentUser.seasonPoints,
+      totalDistanceKm: currentUser.totalDistanceKm,
+      avatar: currentUser.avatar,
+      avgPaceMinPerKm: currentUser.avgPaceMinPerKm,
+      stabilityScore: currentUser.stabilityScore,
     );
   }
 
@@ -482,13 +365,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildHeader(),
-                  const SizedBox(height: 8),
-                  _buildPeriodToggle(),
+                  const SizedBox(height: 16),
+                  // Season stats panel (user's season record)
+                  _buildSeasonStatsSection(context),
                   const SizedBox(height: 12),
-                  _buildRangeNavigation(),
+                  // League toggle: My League | Global TOP 100
+                  _buildLeagueToggle(),
                   const SizedBox(height: 8),
-                  _buildFilterBar(),
+                  // Season navigation
+                  _buildSeasonNavigation(),
+                  const SizedBox(height: 16),
                   Expanded(
                     child: runners.isEmpty
                         ? _buildEmptyState()
@@ -552,60 +438,172 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // HEADER
+  // SEASON STATS & CONTROLS (Matching History Screen Design)
   // ---------------------------------------------------------------------------
 
-  Widget _buildHeader() {
+  /// Season stats section - user's season record (matching ALL TIME design in history)
+  Widget _buildSeasonStatsSection(BuildContext context) {
+    final appState = context.watch<AppStateProvider>();
+    final currentUser = appState.currentUser;
+
+    if (currentUser == null) {
+      return const SizedBox.shrink();
+    }
+
+    final rank = _getCurrentUserRank(context, _getFilteredRunners(context));
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: Text(
-        'RANKINGS',
-        style: GoogleFonts.sora(
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-          letterSpacing: 1.0,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.03)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Season label (matching ALL TIME style)
+            Text(
+              'SEASON RECORD',
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withOpacity(0.2),
+                letterSpacing: 2.0,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Stats in a row with separators (matching ALL TIME layout)
+            Row(
+              children: [
+                // Points - primary highlight (white like distance in ALL TIME)
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            '${currentUser.seasonPoints}',
+                            style: GoogleFonts.sora(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              height: 1.0,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'pts',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white30,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Vertical divider
+                Container(
+                  width: 1,
+                  height: 32,
+                  color: Colors.white.withOpacity(0.06),
+                ),
+                // Secondary stats (matching ALL TIME: 4 items with flex: 4)
+                Expanded(
+                  flex: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildSeasonMiniStat(
+                          _formatPace(currentUser.avgPaceMinPerKm),
+                          '/km',
+                        ),
+                        _buildSeasonMiniStat(
+                          _formatCompact(currentUser.totalDistanceKm),
+                          'km',
+                        ),
+                        _buildSeasonMiniStat(rank > 0 ? '#$rank' : '—', 'rank'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // CONSOLIDATED FILTER BAR
-  // ---------------------------------------------------------------------------
+  /// Mini stat for season stats panel
+  Widget _buildSeasonMiniStat(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.sora(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+            color: Colors.white24,
+          ),
+        ),
+      ],
+    );
+  }
 
-  /// Period toggle: TOTAL | WEEK | MONTH | YEAR
-  Widget _buildPeriodToggle() {
+  /// League toggle: MY LEAGUE | GLOBAL TOP 100
+  Widget _buildLeagueToggle() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
         height: 36,
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
+          color: AppTheme.surfaceColor.withOpacity(0.3),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Row(
-          children: RankingPeriod.values.map((period) {
-            final isSelected = _selectedPeriod == period;
+          children: LeagueScope.values.map((scope) {
+            final isSelected = _selectedScope == scope;
+            final label = scope == LeagueScope.myLeague
+                ? 'MY LEAGUE'
+                : 'GLOBAL TOP 100';
             return Expanded(
               child: GestureDetector(
                 onTap: () {
-                  setState(() {
-                    _selectedPeriod = period;
-                    _calculateRange(DateTime.now(), period);
-                  });
+                  setState(() => _selectedScope = scope);
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.white.withValues(alpha: 0.1)
+                        ? Colors.white.withOpacity(0.1)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    period.name.toUpperCase(),
+                    label,
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: isSelected
@@ -624,9 +622,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
-  /// Range navigation: < Jan 26 - Feb 1 >
-  Widget _buildRangeNavigation() {
-    final isTotal = _selectedPeriod == RankingPeriod.total;
+  /// Season navigation with prev/next controls
+  Widget _buildSeasonNavigation() {
+    final canGoPrevious = _currentSeason > 1;
+    final canGoNext = _currentSeason < _totalSeasons;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -635,14 +634,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         children: [
           // Previous arrow
           GestureDetector(
-            onTap: isTotal ? null : _navigatePrevious,
+            onTap: canGoPrevious ? _navigatePreviousSeason : null,
             child: Container(
               width: 32,
               height: 32,
               alignment: Alignment.center,
               child: Icon(
                 Icons.chevron_left_rounded,
-                color: isTotal ? Colors.white12 : Colors.white54,
+                color: canGoPrevious ? Colors.white54 : Colors.white12,
                 size: 24,
               ),
             ),
@@ -650,10 +649,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
           const SizedBox(width: 8),
 
-          // Range display
+          // Season display
           Expanded(
             child: Text(
-              _formatRangeDisplay(),
+              _formatSeasonDisplay(),
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: 13,
@@ -668,14 +667,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
           // Next arrow
           GestureDetector(
-            onTap: isTotal ? null : _navigateNext,
+            onTap: canGoNext ? _navigateNextSeason : null,
             child: Container(
               width: 32,
               height: 32,
               alignment: Alignment.center,
               child: Icon(
                 Icons.chevron_right_rounded,
-                color: isTotal ? Colors.white12 : Colors.white54,
+                color: canGoNext ? Colors.white54 : Colors.white12,
                 size: 24,
               ),
             ),
@@ -685,63 +684,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
-  /// Combined filter bar: Scope dropdown only (team filter removed)
-  Widget _buildFilterBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [_buildScopeDropdown()],
-      ),
-    );
+  /// Format pace as "X'XX" (e.g., "5'30")
+  String _formatPace(double? paceMinPerKm) {
+    if (paceMinPerKm == null ||
+        paceMinPerKm.isInfinite ||
+        paceMinPerKm.isNaN ||
+        paceMinPerKm == 0) {
+      return "-'--";
+    }
+    final min = paceMinPerKm.floor();
+    final sec = ((paceMinPerKm - min) * 60).round();
+    return "$min'${sec.toString().padLeft(2, '0')}";
   }
 
-  /// Get the icon for a geographic scope (matching MapScreen's _ZoomLevelSelector)
-  IconData _getScopeIcon(GeographicScope scope) {
-    return switch (scope) {
-      GeographicScope.zone => Icons.grid_view_rounded,
-      GeographicScope.city => Icons.location_city_rounded,
-      GeographicScope.all => Icons.public_rounded,
-    };
-  }
-
-  Widget _buildScopeDropdown() {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (_scopeFilter == GeographicScope.all) {
-            _scopeFilter = GeographicScope.city;
-          } else if (_scopeFilter == GeographicScope.city) {
-            _scopeFilter = GeographicScope.zone;
-          } else {
-            _scopeFilter = GeographicScope.all;
-          }
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Icon(
-              _getScopeIcon(_scopeFilter),
-              color: AppTheme.electricBlue,
-              size: 18,
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              color: Colors.white.withValues(alpha: 0.5),
-              size: 18,
-            ),
-          ],
-        ),
-      ),
-    );
+  /// Format large numbers with K suffix (e.g., 10232 → "10.2K")
+  String _formatCompact(num value) {
+    if (value >= 1000) {
+      final k = value / 1000;
+      return '${k.toStringAsFixed(1)}K';
+    }
+    return value is double ? value.toStringAsFixed(1) : value.toString();
   }
 
   // ---------------------------------------------------------------------------
@@ -892,20 +854,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
                   const SizedBox(height: 4),
 
-                  // Secondary stats row: distance + stability
+                  // Secondary stats row: distance + pace
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Distance
                       Text(
-                        '${runner.totalDistanceKm.toStringAsFixed(0)}km',
+                        '${_formatCompact(runner.totalDistanceKm)}km',
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                           color: Colors.white54,
                         ),
                       ),
-                      if (runner.stabilityScore != null) ...[
+                      if (runner.avgPaceMinPerKm != null &&
+                          runner.avgPaceMinPerKm! > 0) ...[
                         Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           width: 2,
@@ -915,13 +878,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                             shape: BoxShape.circle,
                           ),
                         ),
-                        // Stability badge
+                        // Pace
                         Text(
-                          '${runner.stabilityScore}%',
+                          '${runner.formattedPace}/km',
                           style: GoogleFonts.inter(
                             fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: _getStabilityColor(runner.stabilityScore!),
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white54,
                           ),
                         ),
                       ],
@@ -1060,44 +1023,44 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     ),
                   ),
 
-                  // Distance (matching podium format)
+                  // Distance + Pace (matching podium format)
                   if (runner.totalDistanceKm > 0)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: Text(
-                        '${runner.totalDistanceKm.toStringAsFixed(0)}km',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white54,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${_formatCompact(runner.totalDistanceKm)}km',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white54,
+                            ),
+                          ),
+                          if (runner.avgPaceMinPerKm != null &&
+                              runner.avgPaceMinPerKm! > 0) ...[
+                            Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              width: 2,
+                              height: 2,
+                              decoration: const BoxDecoration(
+                                color: Colors.white24,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Text(
+                              '${runner.formattedPace}/km',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-
-                  // Stability badge (if available)
-                  if (runner.stabilityScore != null) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getStabilityColor(
-                          runner.stabilityScore!,
-                        ).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '${runner.stabilityScore}%',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: _getStabilityColor(runner.stabilityScore!),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
 
                   // Points
                   Text(
@@ -1198,14 +1161,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     );
   }
 
-  /// Get color for stability score badge
-  /// Green = high stability (>80), Yellow = medium (50-80), Red = low (<50)
-  Color _getStabilityColor(int score) {
-    if (score >= 80) return const Color(0xFF22C55E); // Green
-    if (score >= 50) return const Color(0xFFF59E0B); // Amber
-    return const Color(0xFFEF4444); // Red
-  }
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -1241,7 +1196,6 @@ class LeaderboardRunner {
   final int flipPoints;
   final double totalDistanceKm;
   final String avatar;
-  final String? crewName;
   final String? lastHexId;
   final String? zoneHexId;
   final String? cityHexId;
@@ -1259,7 +1213,6 @@ class LeaderboardRunner {
     required this.flipPoints,
     required this.totalDistanceKm,
     required this.avatar,
-    this.crewName,
     this.lastHexId,
     this.zoneHexId,
     this.cityHexId,

@@ -190,26 +190,6 @@ class RunningScoreService {
     return 'Sprint';
   }
 
-  /// Get crew co-running multiplier
-  static double getCrewMultiplier(int crewMembersRunning) {
-    if (crewMembersRunning <= 1) return 1.0; // Solo
-    if (crewMembersRunning == 2) return 1.3; // Duo Boost
-    if (crewMembersRunning <= 4) return 1.6; // Squad Power
-    if (crewMembersRunning <= 8) return 2.0; // Crew Surge
-    if (crewMembersRunning <= 12) return 2.5; // Full Force
-    return 3.0; // Unity Wave (Purple Alliance)
-  }
-
-  /// Get crew bonus name
-  static String getCrewBonusName(int crewMembersRunning) {
-    if (crewMembersRunning <= 1) return 'Solo';
-    if (crewMembersRunning == 2) return 'Duo Boost';
-    if (crewMembersRunning <= 4) return 'Squad Power';
-    if (crewMembersRunning <= 8) return 'Crew Surge';
-    if (crewMembersRunning <= 12) return 'Full Force';
-    return 'Unity Wave';
-  }
-
   /// Check if the current pace is sufficient to capture a hex
   /// Threshold: Faster than 8:00 min/km (7.5 km/h)
   static bool canCapture(double paceMinPerKm) {
@@ -245,14 +225,12 @@ class RunningScoreService {
 class RunningScoreState {
   final double totalDistanceKm;
   final double currentPaceMinPerKm;
-  final int crewMembersRunning;
   final String? currentHexId;
   final int flipCount;
 
   RunningScoreState({
     this.totalDistanceKm = 0,
     this.currentPaceMinPerKm = 7.0,
-    this.crewMembersRunning = 1,
     this.currentHexId,
     this.flipCount = 0,
   });
@@ -270,14 +248,12 @@ class RunningScoreState {
   RunningScoreState copyWith({
     double? totalDistanceKm,
     double? currentPaceMinPerKm,
-    int? crewMembersRunning,
     String? currentHexId,
     int? flipCount,
   }) {
     return RunningScoreState(
       totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
       currentPaceMinPerKm: currentPaceMinPerKm ?? this.currentPaceMinPerKm,
-      crewMembersRunning: crewMembersRunning ?? this.crewMembersRunning,
       currentHexId: currentHexId ?? this.currentHexId,
       flipCount: flipCount ?? this.flipCount,
     );

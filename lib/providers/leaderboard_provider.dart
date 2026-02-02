@@ -12,7 +12,6 @@ class LeaderboardEntry {
   final String avatar;
   final int seasonPoints;
   final int rank;
-  final String? crewId;
 
   /// Total distance run in season (km)
   final double totalDistanceKm;
@@ -33,7 +32,6 @@ class LeaderboardEntry {
     required this.avatar,
     required this.seasonPoints,
     required this.rank,
-    this.crewId,
     this.totalDistanceKm = 0,
     this.avgPaceMinPerKm,
     this.avgCv,
@@ -55,7 +53,6 @@ class LeaderboardEntry {
       avatar: json['avatar'] as String? ?? '🏃',
       seasonPoints: (json['season_points'] as num?)?.toInt() ?? 0,
       rank: rank,
-      crewId: json['crew_id'] as String?,
       totalDistanceKm: (json['total_distance_km'] as num?)?.toDouble() ?? 0,
       avgPaceMinPerKm: (json['avg_pace_min_per_km'] as num?)?.toDouble(),
       avgCv: (json['avg_cv'] as num?)?.toDouble(),
@@ -143,13 +140,16 @@ class LeaderboardProvider with ChangeNotifier {
     // All scope means no geographic filtering
     if (scope == GeographicScope.all) return _entries;
 
-    final homeHex = _prefetchService.homeHex;
-    if (homeHex == null) {
-      debugPrint('LeaderboardProvider: No home hex set, returning all entries');
+    final referenceHex =
+        _prefetchService.seasonHomeHex ?? _prefetchService.homeHex;
+    if (referenceHex == null) {
+      debugPrint(
+        'LeaderboardProvider: No season/home hex set, returning all entries',
+      );
       return _entries;
     }
 
-    return _entries.where((e) => e.isInScope(homeHex, scope)).toList();
+    return _entries.where((e) => e.isInScope(referenceHex, scope)).toList();
   }
 
   /// Filter entries by both team and scope.

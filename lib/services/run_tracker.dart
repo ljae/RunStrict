@@ -64,7 +64,6 @@ class RunTracker {
   HexCaptureCallback? _onHexCapture;
   TierChangeCallback? _onTierChange;
   Team? _runnerTeam;
-  int _crewMembersCoRunning = 1;
   ImpactTier _currentTier = ImpactTier.starter;
   int _maxImpactTierIndex = 0;
 
@@ -102,7 +101,6 @@ class RunTracker {
   RunningScoreState get scoreState => RunningScoreState(
     totalDistanceKm: (_currentRun?.distanceMeters ?? 0) / 1000,
     currentPaceMinPerKm: _currentRun?.paceMinPerKm ?? 7.0,
-    crewMembersRunning: _crewMembersCoRunning,
     currentHexId: _currentRun?.currentHexId,
     flipCount: _currentRun?.hexesColored ?? 0,
   );
@@ -117,9 +115,8 @@ class RunTracker {
   }
 
   /// Set runner context for scoring
-  void setRunnerContext({required Team team, int crewMembersCoRunning = 1}) {
+  void setRunnerContext({required Team team}) {
     _runnerTeam = team;
-    _crewMembersCoRunning = crewMembersCoRunning;
   }
 
   /// Start a new run session
@@ -127,7 +124,6 @@ class RunTracker {
     Stream<LocationPoint> locationStream,
     String runId, {
     Team? team,
-    int crewMembersCoRunning = 1,
   }) async {
     if (_currentRun != null) {
       throw StateError('A run is already in progress');
@@ -136,7 +132,6 @@ class RunTracker {
     await _hexService.initialize();
 
     _runnerTeam = team;
-    _crewMembersCoRunning = crewMembersCoRunning;
     _currentTier = ImpactTier.starter;
     _maxImpactTierIndex = 0;
     _gpsValidator.reset();

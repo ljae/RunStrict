@@ -95,6 +95,44 @@ class HexService {
     return children.map((c) => c.toRadixString(16)).toList();
   }
 
+  /// Get all descendant hex IDs from parent resolution to target resolution.
+  ///
+  /// Recursively expands children until target resolution is reached.
+  /// Useful for getting all base hexes within a parent cell boundary.
+  ///
+  /// Example counts (H3 has 7 children per parent):
+  /// - Res 8 → Res 9: 7 hexes (ZONE)
+  /// - Res 6 → Res 9: 343 hexes (CITY)
+  /// - Res 5 → Res 9: 2,401 hexes (ALL)
+  List<String> getAllChildrenAtResolution(
+    String parentHexId,
+    int targetResolution,
+  ) {
+    _checkInit();
+
+    final parentIndex = BigInt.parse(parentHexId, radix: 16);
+    final parentRes = h3.getResolution(parentIndex);
+
+    // If already at target resolution, return the hex itself
+    if (parentRes >= targetResolution) {
+      return [parentHexId];
+    }
+
+    // Iteratively expand children until target resolution
+    List<BigInt> currentLevel = [parentIndex];
+
+    for (int res = parentRes + 1; res <= targetResolution; res++) {
+      final List<BigInt> nextLevel = [];
+      for (final hex in currentLevel) {
+        nextLevel.addAll(h3.cellToChildren(hex, res));
+      }
+      currentLevel = nextLevel;
+    }
+
+    // Convert to hex strings
+    return currentLevel.map((h) => h.toRadixString(16)).toList();
+  }
+
   /// Get the resolution of a hex
   int getHexResolution(String hexId) {
     _checkInit();
@@ -134,11 +172,8 @@ class HexService {
   /// Example:
   /// - baseHexId at Res 9 -> GeographicScope.zone returns Res 8 parent
   /// - baseHexId at Res 9 -> GeographicScope.city returns Res 6 parent
+  /// - baseHexId at Res 9 -> GeographicScope.all returns Res 5 parent
   String getScopeHexId(String baseHexId, GeographicScope scope) {
-    if (scope == GeographicScope.all) {
-      // ALL scope uses Res 4 parent
-      return getParentHexId(baseHexId, scope.resolution);
-    }
     return getParentHexId(baseHexId, scope.resolution);
   }
 
@@ -158,7 +193,7 @@ class HexService {
   /// Note: This can return many hexes for large scopes:
   /// - ZONE (Res 8 -> 9): ~7 hexes
   /// - CITY (Res 6 -> 9): ~343 hexes
-  /// - ALL (Res 4 -> 9): ~16,807 hexes
+  /// - ALL (Res 5 -> 9): ~2,401 hexes
   List<String> getBaseHexesInScope(String scopeHexId) {
     return getChildHexIds(scopeHexId, H3Config.baseResolution);
   }
@@ -179,5 +214,184 @@ class HexService {
     final center2 = getHexCenter(hexId2);
     const distance = Distance();
     return distance.as(LengthUnit.Meter, center1, center2);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Territory Naming Methods
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Word lists for generating human-friendly territory names.
+  /// Each territory gets a unique "Adjective + Noun" combination.
+  static const _territoryAdjectives = [
+    'Amber',
+    'Azure',
+    'Coral',
+    'Crystal',
+    'Dawn',
+    'Dusk',
+    'Echo',
+    'Ember',
+    'Frost',
+    'Golden',
+    'Iron',
+    'Jade',
+    'Luna',
+    'Maple',
+    'Misty',
+    'Nova',
+    'Oak',
+    'Pearl',
+    'Pine',
+    'Raven',
+    'River',
+    'Ruby',
+    'Shadow',
+    'Silver',
+    'Solar',
+    'Stone',
+    'Storm',
+    'Swift',
+    'Thunder',
+    'Velvet',
+    'Violet',
+    'Wild',
+    'Crimson',
+    'Cobalt',
+    'Scarlet',
+    'Sage',
+    'Onyx',
+    'Ivory',
+    'Rustic',
+    'Zenith',
+  ];
+
+  static const _territoryNouns = [
+    'Ridge',
+    'Vale',
+    'Peak',
+    'Hollow',
+    'Grove',
+    'Reach',
+    'Bluff',
+    'Crest',
+    'Dell',
+    'Glen',
+    'Haven',
+    'Heights',
+    'Hills',
+    'Knoll',
+    'Landing',
+    'Meadow',
+    'Pass',
+    'Point',
+    'Shore',
+    'Summit',
+    'Terrace',
+    'Trail',
+    'View',
+    'Woods',
+    'Basin',
+    'Canyon',
+    'Cliff',
+    'Field',
+    'Harbor',
+    'Island',
+    'Lake',
+    'Mesa',
+    'Oasis',
+    'Plains',
+    'Ravine',
+    'Springs',
+    'Valley',
+    'Crossing',
+    'Bend',
+    'Run',
+  ];
+
+  /// Get a user-friendly territory name from hex ID.
+  ///
+  /// Uses a deterministic algorithm to convert hex ID into a memorable
+  /// "Adjective + Noun" combination like "Amber Ridge" or "Crystal Vale".
+  /// Avoids confusing alphanumeric identifiers.
+  String getTerritoryName(String baseHexId) {
+    final res5Parent = getParentHexId(baseHexId, H3Config.allResolution);
+
+    // Use last 8 characters of hex ID to generate indices
+    final hashPart = res5Parent.length >= 8
+        ? res5Parent.substring(res5Parent.length - 8)
+        : res5Parent.padLeft(8, '0');
+
+    // Parse as hex and use modulo to get indices
+    final hashValue = int.tryParse(hashPart, radix: 16) ?? 0;
+    final adjIndex = hashValue % _territoryAdjectives.length;
+    final nounIndex =
+        (hashValue ~/ _territoryAdjectives.length) % _territoryNouns.length;
+
+    return '${_territoryAdjectives[adjIndex]} ${_territoryNouns[nounIndex]}';
+  }
+
+  /// Get the raw Territory ID (4-digit hex string) for internal use.
+  ///
+  /// Returns the last 4 characters of the Res 5 (ALL scope) parent hex ID.
+  /// For display purposes, use [getTerritoryName] instead.
+  String getTerritoryId(String baseHexId) {
+    final res5Parent = getParentHexId(baseHexId, H3Config.allResolution);
+    // Take last 4 hex characters, uppercase for display
+    final last4 = res5Parent.length >= 4
+        ? res5Parent.substring(res5Parent.length - 4)
+        : res5Parent;
+    return last4.toUpperCase();
+  }
+
+  /// Get the City number (1-7) within its parent Territory.
+  ///
+  /// Each Territory (Res 5) contains ~7 City hexes (Res 6).
+  /// This returns the position of the city among its siblings,
+  /// providing a simple 1-7 identifier.
+  ///
+  /// Returns 1-7 based on the city's position among its 7 siblings.
+  int getCityNumber(String baseHexId) {
+    // Get the Res 6 (city) parent
+    final cityHexId = getParentHexId(baseHexId, H3Config.cityResolution);
+    // Get the Res 5 (territory) parent
+    final territoryHexId = getParentHexId(baseHexId, H3Config.allResolution);
+
+    // Get all 7 city children of this territory
+    final siblingCities = getChildHexIds(
+      territoryHexId,
+      H3Config.cityResolution,
+    );
+
+    // Sort siblings for consistent ordering (lexicographic)
+    siblingCities.sort();
+
+    // Find position (1-based)
+    final index = siblingCities.indexOf(cityHexId);
+    return index >= 0 ? index + 1 : 1;
+  }
+
+  /// Get formatted territory display string for a base hex.
+  ///
+  /// Returns user-friendly name like "Amber Ridge" for UI display.
+  String getTerritoryDisplayName(String baseHexId) {
+    return getTerritoryName(baseHexId);
+  }
+
+  /// Get formatted city display string for a base hex.
+  ///
+  /// Returns "District N" format for UI display.
+  String getCityDisplayName(String baseHexId) {
+    final cityNum = getCityNumber(baseHexId);
+    return 'District $cityNum';
+  }
+
+  /// Generate a random territory name for dummy data.
+  ///
+  /// Uses provided seed for deterministic generation in tests.
+  static String generateRandomTerritoryName(int seed) {
+    final adjIndex = seed % _territoryAdjectives.length;
+    final nounIndex =
+        (seed ~/ _territoryAdjectives.length) % _territoryNouns.length;
+    return '${_territoryAdjectives[adjIndex]} ${_territoryNouns[nounIndex]}';
   }
 }

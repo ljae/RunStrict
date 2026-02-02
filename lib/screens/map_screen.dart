@@ -321,8 +321,9 @@ class _HexMapCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
-    final isRedTeam = appState.userTeam?.name == 'red';
-    final teamColor = isRedTeam ? AppTheme.athleticRed : AppTheme.electricBlue;
+    // Use team's color directly (supports red, blue, AND purple)
+    final userTeam = appState.userTeam;
+    final teamColor = userTeam?.color ?? AppTheme.electricBlue;
 
     return HexagonMap(
       initialCenter: null,
@@ -354,6 +355,21 @@ class _TeamStatsOverlay extends StatelessWidget {
     final bluePercent = (stats.blueCount / total * 100).round();
     final purplePercent = (stats.purpleCount / total * 100).round();
 
+    // Get territory/district name from user's home hex (via PrefetchService)
+    final homeHex = PrefetchService().homeHex;
+
+    String scopeLabel;
+    if (scope == GeographicScope.city && homeHex != null) {
+      // CITY -> "District N"
+      final districtNum = HexService().getCityNumber(homeHex);
+      scopeLabel = 'DISTRICT $districtNum';
+    } else if (scope == GeographicScope.all && homeHex != null) {
+      // ALL -> Territory name (e.g., "Amber Ridge")
+      scopeLabel = HexService().getTerritoryName(homeHex).toUpperCase();
+    } else {
+      scopeLabel = scope.label.toUpperCase();
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: BackdropFilter(
@@ -375,12 +391,15 @@ class _TeamStatsOverlay extends StatelessWidget {
               // Row 1: Scope badge + Total count
               Row(
                 children: [
-                  Text(
-                    scope.label.toUpperCase(),
-                    style: GoogleFonts.bebasNeue(
-                      fontSize: 16,
-                      color: Colors.white.withValues(alpha: 0.7),
-                      letterSpacing: 1.5,
+                  Flexible(
+                    child: Text(
+                      scopeLabel,
+                      style: GoogleFonts.bebasNeue(
+                        fontSize: 16,
+                        color: Colors.white.withValues(alpha: 0.7),
+                        letterSpacing: 1.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),

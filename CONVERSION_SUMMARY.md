@@ -1,5 +1,12 @@
 # 🏃 Runner App Conversion Summary
 
+> **DEPRECATED**: This document describes the initial conversion from React to Flutter (circa early 2024).
+> The current architecture has evolved significantly. See `AGENTS.md` and `DEVELOPMENT_SPEC.md` for current documentation.
+> Key changes since this document:
+> - Firebase → Supabase migration
+> - Crew system → Team-based Buff system
+> - Added: Purple team, 40-day seasons, CV tracking, Home Hex system
+
 ## Completed: Professional Flutter App Following Runner.pdf Specification
 
 I've successfully converted your NEON_RUNNER app to the **달리기로 하나되는** (United Through Running) app with a professional electoral broadcast aesthetic.

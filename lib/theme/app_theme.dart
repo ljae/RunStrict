@@ -13,7 +13,7 @@ class AppTheme {
   static const Color electricBlue = Color(0xFF008DFF); // Logo Blue
   static const Color electricBlueDeep = Color(0xFF0070CC); // Deeper variant
 
-  // RunStrict Purple - CHAOS team (unlocks D-140)
+  // RunStrict Purple - CHAOS team (available anytime)
   static const Color chaosPurple = Color(0xFF8B5CF6); // Purple team
   static const Color chaosPurpleDeep = Color(0xFF7C3AED); // Deeper variant
 

@@ -44,7 +44,7 @@ INSERT INTO app_config (id, config_version, config_data) VALUES (
   1,
   '{
     "season": {
-      "durationDays": 280,
+      "durationDays": 40,
       "serverTimezoneOffsetHours": 2
     },
     "crew": {

@@ -1,8 +1,8 @@
 import 'remote_config_service.dart';
 
-/// Service to manage the 280-day season cycle.
+/// Service to manage the 40-day season cycle.
 ///
-/// The season runs for exactly 280 days (gestation period metaphor).
+/// The season runs for exactly 40 days (configurable via RemoteConfig).
 /// On D-Day (day 0), all territories and scores are reset (The Void).
 /// Server timezone: GMT+2 (Israel Standard Time).
 class SeasonService {
@@ -28,7 +28,7 @@ class SeasonService {
   /// Season 1 starts January 1, 2026 (GMT+2).
   static DateTime _defaultSeasonStart() {
     // Season 1: January 1, 2026 00:00:00 GMT+2
-    // D-280 is the first day, D-Day (season end) is October 7, 2026
+    // D-40 is the first day, D-Day (season end) is February 10, 2026
     return DateTime.utc(
       2026,
       1,
@@ -48,8 +48,8 @@ class SeasonService {
     return difference.clamp(-999, seasonDurationDays);
   }
 
-  /// Current day of the season (1-280).
-  /// Day 1 is the first day, Day 280 is the last day before D-Day.
+  /// Current day of the season (1-40).
+  /// Day 1 is the first day, last day is before D-Day.
   int get currentSeasonDay {
     final now = DateTime.now();
     final daysPassed = now.difference(seasonStartDate).inDays;
@@ -80,9 +80,9 @@ class SeasonService {
     return 0.8 + (7 - remaining) / 35; // 0.8 to 1.0
   }
 
-  /// Whether the current time is past the halfway point (D-140).
-  /// Purple Crew unlocks at this point.
-  bool get isPurpleUnlocked => daysRemaining <= 140;
+  /// Whether Purple team is available for defection.
+  /// Purple is available anytime during the season (no restriction).
+  bool get isPurpleUnlocked => true;
 
   /// Whether it's currently D-Day (the final day).
   bool get isDDay => daysRemaining == 0;
@@ -91,7 +91,7 @@ class SeasonService {
   bool get isSeasonEnded => daysRemaining < 0;
 
   /// Formatted display string for the countdown.
-  /// Returns "D-280" through "D-1", then "D-DAY", then "VOID" if past.
+  /// Returns "D-40" through "D-1", then "D-DAY", then "VOID" if past.
   String get displayString {
     final remaining = daysRemaining;
 

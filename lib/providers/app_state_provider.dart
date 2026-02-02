@@ -226,10 +226,7 @@ class AppStateProvider with ChangeNotifier {
       );
 
       // Update local user with server ID
-      _currentUser = user.copyWith(
-        seasonPoints: _currentUser!.seasonPoints,
-        crewId: _currentUser!.crewId,
-      );
+      _currentUser = user.copyWith(seasonPoints: _currentUser!.seasonPoints);
       _error = null;
       debugPrint('AppStateProvider: Account linked - ${user.id}');
     } catch (e) {
@@ -259,43 +256,8 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
-  /// Update user's crew membership with avatar preservation.
-  ///
-  /// Pass [crewId] to set the crew, or null to leave the crew.
-  /// When joining: Saves current avatar to originalAvatar.
-  /// When leaving: Restores avatar from originalAvatar if available.
-  void updateCrewId(String? crewId) {
-    if (_currentUser == null) return;
-
-    if (crewId != null) {
-      // JOINING CREW: Save current avatar to originalAvatar
-      _currentUser = _currentUser!.copyWith(
-        crewId: crewId,
-        originalAvatar: _currentUser!.avatar,
-      );
-      debugPrint(
-        'AppStateProvider: Joined crew, saved originalAvatar=${_currentUser!.originalAvatar}',
-      );
-    } else {
-      // LEAVING CREW: Restore avatar from originalAvatar if available
-      final restoredAvatar =
-          _currentUser!.originalAvatar ?? _currentUser!.avatar;
-      _currentUser = _currentUser!.copyWith(
-        clearCrewId: true,
-        avatar: restoredAvatar,
-        clearOriginalAvatar: true,
-      );
-      debugPrint(
-        'AppStateProvider: Left crew, restored avatar=$restoredAvatar',
-      );
-    }
-
-    _saveLocalUser(); // Persist change
-    notifyListeners();
-  }
-
-  /// Join Purple Crew (The Traitor's Gate)
-  /// Warning: This resets season points to 0
+  /// Join Purple Team (The Traitor's Gate)
+  /// Points are PRESERVED on defection.
   void defectToPurple() {
     if (_currentUser != null && _currentUser!.team != Team.purple) {
       _currentUser = _currentUser!.defectToPurple();

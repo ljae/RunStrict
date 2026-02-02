@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../providers/run_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../models/team.dart';
+import '../services/buff_service.dart';
 import '../widgets/route_map.dart';
 import '../widgets/energy_hold_button.dart';
 
@@ -22,8 +23,15 @@ class _RunningScreenState extends State<RunningScreen>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
+  // Countdown animation
+  late AnimationController _countdownController;
+  late Animation<double> _countdownScaleAnimation;
+  late Animation<double> _countdownOpacityAnimation;
+
   // UI State
   bool _isInitializing = false;
+  bool _isCountingDown = false;
+  int _countdownValue = 3; // 3, 2, 1, then GO (0)
   String? _errorMessage;
   StreamSubscription? _eventSubscription;
 
@@ -41,6 +49,47 @@ class _RunningScreenState extends State<RunningScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    // Countdown animation (each number takes 700ms)
+    _countdownController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+
+    _countdownScaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.5,
+          end: 1.2,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.2,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 60,
+      ),
+    ]).animate(_countdownController);
+
+    _countdownOpacityAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 30,
+      ),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 40),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 30,
+      ),
+    ]).animate(_countdownController);
+
     // Listen for run events
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _eventSubscription = context.read<RunProvider>().eventStream.listen((
@@ -55,59 +104,97 @@ class _RunningScreenState extends State<RunningScreen>
   @override
   void dispose() {
     _pulseController.dispose();
+    _countdownController.dispose();
     _eventSubscription?.cancel();
     super.dispose();
   }
 
   Future<void> _startRun() async {
-    // Prevent double-tap - ignore if already starting or running
+    // Prevent double-tap - ignore if already starting, counting down, or running
     final runProvider = context.read<RunProvider>();
     debugPrint(
-      '>>> _startRun called, _isInitializing=$_isInitializing, isRunning=${runProvider.isRunning}',
+      '>>> _startRun called, _isInitializing=$_isInitializing, _isCountingDown=$_isCountingDown, isRunning=${runProvider.isRunning}',
     );
-    if (_isInitializing || runProvider.isRunning) {
-      debugPrint('>>> _startRun BLOCKED - already initializing or running');
+    if (_isInitializing || _isCountingDown || runProvider.isRunning) {
+      debugPrint(
+        '>>> _startRun BLOCKED - already initializing, counting down, or running',
+      );
       return;
     }
 
-    debugPrint('>>> _startRun STARTING');
+    debugPrint('>>> _startRun STARTING COUNTDOWN');
     setState(() {
-      _isInitializing = true;
+      _isCountingDown = true;
+      _countdownValue = 3;
       _errorMessage = null;
     });
 
-    try {
-      final appState = context.read<AppStateProvider>();
-      final team = appState.userTeam ?? Team.blue;
-      final crewId = appState.currentUser?.crewId;
+    // Start the countdown sequence
+    await _runCountdown();
+  }
 
-      await runProvider.startRun(team: team, crewId: crewId);
+  Future<void> _runCountdown() async {
+    // Countdown: 3, 2, 1, GO
+    // Start run during "1" so it's ready by "GO"
+    Future<void>? startRunFuture;
+    String? startRunError;
 
-      // DON'T reset _isInitializing here!
-      // There's a race condition where isRunning might be false briefly
-      // until the first GPS point arrives. Keep showing 'initializing'
-      // until isRunning becomes true (handled in _buildControls).
-      // _isInitializing will be reset in _stopRun when the run ends.
-      debugPrint(
-        '>>> _startRun COMPLETED, keeping _isInitializing=true until isRunning stabilizes',
-      );
-    } catch (e) {
-      // Only reset _isInitializing on ERROR - allows retry
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
+    for (int i = 3; i >= 0; i--) {
+      if (!mounted || !_isCountingDown) return;
+
+      setState(() {
+        _countdownValue = i;
+      });
+
+      _countdownController.forward(from: 0);
+
+      // Start run during "1" - gives ~800ms head start before "GO" ends
+      if (i == 1 && startRunFuture == null) {
+        startRunFuture = _executeRunStartAsync().catchError((e) {
+          startRunError = e.toString().replaceAll('Exception: ', '');
         });
       }
+
+      await Future.delayed(const Duration(milliseconds: 800));
     }
+
+    // Wait for run to actually start (should be done by now)
+    if (startRunFuture != null) {
+      await startRunFuture;
+    }
+
+    // Check for errors
+    if (startRunError != null && mounted) {
+      setState(() {
+        _isCountingDown = false;
+        _errorMessage = startRunError;
+      });
+      return;
+    }
+
+    // Hide countdown - run should already be active
+    if (mounted) {
+      setState(() {
+        _isCountingDown = false;
+      });
+    }
+  }
+
+  Future<void> _executeRunStartAsync() async {
+    final appState = context.read<AppStateProvider>();
+    final team = appState.userTeam ?? Team.blue;
+
+    await context.read<RunProvider>().startRun(team: team);
   }
 
   Future<void> _stopRun() async {
     if (mounted) {
       await context.read<RunProvider>().stopRun();
-      // Reset _isInitializing for next run cycle
+      // Reset all states for next run cycle
       setState(() {
         _isInitializing = false;
+        _isCountingDown = false;
+        _countdownValue = 3;
       });
     }
   }
@@ -117,8 +204,10 @@ class _RunningScreenState extends State<RunningScreen>
     final appState = context.watch<AppStateProvider>();
     final runningProvider = context.watch<RunProvider>();
 
-    final isRed = appState.userTeam?.name == 'red';
-    final teamColor = isRed ? AppTheme.athleticRed : AppTheme.electricBlue;
+    // Use team's color directly (supports red, blue, AND purple)
+    final userTeam = appState.userTeam;
+    final teamColor = userTeam?.color ?? AppTheme.electricBlue;
+    final isRed = userTeam == Team.red;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundStart,
@@ -131,6 +220,8 @@ class _RunningScreenState extends State<RunningScreen>
                   : _buildPortraitLayout(runningProvider, teamColor, isRed);
             },
           ),
+          // Countdown Overlay
+          if (_isCountingDown) _buildCountdownOverlay(teamColor),
           // Error Message (Overlay on top of everything)
           if (_errorMessage != null)
             Positioned(
@@ -280,7 +371,7 @@ class _RunningScreenState extends State<RunningScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceColor.withOpacity(0.4),
+            color: AppTheme.surfaceColor.withOpacity(0.3),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white.withOpacity(0.1)),
           ),
@@ -372,16 +463,15 @@ class _RunningScreenState extends State<RunningScreen>
   }
 
   Widget _buildSecondaryStats(RunProvider provider, Color teamColor) {
-    final appState = context.watch<AppStateProvider>();
-    final isInCrew = appState.currentUser?.crewId != null;
-    final multiplier = provider.crewMultiplier;
-    final showMultiplier = isInCrew && multiplier > 1;
+    final buffService = BuffService();
+    final multiplier = buffService.multiplier;
+    final showMultiplier = multiplier > 1;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.4),
+        color: AppTheme.surfaceColor.withOpacity(0.3),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
@@ -404,7 +494,7 @@ class _RunningScreenState extends State<RunningScreen>
               color: teamColor,
             ),
           ),
-          // Multiplier display (only show for crew members with bonus)
+          // Buff multiplier display (only show when > 1x)
           if (showMultiplier) ...[
             Container(
               width: 1,
@@ -413,9 +503,9 @@ class _RunningScreenState extends State<RunningScreen>
             ),
             Expanded(
               child: _buildStatItem(
-                icon: Icons.groups,
+                icon: Icons.flash_on,
                 value: '${multiplier}x',
-                label: '어제 크루',
+                label: 'BUFF',
                 color: Colors.amber,
               ),
             ),
@@ -458,16 +548,14 @@ class _RunningScreenState extends State<RunningScreen>
   }
 
   Widget _buildControls(RunProvider provider, Color teamColor) {
-    // Determine state: running > initializing > ready
-    // PRIORITY: isRunning takes precedence to avoid race condition where
-    // _isInitializing is true but isRunning briefly false before GPS starts
+    // Determine state priority:
+    // 1. isRunning → show stop button
+    // 2. _isCountingDown → hide button (overlay visible)
+    // 3. else → show start button (ready state)
+    // Note: removed 'initializing' state - countdown overlay handles transition
     final controlState = provider.isRunning
         ? 'running'
-        : (_isInitializing ? 'initializing' : 'ready');
-
-    debugPrint(
-      '>>> _buildControls: state=$controlState, _isInitializing=$_isInitializing, isRunning=${provider.isRunning}',
-    );
+        : (_isCountingDown ? 'countdown' : 'ready');
 
     return KeyedSubtree(
       key: ValueKey('controls_$controlState'),
@@ -480,46 +568,20 @@ class _RunningScreenState extends State<RunningScreen>
     Color teamColor,
     String state,
   ) {
-    if (state == 'initializing') {
-      // Show filled button (locked state) with loading spinner
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Container(
-          height: 80,
-          decoration: BoxDecoration(
-            color: teamColor,
-            borderRadius: BorderRadius.circular(40),
-            boxShadow: [
-              BoxShadow(
-                color: teamColor.withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Center(
-            child: SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 3,
-              ),
-            ),
-          ),
-        ),
-      );
+    if (state == 'countdown') {
+      // During countdown, hide the button (overlay covers screen)
+      return const SizedBox(height: 80);
     }
 
     if (state == 'running') {
-      // Running state: Full-width stop button
+      // Running state: Full-width stop button (use team color for icon/border)
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: EnergyHoldButton(
           icon: Icons.stop_rounded,
           baseColor: AppTheme.surfaceColor.withOpacity(0.9),
-          fillColor: AppTheme.athleticRed,
-          iconColor: AppTheme.athleticRed,
+          fillColor: teamColor,
+          iconColor: teamColor,
           onComplete: _stopRun,
           isHoldRequired: true,
           duration: const Duration(milliseconds: 1500),
@@ -547,6 +609,68 @@ class _RunningScreenState extends State<RunningScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCountdownOverlay(Color teamColor) {
+    final displayText = _countdownValue > 0 ? '$_countdownValue' : 'GO';
+
+    return Positioned.fill(
+      child: Container(
+        color: AppTheme.backgroundStart.withOpacity(0.9),
+        child: Center(
+          child: AnimatedBuilder(
+            animation: _countdownController,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _countdownScaleAnimation.value,
+                child: Opacity(
+                  opacity: _countdownOpacityAnimation.value.clamp(0.0, 1.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Countdown number or GO
+                      Text(
+                        displayText,
+                        style: GoogleFonts.outfit(
+                          fontSize: _countdownValue > 0 ? 200 : 160,
+                          fontWeight: FontWeight.w900,
+                          color: _countdownValue > 0 ? Colors.white : teamColor,
+                          height: 1.0,
+                          shadows: [
+                            Shadow(
+                              color: teamColor.withOpacity(0.6),
+                              blurRadius: 40,
+                              offset: const Offset(0, 0),
+                            ),
+                            Shadow(
+                              color: teamColor.withOpacity(0.3),
+                              blurRadius: 80,
+                              offset: const Offset(0, 0),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_countdownValue > 0) ...[
+                        const SizedBox(height: 24),
+                        Text(
+                          'GET READY',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textSecondary,
+                            letterSpacing: 4,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 

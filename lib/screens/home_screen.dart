@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/run_provider.dart';
-import '../providers/crew_provider.dart';
 import '../providers/leaderboard_provider.dart';
 import '../providers/hex_data_provider.dart';
 import '../widgets/season_countdown_widget.dart';
 import '../widgets/flip_points_widget.dart';
 import '../services/season_service.dart';
 import '../services/points_service.dart';
+import '../services/buff_service.dart';
 import '../services/app_lifecycle_manager.dart';
 import 'map_screen.dart';
 import 'running_screen.dart';
-import 'crew_screen.dart';
+import 'team_screen.dart';
 import 'run_history_screen.dart';
 import 'leaderboard_screen.dart';
 
@@ -34,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = const [
     MapScreen(),
     RunningScreen(),
-    CrewScreen(),
+    TeamScreen(),
     RunHistoryScreen(),
     LeaderboardScreen(),
   ];
@@ -67,24 +68,16 @@ class _HomeScreenState extends State<HomeScreen> {
   ///
   /// Refreshes:
   /// - Hex map data (clear cache to force re-fetch)
-  /// - Yesterday's multiplier (in case midnight passed)
-  /// - Crew info and members
   /// - Leaderboard rankings
   Future<void> _refreshAppData() async {
     debugPrint('HomeScreen: Refreshing app data on resume');
 
     // Capture providers before async gap
-    final crewProvider = context.read<CrewProvider>();
     final leaderboardProvider = context.read<LeaderboardProvider>();
 
     try {
       // Clear hex cache to force fresh data on next map view
       HexDataProvider().clearAllHexData();
-
-      // Refresh crew data if user has a crew
-      if (crewProvider.hasCrew) {
-        await crewProvider.refreshCrewMembers();
-      }
 
       // Refresh leaderboard data
       await leaderboardProvider.refreshLeaderboard();
@@ -108,10 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final orientation = MediaQuery.of(context).orientation;
     final isLandscape = orientation == Orientation.landscape;
 
-    // Determine current accent color based on team, default to Neon Blue
-    final Color currentAccent = userTeam?.name == 'red'
-        ? AppTheme.athleticRed
-        : AppTheme.electricBlue;
+    // Determine current accent color based on team (supports red, blue, AND purple)
+    final Color currentAccent = userTeam?.color ?? AppTheme.electricBlue;
 
     return Container(
       decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
@@ -193,6 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         seasonService: _seasonService,
                         compact: true,
                       ),
+                      const SizedBox(width: 8),
+                      _BuffBadge(accentColor: accentColor),
                       const SizedBox(width: 8),
                       FlipPointsWidget(
                         pointsService: pointsService,
@@ -315,6 +308,60 @@ class _HomeScreenState extends State<HomeScreen> {
               : AppTheme.textSecondary.withOpacity(0.7),
         ),
       ),
+    );
+  }
+}
+
+/// Compact buff multiplier badge for header.
+///
+/// Shows current buff multiplier (e.g., "2x") in a style matching
+/// SeasonCountdownWidget and FlipPointsWidget.
+class _BuffBadge extends StatelessWidget {
+  final Color accentColor;
+
+  const _BuffBadge({required this.accentColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: BuffService(),
+      builder: (context, _) {
+        final multiplier = BuffService().multiplier;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: multiplier > 1
+                  ? accentColor.withValues(alpha: 0.2)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: 1.0,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.bolt_rounded,
+                size: 10,
+                color: multiplier > 1 ? accentColor : AppTheme.textMuted,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${multiplier}x',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: multiplier > 1 ? accentColor : AppTheme.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

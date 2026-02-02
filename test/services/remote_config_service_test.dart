@@ -14,7 +14,7 @@ void main() {
     test('returns defaults when not initialized', () {
       final config = service.config;
       expect(config.configVersion, equals(1));
-      expect(config.seasonConfig.durationDays, equals(280));
+      expect(config.seasonConfig.durationDays, equals(40));
       expect(config.gpsConfig.maxSpeedMps, equals(6.94));
     });
 
@@ -50,11 +50,8 @@ void main() {
     test('AppConfig.defaults() has all expected values', () {
       final defaults = AppConfig.defaults();
 
-      expect(defaults.seasonConfig.durationDays, equals(280));
+      expect(defaults.seasonConfig.durationDays, equals(40));
       expect(defaults.seasonConfig.serverTimezoneOffsetHours, equals(2));
-
-      expect(defaults.crewConfig.maxMembersRegular, equals(12));
-      expect(defaults.crewConfig.maxMembersPurple, equals(24));
 
       expect(defaults.gpsConfig.maxSpeedMps, equals(6.94));
       expect(defaults.gpsConfig.maxAccuracyMeters, equals(50.0));

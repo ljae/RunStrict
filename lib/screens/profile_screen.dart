@@ -185,7 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         seasonService: _seasonService,
                         teamColor: teamColor,
                       ),
-                      // Traitor's Gate button (only show after D-140, not already purple)
+                      // Traitor's Gate button (show if not already purple)
                       if (_seasonService.isPurpleUnlocked &&
                           user.team != Team.purple) ...[
                         const SizedBox(height: AppTheme.spacingL),

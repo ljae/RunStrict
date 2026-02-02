@@ -1,4 +1,4 @@
-# AGENTS.md - RunStrict (The 280-Day Journey)
+# AGENTS.md - RunStrict (The 40-Day Journey)
 
 > Guidelines for AI coding agents working in this Flutter/Dart codebase.
 
@@ -7,11 +7,11 @@
 **RunStrict** is a location-based running game that gamifies territory control through hexagonal maps.
 
 ### Core Concept
-- **Season**: 280 days (fixed duration)
-- **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - unlocks D-140)
+- **Season**: 40 days (fixed duration)
+- **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - available anytime)
 - **Hex System**: Displays color of **last runner** - no ownership
 - **D-Day Reset**: All territories and scores wiped via TRUNCATE/DROP (The Void)
-- **Crew Benefit**: Yesterday's Check-in Multiplier (yesterday's active members = today's multiplier)
+- **Buff System**: Team-based multipliers calculated daily (Red: Elite 2-4x / Common 1-2x, Blue: 1-3x, Purple: Participation 1-3x)
 
 ### Key Design Principles
 - Privacy optimized: No timestamps or runner IDs stored in hexes
@@ -78,8 +78,7 @@ lib/
 │   ├── team.dart                # Team enum (red/blue/purple)
 │   ├── user_model.dart          # User with seasonPoints & CV aggregates
 │   ├── hex_model.dart           # Hex with lastRunnerTeam only
-│   ├── crew_model.dart          # Crew with maxMembers/leaderId (uses RemoteConfigService)
-│   ├── app_config.dart          # Server-configurable constants (Season, Crew, GPS, Scoring, Hex, Timing)
+│   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
 │   ├── run_session.dart         # Active run session data
 │   ├── run_summary.dart         # Completed run (with hexPath, cv)
 │   ├── lap_model.dart           # Per-km lap data for CV calculation
@@ -89,22 +88,20 @@ lib/
 ├── providers/
 │   ├── app_state_provider.dart  # Global app state (team, user)
 │   ├── run_provider.dart        # Run lifecycle & hex capture
-│   ├── crew_provider.dart       # Crew management
 │   └── hex_data_provider.dart   # Hex data cache & state
 ├── screens/
 │   ├── team_selection_screen.dart  # Onboarding / new season
 │   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
 │   ├── map_screen.dart          # Hex territory exploration
 │   ├── running_screen.dart      # Pre-run & active run tracking
-│   ├── crew_screen.dart         # Crew management
-│   ├── leaderboard_screen.dart  # Rankings (ALL/City/Zone scope)
+│   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
 │   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers
 │   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
 │   ├── config_cache_service.dart # Local JSON cache for remote config
-│   ├── prefetch_service.dart    # Home hex anchoring & scope data prefetch (3,781 hexes)
+│   ├── prefetch_service.dart    # Home hex anchoring & scope data prefetch (2,401 hexes)
 │   ├── hex_service.dart         # H3 hex grid operations
 │   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
 │   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
@@ -115,8 +112,8 @@ lib/
 │   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
 │   ├── local_storage_service.dart # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 280-day season countdown (uses RemoteConfigService)
-│   ├── crew_multiplier_service.dart # Yesterday's check-in multiplier (daily batch)
+│   ├── season_service.dart      # 40-day season countdown (uses RemoteConfigService)
+│   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
 │   ├── running_score_service.dart # Pace validation for capture
 │   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
 │   └── data_manager.dart        # Hot/Cold data separation
@@ -346,14 +343,30 @@ Use `AppTheme.teamColor(isRed)` for team-aware coloring.
 
 ## Game-Specific Guidelines
 
-### Crew Economy: Yesterday's Check-in Multiplier
+### Team-Based Buff System
 ```dart
-// Multiplier = number of crew members who ran YESTERDAY
+// Buff multiplier determined by team, performance, and territory dominance
 // Calculated daily at midnight GMT+2 via Edge Function
-// Red/Blue: Max 12 members = 12x potential
-// Purple: Max 24 members = 24x potential
-// Solo runner or new user/crew = 1x (default)
-final multiplier = yesterdayActiveMembers; // Fetched on app launch
+//
+// RED FLAME:
+// | Scenario              | Elite (Top 20%) | Common |
+// |-----------------------|-----------------|--------|
+// | Normal (no wins)      | 2x              | 1x     |
+// | District win only     | 3x              | 1x     |
+// | Province win only     | 3x              | 2x     |
+// | District + Province   | 4x              | 2x     |
+//
+// BLUE WAVE:
+// | Scenario              | Union |
+// |-----------------------|-------|
+// | Normal (no wins)      | 1x    |
+// | District win only     | 2x    |
+// | Province win only     | 2x    |
+// | District + Province   | 3x    |
+//
+// PURPLE: Participation Rate = 1x-3x (no territory bonus)
+// New users = 1x (default until yesterday's data exists)
+final multiplier = BuffService().currentBuff; // Frozen at run start
 final points = flipsEarned * multiplier;
 ```
 
@@ -407,6 +420,32 @@ static int? calculateStabilityScore(double? cv) {
 // Green: ≥80 (excellent), Yellow: 50-79 (good), Red: <50 (needs work)
 ```
 
+### Purple Team Defection (Protocol of Chaos)
+
+| Property | Value |
+|----------|-------|
+| Availability | Anytime during season (no restriction) |
+| Entry Name | "Traitor's Gate" |
+| Entry Cost | Points are **PRESERVED** (not reset) |
+| Eligibility | Any Red/Blue user |
+| Reversibility | **Irreversible** for remainder of season |
+
+**Rules:**
+- Purple is available anytime during the 40-day season
+- Defection is permanent - cannot return to Red/Blue until next season
+- All accumulated Flip Points are preserved upon defection
+- No minimum point threshold to defect (anyone can defect)
+
+**Implementation:**
+```dart
+// In TraitorGateScreen / AppStateProvider
+void defectToPurple() {
+  // Points are PRESERVED - do NOT reset seasonPoints
+  user = user.copyWith(team: Team.purple);
+  // Team change is permanent for remainder of season
+}
+```
+
 ---
 
 ## Common Patterns
@@ -430,8 +469,8 @@ class RunningScreen extends StatelessWidget {
 ### Supabase RPC Call
 ```dart
 // Call a PostgreSQL function via Supabase
-final result = await supabase.rpc('get_crew_multiplier', params: {
-  'p_crew_id': crewId,
+final result = await supabase.rpc('get_user_buff', params: {
+  'p_user_id': userId,
 });
 ```
 
@@ -587,7 +626,7 @@ All game constants (50+) are server-configurable via the `app_config` table in S
 
 | File | Purpose |
 |------|---------|
-| `lib/models/app_config.dart` | Typed config model with nested classes (SeasonConfig, CrewConfig, GpsConfig, ScoringConfig, HexConfig, TimingConfig) |
+| `lib/models/app_config.dart` | Typed config model with nested classes (SeasonConfig, GpsConfig, ScoringConfig, HexConfig, TimingConfig, BuffConfig) |
 | `lib/services/remote_config_service.dart` | Singleton service with `config`, `configSnapshot`, `freezeForRun()` |
 | `lib/services/config_cache_service.dart` | Local JSON caching for offline fallback |
 | `supabase/migrations/20260128_create_app_config.sql` | Database table with JSONB schema |
@@ -622,8 +661,7 @@ RemoteConfigService().unfreezeAfterRun();
 
 | Category | Examples |
 |----------|----------|
-| **Season** | `durationDays` (280), `serverTimezoneOffsetHours` (2) |
-| **Crew** | `maxMembersRegular` (12), `maxMembersPurple` (24) |
+| **Season** | `durationDays` (40), `serverTimezoneOffsetHours` (2) |
 | **GPS** | `maxSpeedMps` (6.94), `pollingRateHz` (0.5), `maxAccuracyMeters` (50) |
 | **Scoring** | `maxCapturePaceMinPerKm` (8.0), `minMovingAvgWindowSec` (20) |
 | **Hex** | `baseResolution` (9), `maxCacheSize` (4000) |

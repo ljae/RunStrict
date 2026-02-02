@@ -14,6 +14,11 @@ This directory contains the SQL migrations for RunStrict's Supabase backend.
 |------|-------------|
 | `001_initial_schema.sql` | Tables, RLS policies, basic functions |
 | `002_rpc_functions.sql` | RPC functions (finalize_run, app_launch_sync, etc.) |
+| `003_cv_aggregates.sql` | CV tracking and user aggregate statistics |
+| `004_scoped_data_functions.sql` | Scoped hex/leaderboard data, home_hex migration |
+| `005_add_season_home_hex.sql` | Season home hex support |
+| `006_region_aware_multiplier.sql` | Region-aware buff multiplier |
+| `007_remove_total_runs_from_responses.sql` | Remove total_runs from get_leaderboard response |
 
 ## Deployment Instructions
 
@@ -60,14 +65,15 @@ Expected functions:
 - `app_launch_sync`
 - `calculate_yesterday_checkins`
 - `finalize_run`
-- `get_crew_multiplier`
+- `get_user_buff`
+- `get_hexes_in_scope`
 - `get_leaderboard`
 - `get_run_history`
-- `get_user_multiplier`
-- `calculate_yesterday_checkins`
+- `get_scoped_leaderboard`
 - `has_flipped_today`
 - `increment_season_points`
 - `reset_season`
+- `set_home_hex`
 
 ## RPC Function Signatures
 
@@ -83,7 +89,7 @@ finalize_run(
   p_distance_km DOUBLE PRECISION,
   p_duration_seconds INTEGER,
   p_hex_path TEXT[],
-  p_yesterday_crew_count INTEGER,
+  p_buff_multiplier INTEGER,
   p_client_points INTEGER DEFAULT NULL  -- optional
 ) RETURNS JSONB
 ```
@@ -118,8 +124,7 @@ app_launch_sync(
 ```json
 {
   "user_stats": {...},
-  "crew_info": {...},
-  "yesterday_multiplier": 3,
+  "buff_multiplier": 3,
   "hex_map": [...],
   "leaderboard": [...],
   "server_time": "2024-01-27T12:00:00Z"
@@ -130,7 +135,17 @@ app_launch_sync(
 
 ```sql
 get_leaderboard(p_limit INTEGER DEFAULT 20)
-RETURNS TABLE(id, name, team, avatar, season_points, crew_id)
+RETURNS TABLE(
+  id UUID,
+  name TEXT,
+  team TEXT,
+  avatar TEXT,
+  season_points INTEGER,
+  total_distance_km DOUBLE PRECISION,
+  avg_pace_min_per_km DOUBLE PRECISION,
+  avg_cv DOUBLE PRECISION,
+  rank INTEGER
+)
 ```
 
 ## Troubleshooting
@@ -166,5 +181,5 @@ SELECT reset_season();
 **WARNING**: This will:
 - TRUNCATE all hexes
 - Reset all user season_points to 0
-- Clear crews and team assignments
+- Reset team assignments (users must re-select)
 - Preserve run_history (5-year retention)

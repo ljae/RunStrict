@@ -5,10 +5,10 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'theme/app_theme.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/run_provider.dart';
-import 'providers/crew_provider.dart';
 import 'providers/leaderboard_provider.dart';
 import 'providers/hex_data_provider.dart';
 import 'screens/team_selection_screen.dart';
+import 'screens/season_register_screen.dart';
 import 'screens/home_screen.dart';
 import 'config/mapbox_config.dart';
 import 'services/hex_service.dart';
@@ -21,6 +21,17 @@ import 'services/remote_config_service.dart';
 import 'services/prefetch_service.dart';
 import 'services/app_lifecycle_manager.dart';
 import 'storage/local_storage.dart';
+import 'utils/dummy_data_generator.dart';
+
+/// Debug setting to control which team selection screen to show.
+/// Set to true to use the new SeasonRegisterScreen (recommended).
+/// Set to false to use the original TeamSelectionScreen.
+const bool kUseSeasonRegisterScreen = true;
+
+/// Debug setting to force show SeasonRegisterScreen on every app launch.
+/// Set to true during development to test the screen.
+/// Set to false for normal flow (only show when no user exists).
+const bool kForceShowSeasonRegister = true;
 
 /// Global LocalStorage instance for run history persistence
 late final LocalStorage _localStorage;
@@ -83,7 +94,6 @@ class RunnerApp extends StatelessWidget {
             return previous!;
           },
         ),
-        ChangeNotifierProvider(create: (_) => CrewProvider()),
         ChangeNotifierProvider(create: (_) => LeaderboardProvider()),
       ],
       child: MaterialApp(
@@ -95,6 +105,7 @@ class RunnerApp extends StatelessWidget {
         routes: {
           '/home': (context) => const HomeScreen(),
           '/team-selection': (context) => const TeamSelectionScreen(),
+          '/season-register': (context) => const SeasonRegisterScreen(),
         },
       ),
     );
@@ -128,14 +139,54 @@ class _AppInitializerState extends State<_AppInitializer> {
     final appState = context.read<AppStateProvider>();
     await appState.initialize();
 
-    // After app state is initialized and user exists, initialize prefetch
-    if (appState.hasUser && mounted) {
+    // After app state is initialized, initialize prefetch for location data
+    // Also run when kForceShowSeasonRegister is true to show location badge
+    if ((appState.hasUser || kForceShowSeasonRegister) && mounted) {
       await _initializePrefetch();
+      await _loadTodayFlipPoints();
     }
 
     // Initialize AppLifecycleManager for data refresh on resume
     if (mounted) {
       _initializeLifecycleManager();
+    }
+  }
+
+  Future<void> _loadTodayFlipPoints() async {
+    if (!mounted) return;
+
+    final appState = context.read<AppStateProvider>();
+    final pointsService = context.read<PointsService>();
+
+    if (!appState.hasUser) return;
+
+    try {
+      final supabase = SupabaseService();
+      final result = await supabase.appLaunchSync(appState.currentUser!.id);
+
+      // Server baseline: synced runs from today (may include other devices)
+      final serverTodayBaseline =
+          (result['today_flip_points'] as num?)?.toInt() ?? 0;
+      final seasonPoints =
+          (result['user_stats']?['season_points'] as num?)?.toInt() ?? 0;
+
+      // Set server baseline first
+      pointsService.setServerTodayBaseline(serverTodayBaseline);
+      pointsService.setSeasonPoints(seasonPoints);
+
+      // Then add local unsynced runs on top (hybrid calculation)
+      await pointsService.refreshLocalUnsyncedPoints();
+
+      debugPrint(
+        'AppInitializer: Loaded points - '
+        'serverBaseline: $serverTodayBaseline, '
+        'todayTotal: ${pointsService.todayFlipPoints}, '
+        'season: $seasonPoints',
+      );
+    } catch (e) {
+      debugPrint('AppInitializer: Failed to load today flip points - $e');
+      // Still try to load local unsynced points even if server fails
+      await pointsService.refreshLocalUnsyncedPoints();
     }
   }
 
@@ -150,6 +201,26 @@ class _AppInitializerState extends State<_AppInitializer> {
     try {
       await PrefetchService().initialize();
       debugPrint('AppInitializer: PrefetchService initialized successfully');
+
+      // DEBUG: Generate dummy data (4 years of runs + hex colors)
+      // Remove this block after testing!
+      final homeHex = PrefetchService().homeHex;
+      if (homeHex != null) {
+        // Force regenerate hex colors to match current home hex location
+        final runsCount = await DummyDataGenerator.insertDummyRuns(
+          _localStorage,
+        );
+        final hexCount = await DummyDataGenerator.generateHexColors(
+          _localStorage,
+          homeHex,
+          unclaimedPercent: 1.0,
+          forceRegenerate: true, // Always regenerate to match current location
+        );
+        debugPrint(
+          'AppInitializer: Generated dummy data - '
+          'Runs: $runsCount, Hexes: $hexCount',
+        );
+      }
     } catch (e) {
       debugPrint('AppInitializer: PrefetchService failed - $e');
       if (mounted) {
@@ -190,19 +261,29 @@ class _AppInitializerState extends State<_AppInitializer> {
           return _buildLoadingScreen('Initializing...');
         }
 
-        // Show loading while prefetching (only if user exists)
-        if (appState.hasUser && _isPrefetching) {
+        // Show loading while prefetching (for existing user or debug mode)
+        if ((appState.hasUser || kForceShowSeasonRegister) && _isPrefetching) {
           return _buildLoadingScreen('Getting your location...');
         }
 
         // Show error with retry option if prefetch failed
-        if (appState.hasUser && _prefetchError != null) {
+        if ((appState.hasUser || kForceShowSeasonRegister) &&
+            _prefetchError != null) {
           return _buildErrorScreen(_prefetchError!);
         }
 
+        // DEBUG: Force show SeasonRegisterScreen during development
+        if (kForceShowSeasonRegister) {
+          return const SeasonRegisterScreen();
+        }
+
         // After initialization, show appropriate screen
-        return appState.hasUser
-            ? const HomeScreen()
+        if (appState.hasUser) {
+          return const HomeScreen();
+        }
+        // Use debug setting to determine which team selection screen to show
+        return kUseSeasonRegisterScreen
+            ? const SeasonRegisterScreen()
             : const TeamSelectionScreen();
       },
     );

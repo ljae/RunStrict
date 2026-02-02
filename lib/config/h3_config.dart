@@ -9,9 +9,9 @@ import '../services/remote_config_service.dart';
 /// base gameplay hex, with parent resolutions for geographic scope filtering.
 ///
 /// Resolution Reference:
-/// - Res 4: ~1,770 km², ~22.6km edge (Metro/Region)
-/// - Res 6: ~36 km², ~3.2km edge (City/District)
-/// - Res 8: ~0.73 km², ~461m edge (Neighborhood)
+/// - Res 5: ~252 km², ~8.5km edge (City/Region - ALL scope)
+/// - Res 6: ~36 km², ~3.2km edge (District - CITY scope)
+/// - Res 8: ~0.73 km², ~461m edge (Neighborhood - ZONE scope)
 /// - Res 9: ~0.10 km², ~174m edge (Block - Base gameplay)
 ///
 /// H3 uses Aperture 7 subdivision: each parent contains ~7 children.
@@ -33,17 +33,17 @@ class H3Config {
   static int get cityResolution =>
       RemoteConfigService().config.hexConfig.cityResolution;
 
-  /// All/Region scope resolution (Metro area level)
-  /// Edge: ~22.6km, Area: ~1,770 km²
+  /// All/Region scope resolution (City level)
+  /// Edge: ~8.5km, Area: ~252 km²
   static int get allResolution =>
       RemoteConfigService().config.hexConfig.allResolution;
 
   /// Approximate children count per parent
   ///
   /// H3 uses Aperture 7, meaning each parent hex contains ~7 children.
-  /// - Res 9 -> Res 8: ~7 hexes
-  /// - Res 9 -> Res 6: ~7^3 = 343 hexes
-  /// - Res 9 -> Res 4: ~7^5 = 16,807 hexes
+  /// - Res 9 -> Res 8: ~7 hexes (ZONE)
+  /// - Res 9 -> Res 6: ~7^3 = 343 hexes (CITY)
+  /// - Res 9 -> Res 5: ~7^4 = 2,401 hexes (ALL)
   static int childrenPerParent(int resolutionDelta) {
     if (resolutionDelta <= 0) return 1;
     return pow(7, resolutionDelta).round();
@@ -70,10 +70,10 @@ enum GeographicScope {
   /// - Leaderboard filters by Res 6 parent cell
   city(resolution: 6, zoomLevel: 12.0, label: 'CITY', description: 'District'),
 
-  /// All: Metro/Region level (no geographic filter)
-  /// - Shows dense hex grid with stats overlay
+  /// All: City/Region level (no geographic filter)
+  /// - Shows dense hex grid with stats overlay (~2,401 hexes)
   /// - Leaderboard shows all users (no filter)
-  all(resolution: 4, zoomLevel: 10.0, label: 'ALL', description: 'Region');
+  all(resolution: 5, zoomLevel: 11.0, label: 'ALL', description: 'Region');
 
   /// H3 resolution for this scope's parent cell grouping
   final int resolution;

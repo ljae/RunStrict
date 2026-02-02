@@ -4,11 +4,12 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/run_session.dart';
+import '../providers/app_state_provider.dart';
 import '../providers/run_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/run_calendar.dart';
 
-enum HistoryPeriod { week, month, year }
+enum HistoryPeriod { day, week, month, year }
 
 enum HistoryViewMode { calendar, list }
 
@@ -22,61 +23,33 @@ class RunHistoryScreen extends StatefulWidget {
 }
 
 class _RunHistoryScreenState extends State<RunHistoryScreen> {
-  HistoryPeriod _selectedPeriod = HistoryPeriod.month;
+  HistoryPeriod _selectedPeriod = HistoryPeriod.day;
   HistoryViewMode _viewMode = HistoryViewMode.list;
   DateTime? _selectedDate;
-  String _timezone = 'Local';
 
   // Range-based navigation state
   DateTime _rangeStart = DateTime.now();
   DateTime _rangeEnd = DateTime.now();
 
-  static const List<String> _timezones = [
-    'Local',
-    'UTC',
-    'GMT+9 (KST)',
-    'GMT+2 (SAST)',
-    'GMT-5 (EST)',
-    'GMT-8 (PST)',
-  ];
-
-  /// Get the UTC offset in hours for the selected timezone
-  int _getTimezoneOffsetHours() {
-    switch (_timezone) {
-      case 'UTC':
-        return 0;
-      case 'GMT+9 (KST)':
-        return 9;
-      case 'GMT+2 (SAST)':
-        return 2;
-      case 'GMT-5 (EST)':
-        return -5;
-      case 'GMT-8 (PST)':
-        return -8;
-      case 'Local':
-      default:
-        // Return local timezone offset (device timezone)
-        return DateTime.now().timeZoneOffset.inHours;
-    }
+  /// Get user's team color for highlights (supports red, blue, purple)
+  Color get _teamColor {
+    final appState = context.read<AppStateProvider>();
+    return appState.userTeam?.color ?? AppTheme.electricBlue;
   }
 
-  /// Convert a DateTime to the selected timezone for display
-  /// All stored times should be in UTC; this converts to display timezone
+  /// Convert a DateTime to local timezone for display
   DateTime _convertToDisplayTimezone(DateTime utcTime) {
-    if (_timezone == 'Local') {
-      // For local, convert UTC to local time
-      return utcTime.toLocal();
-    }
-    // For explicit timezones, add the offset to UTC time
-    final offsetHours = _getTimezoneOffsetHours();
-    // Ensure we're working with UTC, then add offset
-    final utc = utcTime.isUtc ? utcTime : utcTime.toUtc();
-    return utc.add(Duration(hours: offsetHours));
+    return utcTime.toLocal();
   }
 
   /// Calculate range boundaries based on anchor date and period
   void _calculateRange(DateTime anchorDate, HistoryPeriod period) {
     switch (period) {
+      case HistoryPeriod.day:
+        // DAY mode: Monthly range (chart shows all days of the month)
+        _rangeStart = DateTime(anchorDate.year, anchorDate.month, 1);
+        _rangeEnd = DateTime(anchorDate.year, anchorDate.month + 1, 0);
+        break;
       case HistoryPeriod.week:
         // Week starts Sunday (weekday % 7 gives Sunday = 0)
         final dayOfWeek = anchorDate.weekday % 7;
@@ -88,68 +61,89 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         _rangeEnd = _rangeStart.add(const Duration(days: 6));
         break;
       case HistoryPeriod.month:
-        // First to last day of month
-        _rangeStart = DateTime(anchorDate.year, anchorDate.month, 1);
-        _rangeEnd = DateTime(anchorDate.year, anchorDate.month + 1, 0);
-        break;
-      case HistoryPeriod.year:
-        // Jan 1 to Dec 31
+        // MONTH mode: Full year range (chart shows all 12 months)
         _rangeStart = DateTime(anchorDate.year, 1, 1);
         _rangeEnd = DateTime(anchorDate.year, 12, 31);
+        break;
+      case HistoryPeriod.year:
+        // YEAR mode: Last 5 years range (chart shows 5 years)
+        final currentYear = DateTime.now().year;
+        _rangeStart = DateTime(currentYear - 4, 1, 1);
+        _rangeEnd = DateTime(currentYear, 12, 31);
         break;
     }
     // Clear selection - entire range is selected (range mode)
     _selectedDate = null;
   }
 
-  /// Navigate to previous range (week/month/year)
+  /// Navigate to previous range (day/week/month/year)
   void _navigatePrevious() {
     DateTime newAnchor;
     switch (_selectedPeriod) {
+      case HistoryPeriod.day:
+        // DAY mode navigates by month
+        newAnchor = DateTime(_rangeStart.year, _rangeStart.month - 1, 1);
+        break;
       case HistoryPeriod.week:
         newAnchor = _rangeStart.subtract(const Duration(days: 7));
         break;
       case HistoryPeriod.month:
-        newAnchor = DateTime(_rangeStart.year, _rangeStart.month - 1, 1);
-        break;
-      case HistoryPeriod.year:
+        // MONTH mode navigates by year (shows all 12 months of that year)
         newAnchor = DateTime(_rangeStart.year - 1, 1, 1);
         break;
+      case HistoryPeriod.year:
+        // YEAR mode: no navigation (always shows last 5 years)
+        return;
     }
     setState(() {
       _calculateRange(newAnchor, _selectedPeriod);
     });
   }
 
-  /// Navigate to next range (week/month/year)
+  /// Navigate to next range (day/week/month/year)
   void _navigateNext() {
     DateTime newAnchor;
     switch (_selectedPeriod) {
+      case HistoryPeriod.day:
+        // DAY mode navigates by month
+        newAnchor = DateTime(_rangeStart.year, _rangeStart.month + 1, 1);
+        break;
       case HistoryPeriod.week:
         newAnchor = _rangeStart.add(const Duration(days: 7));
         break;
       case HistoryPeriod.month:
-        newAnchor = DateTime(_rangeStart.year, _rangeStart.month + 1, 1);
-        break;
-      case HistoryPeriod.year:
+        // MONTH mode navigates by year (shows all 12 months of that year)
         newAnchor = DateTime(_rangeStart.year + 1, 1, 1);
         break;
+      case HistoryPeriod.year:
+        // YEAR mode: no navigation (always shows last 5 years)
+        return;
     }
     setState(() {
       _calculateRange(newAnchor, _selectedPeriod);
     });
   }
 
-  /// Jump to current period containing today
-  void _jumpToToday() {
-    setState(() {
-      _calculateRange(DateTime.now(), _selectedPeriod);
-    });
+  /// Get descriptive label for period stats panel
+  String _getPeriodStatsLabel() {
+    switch (_selectedPeriod) {
+      case HistoryPeriod.day:
+        return 'TODAY';
+      case HistoryPeriod.week:
+        return 'WEEK';
+      case HistoryPeriod.month:
+        return 'THIS MONTH';
+      case HistoryPeriod.year:
+        return 'THIS YEAR';
+    }
   }
 
   /// Format range display based on period
   String _formatRangeDisplay() {
     switch (_selectedPeriod) {
+      case HistoryPeriod.day:
+        // DAY mode shows month range: "JANUARY 2026"
+        return DateFormat('MMMM yyyy').format(_rangeStart).toUpperCase();
       case HistoryPeriod.week:
         // "Jan 26 - Feb 1" or "Dec 28 - Jan 3, 2027" if years differ
         final startFormat = DateFormat('MMM d');
@@ -161,11 +155,12 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           return '${startFormat.format(_rangeStart)} - ${_rangeEnd.day}';
         }
       case HistoryPeriod.month:
-        // "JANUARY 2026"
-        return DateFormat('MMMM yyyy').format(_rangeStart).toUpperCase();
-      case HistoryPeriod.year:
-        // "2026"
+        // MONTH mode shows year only: "2025"
         return _rangeStart.year.toString();
+      case HistoryPeriod.year:
+        // YEAR mode shows 5-year range: "2021 - 2025"
+        final currentYear = DateTime.now().year;
+        return '${currentYear - 4} - $currentYear';
     }
   }
 
@@ -192,7 +187,10 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         body: Consumer<RunProvider>(
           builder: (context, provider, child) {
             final allRuns = provider.runHistory;
+            // For chart/calendar visualization (uses _rangeStart/_rangeEnd)
             final periodRuns = _filterRunsByPeriod(allRuns, _selectedPeriod);
+            // For stats panel (uses actual period meaning: today/week/month/year)
+            final statsRuns = _filterRunsForStats(allRuns, _selectedPeriod);
 
             // Calculate OVERALL (all-time) Stats
             final overallDistance = allRuns.fold(
@@ -212,35 +210,38 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               );
               overallPace = (overallSeconds / 60.0) / overallDistance;
             }
+            // Weighted avg stability (runs >= 1km only)
+            final overallStability = _calculateWeightedStability(allRuns);
 
-            // Calculate PERIOD Stats
-            final totalDistance = periodRuns.fold(
+            // Calculate PERIOD Stats (from statsRuns - actual period)
+            final totalDistance = statsRuns.fold(
               0.0,
               (sum, run) => sum + run.distanceKm,
             );
-            final totalPoints = periodRuns.fold(
+            final totalPoints = statsRuns.fold(
               0,
               (sum, run) => sum + run.hexesColored,
             );
-            final runCount = periodRuns.length;
+            final runCount = statsRuns.length;
 
             // Weighted average pace for period
             double avgPace = 0.0;
             if (totalDistance > 0) {
-              final totalSeconds = periodRuns.fold(
+              final totalSeconds = statsRuns.fold(
                 0,
                 (sum, run) => sum + run.duration.inSeconds,
               );
               final totalMinutes = totalSeconds / 60.0;
               avgPace = totalMinutes / totalDistance;
             }
+            // Weighted avg stability for period (runs >= 1km only)
+            final periodStability = _calculateWeightedStability(statsRuns);
 
             return SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildHeader(),
-                  SizedBox(height: isLandscape ? 4 : 10),
+                  SizedBox(height: isLandscape ? 8 : 16),
                   if (!isLandscape) ...[
                     // ALL-TIME stats at top (fixed, outside scroll)
                     Padding(
@@ -250,11 +251,14 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                         overallPace,
                         overallPoints,
                         overallRunCount,
+                        overallStability,
                       ),
                     ),
                     const SizedBox(height: 12),
+                    // Period toggle: DAY | WEEK | MONTH | YEAR
                     _buildPeriodToggle(),
                     const SizedBox(height: 8),
+                    // Range navigation
                     _buildRangeNavigation(),
                     const SizedBox(height: 16),
                   ],
@@ -271,6 +275,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                             overallPace,
                             overallPoints,
                             overallRunCount,
+                            overallStability,
+                            periodStability,
                           )
                         : CustomScrollView(
                             physics: const BouncingScrollPhysics(),
@@ -286,7 +292,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                                     avgPace,
                                     totalPoints,
                                     runCount,
-                                    _selectedPeriod.name.toUpperCase(),
+                                    _getPeriodStatsLabel(),
+                                    periodStability,
                                   ),
                                 ),
                               ),
@@ -416,6 +423,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     double overallPace,
     int overallPoints,
     int overallRunCount,
+    int? overallStability,
+    int? periodStability,
   ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,10 +441,13 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   overallPace,
                   overallPoints,
                   overallRunCount,
+                  overallStability,
                 ),
                 const SizedBox(height: 12),
+                // Period toggle: DAY | WEEK | MONTH | YEAR
                 _buildPeriodToggle(),
                 const SizedBox(height: 8),
+                // Range navigation
                 _buildRangeNavigation(),
                 const SizedBox(height: 16),
                 _buildPeriodStatsSection(
@@ -443,7 +455,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   avgPace,
                   totalPoints,
                   runCount,
-                  _selectedPeriod.name.toUpperCase(),
+                  _getPeriodStatsLabel(),
+                  periodStability,
                 ),
                 const SizedBox(height: 16),
                 if (_viewMode == HistoryViewMode.calendar)
@@ -497,17 +510,24 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   Widget _buildCalendarContainer(List<RunSession> allRuns) {
     // Map period selection to calendar display mode
+    // DAY → month calendar (to select a day)
+    // WEEK → week view
+    // MONTH → year view (to select a month)
+    // YEAR → 5-year view (custom widget)
     CalendarDisplayMode displayMode;
     switch (_selectedPeriod) {
+      case HistoryPeriod.day:
+        displayMode = CalendarDisplayMode.month;
+        break;
       case HistoryPeriod.week:
         displayMode = CalendarDisplayMode.week;
         break;
-      case HistoryPeriod.year:
+      case HistoryPeriod.month:
         displayMode = CalendarDisplayMode.year;
         break;
-      case HistoryPeriod.month:
-      default:
-        displayMode = CalendarDisplayMode.month;
+      case HistoryPeriod.year:
+        // Use custom 5-year view
+        return _buildFiveYearCalendarWithToggle(allRuns);
     }
 
     return Container(
@@ -517,18 +537,160 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
-      child: RunCalendar(
-        runs: allRuns,
-        selectedDate: _selectedDate,
-        displayMode: displayMode,
-        externalRangeStart: _rangeStart,
-        externalRangeEnd: _rangeEnd,
-        onNavigatePrevious: _navigatePrevious,
-        onNavigateNext: _navigateNext,
-        onDateSelected: (date) {
-          setState(() => _selectedDate = date);
-        },
-        timezoneConverter: _convertToDisplayTimezone,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with title and toggle
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'CALENDAR',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white30,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                _buildViewModeToggle(),
+              ],
+            ),
+          ),
+          RunCalendar(
+            runs: allRuns,
+            selectedDate: _selectedDate,
+            displayMode: displayMode,
+            externalRangeStart: _rangeStart,
+            externalRangeEnd: _rangeEnd,
+            onNavigatePrevious: _navigatePrevious,
+            onNavigateNext: _navigateNext,
+            onDateSelected: (date) {
+              setState(() => _selectedDate = date);
+            },
+            timezoneConverter: _convertToDisplayTimezone,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build 5-year calendar view for YEAR period (with toggle)
+  Widget _buildFiveYearCalendarWithToggle(List<RunSession> allRuns) {
+    final currentYear = DateTime.now().year;
+    final years = List.generate(5, (i) => currentYear - 4 + i);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with title and toggle
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'YEARLY OVERVIEW',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white30,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                _buildViewModeToggle(),
+              ],
+            ),
+          ),
+          // Year grid
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: years.map((year) {
+              final isSelected = _rangeStart.year == year;
+              final yearRuns = allRuns.where((run) {
+                final displayTime = _convertToDisplayTimezone(run.startTime);
+                return displayTime.year == year;
+              }).toList();
+              final totalDistance = yearRuns.fold(
+                0.0,
+                (sum, run) => sum + run.distanceKm,
+              );
+              final runCount = yearRuns.length;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _calculateRange(DateTime(year, 6, 15), HistoryPeriod.year);
+                  });
+                },
+                child: Container(
+                  width: 60,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isSelected
+                        ? Border.all(color: Colors.white.withOpacity(0.2))
+                        : null,
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        year.toString(),
+                        style: GoogleFonts.sora(
+                          fontSize: 14,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: isSelected ? Colors.white : Colors.white54,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatCompact(totalDistance),
+                        style: GoogleFonts.sora(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: runCount > 0 ? _teamColor : Colors.white24,
+                        ),
+                      ),
+                      Text(
+                        'km',
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white30,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_formatCompactInt(runCount)} runs',
+                        style: GoogleFonts.inter(
+                          fontSize: 8,
+                          color: Colors.white24,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -558,199 +720,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
-
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: 24,
-        vertical: isLandscape ? 2 : 4,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Title - minimal
-          Text(
-            'HISTORY',
-            style: GoogleFonts.sora(
-              fontSize: isLandscape ? 18 : 22,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: 1.0,
-            ),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Timezone selector
-              _buildTimezoneDropdown(),
-              const SizedBox(width: 8),
-              // View mode toggle
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _viewMode = _viewMode == HistoryViewMode.calendar
-                        ? HistoryViewMode.list
-                        : HistoryViewMode.calendar;
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white.withOpacity(0.08)),
-                  ),
-                  child: Icon(
-                    _viewMode == HistoryViewMode.calendar
-                        ? Icons.bar_chart_rounded
-                        : Icons.calendar_month_rounded,
-                    color: AppTheme.electricBlue,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimezoneDropdown() {
-    return PopupMenuButton<String>(
-      onSelected: (value) {
-        setState(() => _timezone = value);
-      },
-      offset: const Offset(0, 40),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: AppTheme.surfaceColor,
-      itemBuilder: (context) => _timezones.map((tz) {
-        final isSelected = _timezone == tz;
-        return PopupMenuItem<String>(
-          value: tz,
-          child: Row(
-            children: [
-              if (isSelected)
-                Icon(Icons.check, size: 16, color: AppTheme.electricBlue)
-              else
-                const SizedBox(width: 16),
-              const SizedBox(width: 8),
-              Text(
-                tz,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: isSelected ? AppTheme.electricBlue : Colors.white70,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.public, size: 14, color: AppTheme.textSecondary),
-            const SizedBox(width: 6),
-            Text(
-              _timezone,
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 16,
-              color: AppTheme.textSecondary,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Unified range navigation with prev/next controls
-  Widget _buildRangeNavigation() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Previous arrow
-          GestureDetector(
-            onTap: _navigatePrevious,
-            child: Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.chevron_left_rounded,
-                color: Colors.white54,
-                size: 24,
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Range display - tap to toggle range mode / jump to today
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (_selectedDate != null) {
-                  // Exit day mode, enter range mode
-                  setState(() => _selectedDate = null);
-                } else {
-                  // Jump to today's range
-                  _jumpToToday();
-                }
-              },
-              child: Text(
-                _formatRangeDisplay(),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Next arrow
-          GestureDetector(
-            onTap: _navigateNext,
-            child: Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.white54,
-                size: 24,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// Period toggle: DAY | WEEK | MONTH | YEAR
   Widget _buildPeriodToggle() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -801,6 +771,65 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
+  /// Range navigation with prev/next controls and date display
+  Widget _buildRangeNavigation() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Previous arrow
+          GestureDetector(
+            onTap: _navigatePrevious,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.chevron_left_rounded,
+                color: Colors.white54,
+                size: 24,
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Range display
+          Expanded(
+            child: Text(
+              _formatRangeDisplay(),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Next arrow
+          GestureDetector(
+            onTap: _navigateNext,
+            child: Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white54,
+                size: 24,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Period stats section - smaller version of ALL TIME panel
   Widget _buildPeriodStatsSection(
     double distance,
@@ -808,6 +837,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     int flips,
     int runs,
     String periodLabel,
+    int? stability,
   ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -836,34 +866,34 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               // Distance - primary highlight
               Expanded(
                 flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          distance.toStringAsFixed(1),
-                          style: GoogleFonts.sora(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            height: 1.0,
-                          ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatCompact(distance),
+                        style: GoogleFonts.sora(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.0,
                         ),
-                        const SizedBox(width: 3),
-                        Text(
-                          'km',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white30,
-                          ),
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'km',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white30,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               // Vertical divider
@@ -874,15 +904,33 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               ),
               // Secondary stats
               Expanded(
-                flex: 3,
+                flex: 4,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildMiniStatSmall(_formatPace(pace), '/km'),
-                      _buildMiniStatSmall(flips.toString(), 'flips'),
-                      _buildMiniStatSmall(runs.toString(), 'runs'),
+                      Flexible(
+                        child: _buildMiniStatSmall(_formatPace(pace), '/km'),
+                      ),
+                      Flexible(
+                        child: _buildMiniStatSmall(
+                          _formatCompactInt(flips),
+                          'flips',
+                        ),
+                      ),
+                      Flexible(
+                        child: _buildMiniStatSmall(runs.toString(), 'runs'),
+                      ),
+                      Flexible(
+                        child: stability != null
+                            ? _buildMiniStatSmallColored(
+                                '$stability%',
+                                'stab',
+                                _getStabilityColor(stability),
+                              )
+                            : _buildMiniStatSmall('--', 'stab'),
+                      ),
                     ],
                   ),
                 ),
@@ -896,27 +944,63 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   /// Mini stat for period section (smaller than ALL TIME)
   Widget _buildMiniStatSmall(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.sora(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.white70,
-            height: 1.0,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.sora(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white70,
+              height: 1.0,
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 8,
-            fontWeight: FontWeight.w500,
-            color: Colors.white24,
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 8,
+              fontWeight: FontWeight.w500,
+              color: Colors.white24,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  /// Mini stat with custom color for period section (smaller)
+  Widget _buildMiniStatSmallColored(
+    String value,
+    String label,
+    Color valueColor,
+  ) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.sora(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 8,
+              fontWeight: FontWeight.w500,
+              color: Colors.white24,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -926,6 +1010,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     double pace,
     int flips,
     int runs,
+    int? stability,
   ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -954,34 +1039,34 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               // Distance - primary highlight
               Expanded(
                 flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          distance.toStringAsFixed(0),
-                          style: GoogleFonts.sora(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            height: 1.0,
-                          ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatCompact(distance),
+                        style: GoogleFonts.sora(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.0,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'km',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white30,
-                          ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'km',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white30,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               // Vertical divider
@@ -992,15 +1077,28 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               ),
               // Secondary stats
               Expanded(
-                flex: 3,
+                flex: 4,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildMiniStat(_formatPace(pace), '/km'),
-                      _buildMiniStat(flips.toString(), 'flips'),
-                      _buildMiniStat(runs.toString(), 'runs'),
+                      Flexible(child: _buildMiniStat(_formatPace(pace), '/km')),
+                      Flexible(
+                        child: _buildMiniStat(
+                          _formatCompactInt(flips),
+                          'flips',
+                        ),
+                      ),
+                      Flexible(
+                        child: stability != null
+                            ? _buildMiniStatColored(
+                                '$stability%',
+                                'stab',
+                                _getStabilityColor(stability),
+                              )
+                            : _buildMiniStat('--', 'stab'),
+                      ),
                     ],
                   ),
                 ),
@@ -1012,35 +1110,67 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
+  /// Mini stat with custom color for value
+  Widget _buildMiniStatColored(String value, String label, Color valueColor) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.sora(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.white24,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Mini stat for overall section
   Widget _buildMiniStat(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.sora(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.white70,
-            height: 1.0,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.sora(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white70,
+              height: 1.0,
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 9,
-            fontWeight: FontWeight.w500,
-            color: Colors.white24,
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.white24,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildChartCard(List<RunSession> runs, HistoryPeriod period) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 20, 16, 8),
+      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor.withOpacity(0.6),
         borderRadius: BorderRadius.circular(20),
@@ -1049,20 +1179,95 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row with title and toggle
           Padding(
-            padding: const EdgeInsets.only(left: 12, bottom: 16),
-            child: Text(
-              'DISTANCE OVERVIEW',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.white30,
-                letterSpacing: 1.5,
-              ),
+            padding: const EdgeInsets.only(left: 12, right: 8, bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'DISTANCE OVERVIEW',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white30,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                // Graph/Calendar toggle
+                _buildViewModeToggle(),
+              ],
             ),
           ),
           AspectRatio(aspectRatio: 1.8, child: _buildChart(runs, period)),
         ],
+      ),
+    );
+  }
+
+  /// Compact toggle switch for Graph/Calendar view modes
+  Widget _buildViewModeToggle() {
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleOption(
+            icon: Icons.bar_chart_rounded,
+            label: 'Graph',
+            isSelected: _viewMode == HistoryViewMode.list,
+            onTap: () => setState(() => _viewMode = HistoryViewMode.list),
+          ),
+          _buildToggleOption(
+            icon: Icons.calendar_month_rounded,
+            label: 'Calendar',
+            isSelected: _viewMode == HistoryViewMode.calendar,
+            onTap: () => setState(() => _viewMode = HistoryViewMode.calendar),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleOption({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? _teamColor.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? _teamColor : Colors.white38,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? _teamColor : Colors.white38,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1074,8 +1279,32 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     int minX = 0;
     int maxX = 6;
 
-    // Use range boundaries for bucketing
-    if (period == HistoryPeriod.week) {
+    // Chart displays based on new period mapping:
+    // DAY: Show days of month (calendar shows month)
+    // WEEK: Show 7 days
+    // MONTH: Show 12 months (calendar shows year)
+    // YEAR: Show 5 years
+
+    if (period == HistoryPeriod.day) {
+      // DAY period shows month data (to match month calendar)
+      minX = 1;
+      final daysInMonth = DateTime(
+        _rangeStart.year,
+        _rangeStart.month + 1,
+        0,
+      ).day;
+      maxX = daysInMonth;
+      for (var run in runs) {
+        final displayTime = _convertToDisplayTimezone(run.startTime);
+        if (displayTime.year == _rangeStart.year &&
+            displayTime.month == _rangeStart.month) {
+          final day = displayTime.day;
+          distanceBuckets[day] = (distanceBuckets[day] ?? 0) + run.distanceKm;
+          durationBuckets[day] =
+              (durationBuckets[day] ?? 0) + run.duration.inSeconds / 60.0;
+        }
+      }
+    } else if (period == HistoryPeriod.week) {
       // Week: 7 days starting from _rangeStart (index 0-6)
       minX = 0;
       maxX = 6;
@@ -1100,38 +1329,31 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         }
       }
     } else if (period == HistoryPeriod.month) {
-      // Month: days 1-N based on _rangeStart's month
-      minX = 1;
-      final daysInMonth = DateTime(
-        _rangeStart.year,
-        _rangeStart.month + 1,
-        0,
-      ).day;
-      maxX = daysInMonth;
-      for (var run in runs) {
-        final displayTime = _convertToDisplayTimezone(run.startTime);
-        // Only include runs from the range's month
-        if (displayTime.year == _rangeStart.year &&
-            displayTime.month == _rangeStart.month) {
-          final day = displayTime.day;
-          distanceBuckets[day] = (distanceBuckets[day] ?? 0) + run.distanceKm;
-          durationBuckets[day] =
-              (durationBuckets[day] ?? 0) + run.duration.inSeconds / 60.0;
-        }
-      }
-    } else {
-      // Year: months 1-12 based on _rangeStart's year
+      // MONTH period shows year data (12 months - calendar shows year)
       minX = 1;
       maxX = 12;
       for (var run in runs) {
         final displayTime = _convertToDisplayTimezone(run.startTime);
-        // Only include runs from the range's year
         if (displayTime.year == _rangeStart.year) {
           final month = displayTime.month;
           distanceBuckets[month] =
               (distanceBuckets[month] ?? 0) + run.distanceKm;
           durationBuckets[month] =
               (durationBuckets[month] ?? 0) + run.duration.inSeconds / 60.0;
+        }
+      }
+    } else {
+      // YEAR period shows 5 years
+      final currentYear = DateTime.now().year;
+      minX = currentYear - 4;
+      maxX = currentYear;
+      for (var run in runs) {
+        final displayTime = _convertToDisplayTimezone(run.startTime);
+        final year = displayTime.year;
+        if (year >= minX && year <= maxX) {
+          distanceBuckets[year] = (distanceBuckets[year] ?? 0) + run.distanceKm;
+          durationBuckets[year] =
+              (durationBuckets[year] ?? 0) + run.duration.inSeconds / 60.0;
         }
       }
     }
@@ -1182,27 +1404,53 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           Expanded(
             child: Stack(
               children: [
-                // Bar chart layer
+                // Bar chart layer with value labels on top
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: entries.map((entry) {
                     final fraction = entry.value / maxY;
+                    final hasValue = entry.value > 0;
                     return Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 1),
-                        child: FractionallySizedBox(
-                          heightFactor: fraction.clamp(0.02, 1.0),
-                          alignment: Alignment.bottomCenter,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: entry.value > 0
-                                  ? AppTheme.electricBlue.withValues(alpha: 0.7)
-                                  : Colors.white.withValues(alpha: 0.05),
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(4),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            // Value label on top of bar
+                            if (hasValue)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Text(
+                                  _formatValueWithK(entry.value),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white54,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.visible,
+                                ),
+                              ),
+                            // Bar
+                            Flexible(
+                              child: FractionallySizedBox(
+                                heightFactor: fraction.clamp(0.02, 1.0),
+                                alignment: Alignment.bottomCenter,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: hasValue
+                                        ? AppTheme.electricBlue.withValues(
+                                            alpha: 0.7,
+                                          )
+                                        : Colors.white.withValues(alpha: 0.05),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(4),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     );
@@ -1279,19 +1527,25 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   String _getLabel(int value, HistoryPeriod period) {
-    if (period == HistoryPeriod.week) {
+    if (period == HistoryPeriod.day) {
+      // DAY period shows month days - show labels at day 1, 7, 14, 21, 28
+      return (value == 1 || value % 7 == 0) ? '$value' : '';
+    } else if (period == HistoryPeriod.week) {
       // Use range start to calculate the date for each bar
       final date = _rangeStart.add(Duration(days: value));
       return DateFormat.E().format(date)[0];
     } else if (period == HistoryPeriod.month) {
-      // Show labels at day 1, 7, 14, 21, 28
-      return (value == 1 || value % 7 == 0) ? '$value' : '';
-    } else {
+      // MONTH period shows 12 months
       if (value >= 1 && value <= 12) {
         final d = DateTime(_rangeStart.year, value);
         return DateFormat.MMM().format(d)[0];
       }
       return '';
+    } else {
+      // YEAR period shows years
+      return value.toString().substring(
+        2,
+      ); // Just last 2 digits: "22", "23", etc.
     }
   }
 
@@ -1422,11 +1676,9 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: AppTheme.athleticRed.withOpacity(0.1),
+                color: _teamColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppTheme.athleticRed.withOpacity(0.2),
-                ),
+                border: Border.all(color: _teamColor.withOpacity(0.2)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1436,7 +1688,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     style: GoogleFonts.sora(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.athleticRed,
+                      color: _teamColor,
                     ),
                   ),
                   const SizedBox(width: 2),
@@ -1445,7 +1697,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       fontWeight: FontWeight.w500,
-                      color: AppTheme.athleticRed.withOpacity(0.7),
+                      color: _teamColor.withOpacity(0.7),
                     ),
                   ),
                 ],
@@ -1582,6 +1834,39 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     return "$min'${sec.toString().padLeft(2, '0')}\"";
   }
 
+  /// Format large numbers with K suffix (e.g., 10232 → "10.2K")
+  String _formatCompact(num value) {
+    if (value >= 1000) {
+      final k = value / 1000;
+      return '${k.toStringAsFixed(1)}K';
+    }
+    return value is double ? value.toStringAsFixed(1) : value.toString();
+  }
+
+  /// Format large integers with K suffix (e.g., 58822 → "58.8K")
+  String _formatCompactInt(int value) {
+    if (value >= 1000) {
+      final k = value / 1000;
+      return '${k.toStringAsFixed(1)}K';
+    }
+    return value.toString();
+  }
+
+  /// Format bar chart values to be compact (single line)
+  /// < 10: one decimal (e.g., "5.2")
+  /// >= 10 and < 1000: no decimal (e.g., "42")
+  /// >= 1000: K suffix (e.g., "1.2K")
+  String _formatValueWithK(double value) {
+    if (value >= 1000) {
+      final k = value / 1000;
+      return '${k.toStringAsFixed(1)}K';
+    } else if (value >= 10) {
+      return value.round().toString();
+    } else {
+      return value.toStringAsFixed(1);
+    }
+  }
+
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
@@ -1604,6 +1889,26 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     return const Color(0xFFEF4444); // Red
   }
 
+  /// Calculate weighted average stability score from runs
+  /// Only includes runs >= 1km with valid stability scores
+  /// Weight is based on distance (longer runs count more)
+  int? _calculateWeightedStability(List<RunSession> runs) {
+    double totalWeight = 0.0;
+    double weightedSum = 0.0;
+
+    for (final run in runs) {
+      // Only include runs >= 1km with valid stability score
+      if (run.distanceKm >= 1.0 && run.stabilityScore != null) {
+        final weight = run.distanceKm;
+        weightedSum += run.stabilityScore! * weight;
+        totalWeight += weight;
+      }
+    }
+
+    if (totalWeight == 0) return null;
+    return (weightedSum / totalWeight).round().clamp(0, 100);
+  }
+
   List<RunSession> _runsForDate(List<RunSession> runs, DateTime date) {
     return runs.where((run) {
       final displayTime = _convertToDisplayTimezone(run.startTime);
@@ -1617,7 +1922,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     List<RunSession> runs,
     HistoryPeriod period,
   ) {
-    // Filter runs by the current range boundaries
+    // Filter runs by the current range boundaries (for chart/calendar)
     return runs.where((run) {
       final displayTime = _convertToDisplayTimezone(run.startTime);
       final runDate = DateTime(
@@ -1637,6 +1942,59 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       );
       return !runDate.isBefore(rangeStartDate) &&
           !runDate.isAfter(rangeEndDate);
+    }).toList();
+  }
+
+  /// Filter runs for stats panel based on the ACTUAL period meaning:
+  /// - DAY: Today only
+  /// - WEEK: Selected week range (Sun-Sat)
+  /// - MONTH: Current month only
+  /// - YEAR: Current year only
+  List<RunSession> _filterRunsForStats(
+    List<RunSession> runs,
+    HistoryPeriod period,
+  ) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    DateTime statsStart;
+    DateTime statsEnd;
+
+    switch (period) {
+      case HistoryPeriod.day:
+        // Today only
+        statsStart = today;
+        statsEnd = today;
+        break;
+      case HistoryPeriod.week:
+        // Selected week range (Sun-Sat based on _rangeStart)
+        statsStart = DateTime(
+          _rangeStart.year,
+          _rangeStart.month,
+          _rangeStart.day,
+        );
+        statsEnd = statsStart.add(const Duration(days: 6));
+        break;
+      case HistoryPeriod.month:
+        // Current month only (not the navigated year)
+        statsStart = DateTime(now.year, now.month, 1);
+        statsEnd = DateTime(now.year, now.month + 1, 0); // Last day of month
+        break;
+      case HistoryPeriod.year:
+        // Current year only (not 5-year range)
+        statsStart = DateTime(now.year, 1, 1);
+        statsEnd = DateTime(now.year, 12, 31);
+        break;
+    }
+
+    return runs.where((run) {
+      final displayTime = _convertToDisplayTimezone(run.startTime);
+      final runDate = DateTime(
+        displayTime.year,
+        displayTime.month,
+        displayTime.day,
+      );
+      return !runDate.isBefore(statsStart) && !runDate.isAfter(statsEnd);
     }).toList();
   }
 }

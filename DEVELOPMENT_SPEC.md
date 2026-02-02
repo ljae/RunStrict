@@ -1,8 +1,8 @@
-# RunStrict Development Specification: "The 280-Day Journey"
+# RunStrict Development Specification: "The 40-Day Journey"
 
-> **Last Updated**: 2026-01-28  
-> **App Name**: RunStrict (Project Code: 280-Journey)  
-> **Current Season Status**: D-280 (Pre-season)
+> **Last Updated**: 2026-02-01  
+> **App Name**: RunStrict (The 40-Day Journey)  
+> **Current Season Status**: D-40 (Pre-season)
 
 ---
 
@@ -12,12 +12,12 @@
 2. [Rule Definitions](#2-rule-definitions)
    - 2.1 Season & Time System
    - 2.2 Teams & Factions
-   - 2.3 Crew System
+   - 2.3 Team-Based Buff System
    - 2.4 Hex Capture Mechanics
    - 2.5 Economy & Points
    - 2.6 Pace Consistency (CV & Stability Score)
    - 2.7 Ranking & Leaderboard
-   - 2.8 Purple Crew: Protocol of Chaos
+   - 2.8 Purple Team: Protocol of Chaos
    - 2.9 D-Day Reset Protocol
 3. [UI Structure](#3-ui-structure)
    - 3.1 Navigation Architecture
@@ -60,7 +60,7 @@
 
 A location-based running game that gamifies territory control through hexagonal maps.
 
-- **Season**: Fixed **280 days** (Gestation period metaphor).
+- **Season**: Fixed **40 days**.
 - **Reset**: On D-Day (D-0), all territories and scores are deleted (The Void). Only personal history remains.
 
 ### Core Philosophy
@@ -75,8 +75,8 @@ A location-based running game that gamifies territory control through hexagonal 
 ### Key Differentiators
 
 - **Natural unity discovery** through competition phases
-- **Purple Crew**: Mid-season chaos mechanic — larger crew capacity for higher multiplier potential
-- **Yesterday's Check-in Multiplier**: Crew benefit = yesterday's active members count (no real-time tracking)
+- **Team-Based Buff System**: Different buff mechanics per team (RED=Elite, BLUE=Union, PURPLE=Participation)
+- **District Dominance**: Hex count determines District Leader status and buff bonuses
 - **The Final Sync**: No real-time hex updates — batch upload at run completion (cost optimized)
 - **Server-verified points**: Points calculated by client, validated by server (≤ hex_count × multiplier)
 - **Privacy-first hex system**: Minimal timestamps for fairness (last_flipped_at), no runner IDs stored
@@ -89,15 +89,15 @@ A location-based running game that gamifies territory control through hexagonal 
 
 | Property | Value |
 |----------|-------|
-| Season Duration | 280 days (D-280 → D-0) |
+| Season Duration | 40 days (D-40 → D-0) |
 | Server Timezone | GMT+2 (Israel Standard Time) |
 | Season Start | Immediately after previous season ends |
-| Purple Unlock Day | D-140 (midpoint) |
+| Purple Unlock | Available anytime during season |
 
 **Rules:**
 - The server operates on an absolute countdown. All users share the same timeline.
 - Remaining days vary by entry point (e.g., joining at D-260 vs D-5).
-- On D-0, all Flip Points, Crew data, and Rankings are wiped.
+- On D-0, all Flip Points, Buff data, and Rankings are wiped.
 - Personal running history (Calendar/DailyStats) persists across seasons.
 - No daily settlement cycle — points are calculated in real-time.
 
@@ -112,49 +112,119 @@ A location-based running game that gamifies territory control through hexagonal 
 **Rules:**
 - On first entry, user MUST choose Red or Blue.
 - Team choice is locked for the entire season.
-- **Exception**: User can defect to Purple after D-140 (see §2.7).
-- Purple is NOT available at season start.
-- All teams have the same base multiplier (1x). Advantage comes from crew size (see §2.5).
+- **Exception**: User can defect to Purple anytime (see §2.8).
+- Purple is available anytime during the season.
+- All teams have the same base multiplier (1x). Advantage comes from team-based buffs (see §2.3).
 
-### 2.3 Crew System
+### 2.3 Team-Based Buff System
 
-#### 2.3.1 Red/Blue Crews
+> **DEPRECATED**: The Crew System has been replaced by the Team-Based Buff System as of 2026-02-01.
+
+#### 2.3.1 Buff Matrix Overview
+
+Each team earns buff multipliers based on different mechanics:
+
+| Team | Buff Basis | Max Multiplier |
+|------|-----------|----------------|
+| RED | Individual performance (Elite vs Common) + Territory | 4x (Elite) / 2x (Common) |
+| BLUE | Territory dominance (District + Province) | 3x |
+| PURPLE | District participation rate | 3x (no Province bonus) |
+
+#### 2.3.2 RED Team Buffs (Elite System)
+
+RED rewards **individual excellence** with territory bonuses.
+
+| Scenario | Elite (Top 20%) | Common |
+|----------|-----------------|--------|
+| Normal (no territory wins) | 2x | 1x |
+| District win only | 3x | 1x |
+| Province win only | 3x | 2x |
+| District + Province win | 4x | 2x |
+
+**Definitions:**
+- **Elite**: Top 20% of yesterday's Flip Points among RED runners in the same District.
+- **Common**: Bottom 80% of RED runners in the District.
+- **District Win**: RED controls the most hexes in this District (yesterday midnight snapshot).
+- **Province Win**: RED controls the most hexes server-wide (yesterday midnight snapshot).
+
+**Calculation Logic:**
+- Elite Base: 2x
+- Elite + District Win: +1x → 3x
+- Elite + Province Win: +1x → 3x
+- Elite + Both Wins: +1x + 1x → 4x
+- Common Base: 1x
+- Common + District Win: +0x → 1x (no district bonus for Common)
+- Common + Province Win: +1x → 2x
+- Common + Both Wins: +1x → 2x (no district bonus for Common)
+
+#### 2.3.3 BLUE Team Buffs (Union System)
+
+BLUE rewards **collective participation** with equal territory bonuses.
+
+| Scenario | Union (All BLUE) |
+|----------|------------------|
+| Normal (no territory wins) | 1x |
+| District win only | 2x |
+| Province win only | 2x |
+| District + Province win | 3x |
+
+**Definitions:**
+- **Union**: All BLUE users who ran yesterday in the same District benefit equally.
+- **District Win**: BLUE controls the most hexes in this District (yesterday midnight snapshot).
+- **Province Win**: BLUE controls the most hexes server-wide (yesterday midnight snapshot).
+
+**Calculation Logic:**
+- Union Base: 1x
+- Union + District Win: +1x → 2x
+- Union + Province Win: +1x → 2x
+- Union + Both Wins: +1x + 1x → 3x
+
+#### 2.3.4 PURPLE Team Buffs (Chaos System)
+
+PURPLE rewards **participation rate** within District scope.
+
+| Participation Rate (R) | Multiplier | Province Range Bonus |
+|------------------------|------------|----------------------|
+| R ≥ 60% | 3x | None |
+| 30% ≤ R < 60% | 2x | None |
+| R < 30% | 1x | None |
+
+**Definitions:**
+- **Participation Rate (R)**: Yesterday's PURPLE runners / Total PURPLE users in District.
+- **No Province Range**: PURPLE does not receive server-wide dominance bonus.
+- **District Leader status**: Does not affect PURPLE buff (same multiplier regardless).
+
+**Examples:**
+- 70% of District's PURPLE users ran yesterday = **3x**
+- 45% participation = **2x**
+- 20% participation = **1x**
+
+#### 2.3.5 Buff Timing & Calculation
 
 | Property | Value |
 |----------|-------|
-| Max Members | 12 |
-| Formation Rule | Same-color members only |
-| Membership | One person, one crew |
-| Entry Security | Optional 4-digit PIN (stored plaintext for MVP) |
-| Max Simultaneous Multiplier | 12x |
+| Calculation Time | Daily at midnight (GMT+2) via Edge Function |
+| Display Timing | Shown at run START (frozen for entire run) |
+| Scope | District-level (determined by user's home hex) |
+| Mid-day changes | Buff frozen at run start; new district = new buff next day |
 
 **Rules:**
-- Any Red/Blue user can create a crew.
-- `memberIds[0]` is the crew leader (creator).
-- Users can voluntarily withdraw at any time. No cooldown.
-- If the leader leaves, leadership auto-transfers to the next oldest member (`memberIds[1]`).
-- If a crew reaches 0 members, it is automatically deleted.
-- Crew representative image is auto-generated by the app on creation.
-- When a user joins a crew, their avatar is forcibly changed to the crew's representative image.
-  - **Avatar preservation**: The user's original personal avatar is saved to `original_avatar` column.
-  - When the user leaves the crew, their avatar is automatically restored from `original_avatar`.
+- Buff is **frozen** when a run starts. Mid-run location changes don't affect multiplier.
+- Users see their buff breakdown before starting a run.
+- Server-configurable thresholds via `app_config.buff_config`.
 
-#### 2.3.2 Purple Crews
+#### 2.3.6 Purple Defection (Unchanged)
 
 | Property | Value |
 |----------|-------|
-| Max Members | 24 |
-| Formation Rule | Any user who has defected to Purple |
-| Unlock Condition | Season reaches D-140 |
-| Entry Cost | All existing Flip Points reset to 0 |
-| Max Simultaneous Multiplier | 24x |
+| Unlock Condition | Available anytime during season |
+| Entry Cost | Points are **PRESERVED** (not reset) |
+| Requirement | Permanent team change for remainder of season |
 
 **Rules:**
-- Only users who defect from Red/Blue can join Purple.
+- Only users who defect from Red/Blue can become Purple.
 - Defection permanently changes team for the remainder of the season.
-- User MUST leave their current crew before defecting to Purple.
-- Any Purple user can create a new Purple crew.
-- Purple's advantage is crew capacity (24 members = up to 24x multiplier vs Red/Blue's 12x max).
+- No special requirements beyond being Red/Blue.
 
 ### 2.4 Hex Capture Mechanics
 
@@ -176,8 +246,8 @@ A location-based running game that gamifies territory control through hexagonal 
 | Scope | H3 Resolution | Avg Edge | Avg Area | Purpose |
 |-------|---------------|----------|----------|---------|
 | ZONE | 8 (Parent of 9) | ~461m | ~0.73 km² | Neighborhood leaderboard |
-| CITY | 6 (Parent of 9) | ~3.2km | ~36 km² | District leaderboard |
-| ALL | 4 (Parent of 9) | ~22.6km | ~1,770 km² | Metro/Regional leaderboard |
+| DISTRICT | 6 (Parent of 9) | ~3.2km | ~36 km² | District leaderboard |
+| PROVINCE | 4 (Parent of 9) | ~22.6km | ~1,770 km² | Metro/Regional leaderboard |
 
 > H3 uses Aperture 7: each parent hex contains ~7 children. Scope filtering uses `cellToParent()` to group users by their parent hex at the scope resolution.
 
@@ -229,49 +299,41 @@ A **Flip** occurs when a hex changes color (any color change counts).
 |----------|-------|
 | Earning Method | Flipping a hex (any color change) |
 | Base Points Per Flip | 1 |
-| Multiplier | Yesterday's crew check-in count (see §2.5.2) |
-| Scope | Individual (not shared with crew) |
+| Multiplier | Team-based buff (see §2.3) |
+| Scope | Individual |
 | Reset | Wiped on D-0 (season end) |
 
 **Rules:**
-- All Flip Points belong to the individual, not the crew.
+- All Flip Points belong to the individual.
 - Points are calculated at run completion ("The Final Sync").
-- Multiplier is determined by yesterday's crew activity (not real-time).
+- Multiplier is determined by team-based buff system (see §2.3).
 - No streak bonuses. No daily total cap. **No daily hex limit** (same hex can be flipped multiple times per day).
 
-#### 2.5.2 Yesterday's Check-in Multiplier (Crew Benefit)
+#### 2.5.2 Team-Based Buff Multiplier
 
-> **Design Goal**: Eliminate real-time simultaneous runner tracking to reduce server load and operational costs.
+> **Design Goal**: Team-based competitive dynamics with different buff mechanics per team.
 
-The core crew benefit: **multiplier = number of crew members who completed at least one run YESTERDAY.**
+The buff multiplier is determined by team, performance tier, and territory dominance (see §2.3 for full details).
 
-| Yesterday's Check-ins | Today's Multiplier | Example (1 flip) |
-|----------------------|-------------------|-------------------|
-| 1 | 1x | 1 point |
-| 3 | 3x | 3 points |
-| 5 | 5x | 5 points |
-| 12 (Red/Blue max) | 12x | 12 points |
-| 24 (Purple max) | 24x | 24 points |
+| Team | Condition | Multiplier Range |
+|------|-----------|-----------------|
+| RED Elite | Base 2x + District Win (+1x) + Province Win (+1x) | 2x - 4x |
+| RED Common | Base 1x + Province Win (+1x) | 1x - 2x |
+| BLUE | Base 1x + District Win (+1x) + Province Win (+1x) | 1x - 3x |
+| PURPLE | Participation Rate (R) | 1x - 3x |
 
 **Rules:**
-- "Check-in" = completing at least 1 run (any distance) on the previous day.
 - Multiplier is calculated once daily at midnight (GMT+2) and fixed for the entire day.
-- All crew members running today use the **same** multiplier (yesterday's count).
-- No real-time tracking of concurrent runners required.
-- Example: If 5 crew members ran yesterday, everyone in the crew earns 5 points per flip today.
-- **Mid-day crew change**: If a user changes crew during the day, they keep their **previous crew's multiplier** until tomorrow. New crew's multiplier applies starting the next day.
-- **New users/crews**: If no "yesterday" data exists (new user or new crew), default multiplier is **1x**.
-- **Solo runners (no crew)**: Multiplier UI is **hidden**. Points are calculated at 1x but not displayed.
+- Users see their buff before starting a run (buff breakdown screen).
+- Buff is **frozen** when run starts - no changes mid-run.
+- **New users**: Default multiplier is **1x** until they have yesterday's data.
+- **District determination**: User's home hex (first run location) determines their District scope.
 
 **Advantages:**
-- **Server efficiency**: Multiplier calculated once per day via Edge Function, not per-second.
-- **Predictability**: Users know their multiplier at the start of each day.
-- **Strategy**: Crews can plan around yesterday's activity without coordination pressure.
-
-**Purple Advantage:**
-- Purple has NO base multiplier bonus.
-- Purple's advantage is purely crew capacity: max 24 members = potential 24x vs Red/Blue's max 12x.
-- This means Purple crews benefit more from consistent daily participation.
+- **Server efficiency**: Buff calculated once per day via Edge Function.
+- **Predictability**: Users know their buff at the start of each day.
+- **Strategy**: Teams can coordinate city dominance and participation.
+- **Competition**: RED rewards individual excellence, BLUE rewards solidarity, PURPLE rewards district-wide consistency.
 
 #### 2.5.3 Points Calculation Flow ("The Final Sync")
 
@@ -281,17 +343,18 @@ The core crew benefit: **multiplier = number of crew members who completed at le
 [During Run - Local Only]
   Runner GPS → Client validates locally
   Hex flip detected → Client records to local hex_path list
-  Points calculated locally using yesterday's multiplier (cached)
+  Points calculated locally using buff multiplier (frozen at run start)
   NO server communication during run
 
 [Run Completion - Batch Sync]
   RunSession.endTime = now()
   Client uploads:
-    → run_summary: { endTime, distanceKm, hex_path[], yesterdayCrewCount }
+    → run_summary: { endTime, distanceKm, hex_path[], buffMultiplier }
   
   Server processes (RPC: finalize_run):
     → Count flips in hex_path (color changes from current hex state)
-    → Award points: total_flips × multiplier
+    → Award points: total_flips × buffMultiplier
+    → Validate: buffMultiplier ≤ max allowed for user's team/tier
     → Conflict Resolution: Later endTime wins hex color
     → UPDATE hexes SET last_runner_team = team WHERE endTime > existing
     → UPDATE users SET season_points += total_points_earned
@@ -366,8 +429,8 @@ static double? calculateCV(List<LapModel> laps) {
 |----------|-------|
 | Type | Season cumulative only (no daily/weekly) |
 | Ranking Metric | Individual accumulated Flip Points |
-| Crew Affiliation Impact | None (purely individual) |
-| Display | Top rankings per geographic scope based on user's "home hex" |
+| Team Buff Impact | Via team-based buff multipliers |
+| Display | Top rankings per geographic scope (Zone/District/Province) based on user's "home hex" |
 | Stability Badge | Shows user's stability score on podium and rank tiles |
 
 #### 2.7.1 Home Hex System (Asymmetric Definition)
@@ -382,7 +445,7 @@ static double? calculateCV(List<LapModel> laps) {
 | **Other Users** | **LAST hexagon** of most recent run (end point) | Standard: Most recent location |
 
 - The Home Hex is updated at run completion (part of "The Final Sync").
-- Home Hex determines which ZONE/CITY/ALL scope the user belongs to for leaderboard filtering.
+- Home Hex determines which ZONE/DISTRICT/PROVINCE scope the user belongs to for leaderboard filtering.
 - **Privacy Rationale**: By using the START hex for yourself, your actual ending location (potentially your home) is not revealed to others viewing your ranking scope.
 - **Zero-hex run**: If `hex_path` is empty (GPS failed, indoor run, etc.), **home hex is NOT updated**. Previous home hex values are preserved.
 
@@ -391,8 +454,8 @@ static double? calculateCV(List<LapModel> laps) {
 | Scope | H3 Resolution | Definition | Display |
 |-------|---------------|-----------|---------|
 | **ZONE** | 8 (Parent of 9) | Users whose Home Hex shares the same Resolution 8 parent | Neighborhood rankings (~461m radius) |
-| **CITY** | 6 (Parent of 9) | Users whose Home Hex shares the same Resolution 6 parent | District rankings (~3.2km radius) |
-| **ALL** | — | All users server-wide | Global rankings |
+| **DISTRICT** | 6 (Parent of 9) | Users whose Home Hex shares the same Resolution 6 parent | District rankings (~3.2km radius) |
+| **PROVINCE** | — | All users server-wide | Regional/Global rankings |
 
 **Implementation:**
 ```dart
@@ -409,8 +472,8 @@ String getHomeHex(RunSummary run, {required bool isSelf}) {
 String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
   return switch (scope) {
     LeaderboardScope.zone => h3.cellToParent(homeHex, 8),
-    LeaderboardScope.city => h3.cellToParent(homeHex, 6),
-    LeaderboardScope.all => null, // No filtering
+    LeaderboardScope.district => h3.cellToParent(homeHex, 6),
+    LeaderboardScope.province => null, // No filtering
   };
 }
 ```
@@ -420,38 +483,36 @@ String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
 - **Current user's scope** is determined by their own FIRST hex (start point).
 - **Other users' scope** is determined by their LAST hex (end point).
 - Users outside top ranks see their own rank in a sticky footer.
-- Purple users have a distinct glowing border in the [ALL] view.
+- Purple users have a distinct glowing border in the [PROVINCE] view.
 - Team filter tabs: [ALL] / [RED] / [BLUE] / [PURPLE].
 - **Ranking snapshot**: Downloaded once on app launch, NOT polled in real-time.
 
-### 2.8 Purple Crew: Protocol of Chaos
+### 2.8 Purple Team: Protocol of Chaos
 
 #### 2.8.1 Unlock & Entry
 
 | Property | Value |
 |----------|-------|
-| Unlock Day | D-140 (season midpoint) |
+| Availability | Anytime during season (no restriction) |
 | Entry Name | "Traitor's Gate" |
-| Entry Cost | All existing Flip Points reset to **0** |
-| Eligibility | Any Red/Blue user (anytime after D-140) |
-| Pre-condition | Must leave current crew first |
+| Entry Cost | Points **PRESERVED** (not reset) |
+| Eligibility | Any Red/Blue user |
 
 **Rules:**
-- Purple is designed as a "comeback mechanic" for underperforming players.
-- Larger crew capacity (24 vs 12) compensates for the late start and point reset.
+- Purple is available anytime during the 40-day season.
 - Once defected, cannot return to Red/Blue for the remainder of the season.
 - No minimum Flip Point threshold to defect (anyone can defect).
-- Defection is available at any time after D-140 until season end.
+- Defection is permanent for the remainder of the season.
+- Points are preserved upon defection.
 
 #### 2.8.2 Purple Mechanics
 
 | Property | Value |
 |----------|-------|
-| Base Multiplier | 1x (same as Red/Blue) |
-| Max Crew Size | 24 members |
-| Max Simultaneous Multiplier | 24x |
+| Buff Basis | District participation rate |
+| Max Multiplier | 3x (no Province Range bonus) |
 | Hex Color | Purple (distinct from Red/Blue) |
-| Role | "Virus/Joker" — disrupts Red/Blue territory with larger coordinated crews |
+| Role | "Virus/Joker" — rewards consistent district-wide Purple participation |
 
 ### 2.9 D-Day Reset Protocol (The Void)
 
@@ -459,17 +520,17 @@ String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
 |------|--------|--------|
 | 1 | Season countdown reaches D-0 | Scheduled Edge Function |
 | 2 | All hex colors reset to neutral | `TRUNCATE TABLE hexes` (instant) |
-| 3 | All Crew data deleted | `TRUNCATE TABLE crews CASCADE` (instant) |
-| 4 | All Flip Points & team wiped | `UPDATE users SET season_points=0, crew_id=NULL, team=NULL` |
+| 3 | All buff stats cleared | `TRUNCATE TABLE daily_buff_stats` (instant) |
+| 4 | All Flip Points & team wiped | `UPDATE users SET season_points=0, team=NULL` |
 | 5 | Drop season's `runs` partitions (heavy data) | `DROP TABLE runs_p20XX_XX` (instant disk reclaim) |
 | 6 | `run_history` preserved | Personal run stats untouched |
 | 7 | `daily_stats` preserved | Aggregated daily stats untouched |
-| 8 | Next season begins immediately (D-280) | New season record created |
+| 8 | Next season begins immediately (D-40) | New season record created |
 | 9 | All users must re-select Red or Blue | `team = NULL` forces re-selection |
 
 **Data Preservation:**
 - ✅ Kept: `run_history` (per-run stats), `daily_stats` (aggregated daily)
-- ❌ Wiped: `runs` (heavy hex_path data), Flip Points, Crew, Rankings, Hex colors, Team
+- ❌ Wiped: `runs` (heavy hex_path data), Flip Points, Buff stats, Rankings, Hex colors, Team
 - ⚡ Deletion Method: `TRUNCATE`/`DROP PARTITION` = **$0 cost, < 1 second**, no performance impact
 
 ---
@@ -486,12 +547,11 @@ App Entry
     │   ├── [Left] Empty
     │   ├── [Center] FlipPoints Widget (animated counter, team-colored glow)
     │   └── [Right] Season Countdown Badge (D-day)
-    ├── Bottom Tab Bar + Swipe Navigation
-    │   ├── Tab: Map Screen
-    │   ├── Tab: Running Screen
-    │   ├── Tab: Leaderboard Screen
-    │   ├── Tab: Run History Screen (Calendar)
-    │   └── Tab: Crew Screen
+     ├── Bottom Tab Bar + Swipe Navigation
+     │   ├── Tab: Map Screen
+     │   ├── Tab: Running Screen
+     │   ├── Tab: Leaderboard Screen
+     │   └── Tab: Run History Screen (Calendar)
     └── Profile Screen (accessible from settings/menu)
         └── Manifesto (12-char, editable anytime)
 ```
@@ -508,7 +568,7 @@ App Entry
 | UI | Animated team cards with gradient text |
 | Interaction | Tap to select Red or Blue |
 | Lock | Cannot be revisited until next season |
-| Purple | Not shown here (accessed via Traitor's Gate after D-140) |
+| Purple | Not shown here (accessed via Traitor's Gate anytime) |
 
 #### 3.2.2 Home Screen
 
@@ -569,35 +629,55 @@ App Entry
 | Stats Overlay | Distance, Time, Pace |
 | Top Bar | "RUNNING" + team-colored pulsing dot |
 | Stop Button | Hold-to-stop (1.5s hold, no confirmation dialog) |
-| Yesterday's Crew Runners | Show count (어제 뛴 크루원) — today's multiplier. **Hidden for solo runners.** |
+| Buff Multiplier | Show current buff (e.g., "2x") — based on team buff system |
 
 **Important:** FlipPoints are shown in AppBar header ONLY (not duplicated in running screen).
 
 **Multiplier Display:**
-- In crew: Show "Nx (어제 뛴 크루원: Y명)" where N is multiplier and Y is yesterday's runner count.
-- Solo (no crew): **Hide multiplier UI entirely**. Points calculated at 1x internally but not displayed.
+- Show buff multiplier (e.g., "2x Elite" for RED, "2x City Leader" for BLUE)
+- New users without buff data: Show "1x" (default)
 
 #### 3.2.5 Leaderboard Screen
 
 | Element | Spec |
 |---------|------|
-| Team Tabs | [ALL] / [RED] / [BLUE] / [PURPLE] |
-| Scope Tabs | [ALL] / [City] / [Zone] |
-| List | Top rankings for selected scope |
+| Period Toggle | TOTAL / WEEK / MONTH / YEAR (height 36, borderRadius 18) |
+| Range Navigation | Prev/Next arrows with date range display |
+| List | Top rankings for selected period, all users |
+| Podium | Top 3 users with team-colored cards |
 | Sticky Footer | "My Rank" (if user outside top displayed) |
-| Purple Users | Glowing border in [ALL] tab |
-| Per User | Avatar, Name, Flip Points |
+| Purple Users | Glowing border |
+| Per User | Avatar, Name, Flip Points, Stability Badge |
+
+**Removed Features:**
+- Geographic scope filter (Zone/City/All) - removed for simplicity
+- Team filter tabs - all teams shown together
 
 #### 3.2.6 Run History Screen (Calendar)
 
 | Element | Spec |
 |---------|------|
-| Calendar View | Month view calendar grid |
-| Day Indicators | Dot indicators per day with activity |
-| Stats | Total km, Avg Pace, Total Time |
+| Calendar View | Month/Week/Year view with distance indicators |
+| Day Indicators | Distance display per day (e.g., "5.2k") matching week view style |
+| ALL TIME Stats | Fixed panel at top with distance, pace, flips, runs |
+| Period Stats | Smaller panel (copies ALL TIME design) for WEEK/MONTH/YEAR period |
+| Period Toggle | TOTAL/WEEK/MONTH/YEAR selector (height 36, borderRadius 18) |
+| Range Navigation | Prev/Next arrows for period navigation |
 | **Timezone Selector** | Dropdown to select display timezone |
 | Timezone Persistence | User's timezone preference saved locally |
 | Default Timezone | Device's local timezone on first launch |
+
+**Stats Panel Design:**
+
+| Panel | Padding | Border Radius | Distance Font | Mini Stat Font |
+|-------|---------|---------------|---------------|----------------|
+| ALL TIME | 20h/16v | 16 | 32px | 16px |
+| Period (WEEK/MONTH/YEAR) | 16h/12v | 12 | 24px | 14px |
+
+**Calendar Distance Display:**
+- Month view: Shows distance per day (e.g., "5.2k") below the day number
+- Week view: Shows distance per day in the same style
+- Replaces previous dot/badge indicators with consistent distance display
 
 **Timezone Selection Feature:**
 - Users can select and change the timezone for displaying run history.
@@ -610,34 +690,16 @@ App Entry
 - All standard IANA timezones (e.g., `Asia/Seoul`, `America/New_York`, `Europe/London`)
 - Common options shown at top of dropdown: device local, UTC, GMT+2 (server time)
 
-#### 3.2.7 Crew Screen
-
-| Element | Spec |
-|---------|------|
-| Create Crew | Name + optional 4-digit PIN |
-| Join Crew | Search/browse + PIN entry |
-| Member Display | Avatar grid layout |
-| Per Member | Avatar + individual running history & rank |
-| Yesterday's Runners | Badge showing who ran yesterday (어제 뛴 크루원) |
-| Crew Stats | Total flips, total distance, yesterday's runner count |
-| Crew Image | Auto-generated on creation |
-| Chat | Not included |
-
-#### 3.2.8 Profile Screen
+#### 3.2.7 Profile Screen
 
 | Element | Spec |
 |---------|------|
 | Access | Via settings/menu (not a main tab) |
 | Manifesto | 12-character declaration, editable anytime |
-| Avatar | Personal emoji (overridden by crew image when in crew, restored on crew leave) |
-| Team | Display only (cannot change) |
+| Avatar | Personal emoji |
+| Team | Display only (cannot change mid-season) |
 | Season Stats | Total flips, distance, runs |
-
-**Avatar Behavior:**
-- In crew: Displays crew representative image (forced).
-- Solo: Displays personal avatar.
-- On crew leave: Personal avatar automatically restored from `original_avatar`.
-- Users can change personal avatar anytime; if in crew, change is saved to `original_avatar` for later restoration.
+| Buff Status | Current multiplier breakdown (Elite/City Leader/All Range) |
 
 ### 3.3 Widget Library
 
@@ -700,7 +762,6 @@ enum Team {
   blue,   // Display: "WAVE" 🌊
   purple; // Display: "CHAOS" 💜
 
-  // No multiplier on Team — multiplier comes from yesterday's crew runners
   String get displayName => switch (this) {
     red => 'FLAME',
     blue => 'WAVE',
@@ -716,9 +777,8 @@ class UserModel {
   final String id;
   final String name;           // Display name
   final Team team;             // Current team (purple = defected)
-  final String avatar;         // Emoji avatar (overridden by crew image when in crew)
-  final String? crewId;        // Current crew membership
-  final int seasonPoints;      // Flip points this season (reset to 0 on Purple defection)
+  final String avatar;         // Emoji avatar
+  final int seasonPoints;      // Flip points this season (preserved on Purple defection)
   final String? manifesto;     // 12-char declaration, editable anytime
   final double totalDistanceKm; // Running season aggregate
   final double? avgPaceMinPerKm; // Weighted average pace (min/km)
@@ -759,24 +819,6 @@ class HexModel {
 }
 ```
 
-#### CrewModel
-
-```dart
-class CrewModel {
-  final String id;
-  final String name;
-  final Team team;              // Red, Blue, or Purple
-  final List<String> memberIds; // memberIds[0] = leader
-  final String? pin;            // Optional 4-digit PIN (plaintext for MVP)
-  final String? representativeImage; // Auto-generated on creation
-
-  // Derived getters
-  bool get isPurple => team == Team.purple;
-  int get maxMembers => isPurple ? 24 : 12;
-  String get leaderId => memberIds.isNotEmpty ? memberIds[0] : '';
-}
-```
-
 #### RunSession (Active Run — Hot Data)
 
 ```dart
@@ -809,7 +851,7 @@ class RunSummary {
   final int hexesColored;           // Flip count
   final Team teamAtRun;
   final List<String> hexPath;       // H3 hex IDs passed (deduplicated, no timestamps)
-  final int yesterdayCrewCount;     // Applied multiplier (yesterday's check-in count)
+  final int buffMultiplier;         // Applied multiplier from buff system
   final double? cv;                 // Coefficient of Variation (null for runs < 1km)
 
   /// Stability score (100 - CV, clamped 0-100). Higher = more consistent pace.
@@ -927,30 +969,16 @@ CREATE TABLE users (
   name TEXT NOT NULL,
   team TEXT CHECK (team IN ('red', 'blue', 'purple')),
   avatar TEXT NOT NULL DEFAULT '🏃',
-  original_avatar TEXT,                       -- Preserved personal avatar (restored when leaving crew)
-  crew_id UUID REFERENCES crews(id) ON DELETE SET NULL,
   season_points INTEGER NOT NULL DEFAULT 0,
   manifesto TEXT CHECK (char_length(manifesto) <= 12),
   home_hex_start TEXT,                        -- First hex of last run (used for SELF leaderboard scope)
   home_hex_end TEXT,                          -- Last hex of last run (used for OTHERS leaderboard scope)
+  total_distance_km DOUBLE PRECISION NOT NULL DEFAULT 0,
+  avg_pace_min_per_km DOUBLE PRECISION,
+  avg_cv DOUBLE PRECISION,
+  total_runs INTEGER NOT NULL DEFAULT 0,
+  cv_run_count INTEGER NOT NULL DEFAULT 0,   -- For incremental CV average
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Crews table (deleted on season reset)
-CREATE TABLE crews (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  team TEXT NOT NULL CHECK (team IN ('red', 'blue', 'purple')),
-  member_ids UUID[] NOT NULL DEFAULT '{}',  -- [0] = leader
-  pin TEXT,                                  -- Plaintext for MVP
-  representative_image TEXT,                 -- Auto-generated
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  
-  CONSTRAINT max_members CHECK (
-    CASE WHEN team = 'purple' THEN array_length(member_ids, 1) <= 24
-         ELSE array_length(member_ids, 1) <= 12
-    END
-  )
 );
 
 -- Hex map (deleted on season reset)
@@ -961,22 +989,34 @@ CREATE TABLE hexes (
   -- NO runner IDs (privacy)
 );
 
--- Active runs (DEPRECATED - kept for potential future use)
--- NOTE: NOT used for multiplier calculation (see "Yesterday's Check-in" system)
--- NOTE: Crew run-start notifications have been REMOVED to reduce complexity
--- This table may be dropped in future versions if no use case emerges
-CREATE TABLE active_runs (
-  user_id UUID PRIMARY KEY REFERENCES users(id),
-  crew_id UUID REFERENCES crews(id),
-  start_time TIMESTAMPTZ NOT NULL DEFAULT now(),
-  team TEXT NOT NULL CHECK (team IN ('red', 'blue', 'purple'))
+-- Daily buff stats (calculated at midnight GMT+2 via Edge Function)
+CREATE TABLE daily_buff_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  date DATE NOT NULL,
+  buff_multiplier INTEGER NOT NULL DEFAULT 1,
+  is_elite BOOLEAN NOT NULL DEFAULT false,        -- RED: Top 20%
+  is_district_leader BOOLEAN NOT NULL DEFAULT false,  -- Team has most hexes in district
+  has_province_range BOOLEAN NOT NULL DEFAULT false,   -- Team has most hexes server-wide
+  participation_rate DOUBLE PRECISION,            -- PURPLE: District participation %
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, date)
+);
+
+-- Daily province range stats (tracks server-wide hex dominance)
+CREATE TABLE daily_province_range_stats (
+  date DATE PRIMARY KEY,
+  leading_team TEXT CHECK (leading_team IN ('red', 'blue')),  -- PURPLE excluded
+  red_hex_count INTEGER NOT NULL DEFAULT 0,
+  blue_hex_count INTEGER NOT NULL DEFAULT 0,
+  calculated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
 #### Season-Partitioned Tables (pg_partman)
 
 ```sql
--- Runs table: partitioned by season (280-day periods)
+-- Runs table: partitioned by season (40-day periods)
 CREATE TABLE runs (
   id UUID NOT NULL DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id),
@@ -1083,20 +1123,21 @@ CREATE POLICY hexes_write ON hexes FOR UPDATE USING (auth.role() = 'authenticate
 ```sql
 CREATE INDEX idx_users_team ON users(team);
 CREATE INDEX idx_users_season_points ON users(season_points DESC);
-CREATE INDEX idx_users_crew_id ON users(crew_id);
-CREATE INDEX idx_active_runs_crew_id ON active_runs(crew_id);
 CREATE INDEX idx_daily_stats_user_date ON daily_stats(user_id, date_key);
 CREATE INDEX idx_hexes_team ON hexes(last_runner_team);
+CREATE INDEX idx_daily_buff_stats_user_date ON daily_buff_stats(user_id, date);
 ```
 
 #### Useful Views & Functions
 
 ```sql
--- DEPRECATED: Real-time crew multiplier (replaced by "Yesterday's Check-in" system)
--- Kept for reference; use calculate_yesterday_checkins() instead
-CREATE OR REPLACE FUNCTION get_crew_multiplier(p_crew_id UUID)
+-- Get user's current buff multiplier (from today's daily_buff_stats)
+CREATE OR REPLACE FUNCTION get_user_buff(p_user_id UUID)
 RETURNS INTEGER AS $$
-  SELECT COUNT(*)::INTEGER FROM active_runs WHERE crew_id = p_crew_id;
+  SELECT COALESCE(buff_multiplier, 1)
+  FROM daily_buff_stats
+  WHERE user_id = p_user_id AND date = CURRENT_DATE
+  LIMIT 1;
 $$ LANGUAGE sql STABLE;
 
 -- Leaderboard query (efficient with index on season_points)
@@ -1110,17 +1151,6 @@ RETURNS TABLE(user_id UUID, name TEXT, team TEXT, season_points INTEGER, rank BI
   LIMIT p_limit;
 $$ LANGUAGE sql STABLE;
 
--- Calculate yesterday's check-in count per crew (called daily at midnight GMT+2)
-CREATE OR REPLACE FUNCTION calculate_yesterday_checkins(p_crew_id UUID)
-RETURNS INTEGER AS $$
-  SELECT COUNT(DISTINCT r.user_id)::INTEGER
-  FROM runs r
-  JOIN users u ON r.user_id = u.id
-  WHERE u.crew_id = p_crew_id
-    AND r.end_time::DATE = (CURRENT_DATE - INTERVAL '1 day')::DATE
-    AND r.end_time IS NOT NULL;  -- Only completed runs count
-$$ LANGUAGE sql STABLE;
-
 -- Finalize run: batch process hex flips and award points ("The Final Sync")
 CREATE OR REPLACE FUNCTION finalize_run(
   p_user_id UUID,
@@ -1129,7 +1159,7 @@ CREATE OR REPLACE FUNCTION finalize_run(
   p_distance_km DOUBLE PRECISION,
   p_duration_seconds INTEGER,
   p_hex_path TEXT[],
-  p_yesterday_crew_count INTEGER,
+  p_cv DOUBLE PRECISION DEFAULT NULL,  -- Coefficient of Variation (null for runs < 1km)
   p_client_points INTEGER DEFAULT NULL  -- Optional: client-calculated points for validation
 )
 RETURNS jsonb AS $$
@@ -1138,12 +1168,16 @@ DECLARE
   v_total_flips INTEGER := 0;
   v_team TEXT;
   v_points INTEGER;
+  v_multiplier INTEGER;
   v_current_team TEXT;
   v_current_flipped_at TIMESTAMPTZ;
   v_max_allowed_points INTEGER;
 BEGIN
-  -- Get user's team
+  -- Get user's team and buff multiplier
   SELECT team INTO v_team FROM users WHERE id = p_user_id;
+  SELECT COALESCE(buff_multiplier, 1) INTO v_multiplier 
+  FROM daily_buff_stats WHERE user_id = p_user_id AND date = CURRENT_DATE;
+  IF v_multiplier IS NULL THEN v_multiplier := 1; END IF;
   
   -- Process each hex in the path (NO daily limit - all flips count)
   FOREACH v_hex_id IN ARRAY p_hex_path LOOP
@@ -1153,7 +1187,6 @@ BEGIN
     FROM hexes WHERE id = v_hex_id;
     
     -- Only update if this run ended LATER than the existing flip
-    -- This prevents offline abusing (submitting old runs)
     IF v_current_flipped_at IS NULL OR p_end_time > v_current_flipped_at THEN
       -- Count as flip if color changes (or hex is new/neutral)
       IF v_current_team IS DISTINCT FROM v_team THEN
@@ -1170,40 +1203,51 @@ BEGIN
     END IF;
   END LOOP;
   
-  -- Calculate points with multiplier
-  v_points := v_total_flips * GREATEST(p_yesterday_crew_count, 1);
+  -- Calculate points with buff multiplier
+  v_points := v_total_flips * v_multiplier;
   
   -- [SECURITY] Server-side validation: points cannot exceed hex_count × multiplier
-  v_max_allowed_points := array_length(p_hex_path, 1) * GREATEST(p_yesterday_crew_count, 1);
+  v_max_allowed_points := array_length(p_hex_path, 1) * v_multiplier;
   IF p_client_points IS NOT NULL AND p_client_points > v_max_allowed_points THEN
-    -- Client claimed more points than possible - reject or flag
     RAISE WARNING 'Client claimed % points but max allowed is %', p_client_points, v_max_allowed_points;
-    -- Use server-calculated points instead (anti-cheat)
   END IF;
   
-  -- Award points to user and update home hex (only if hex_path is not empty)
+  -- Award points to user, update home hex, and update aggregates
   UPDATE users SET 
     season_points = season_points + v_points,
     home_hex_start = CASE WHEN array_length(p_hex_path, 1) > 0 THEN p_hex_path[1] ELSE home_hex_start END,
-    home_hex_end = CASE WHEN array_length(p_hex_path, 1) > 0 THEN p_hex_path[array_length(p_hex_path, 1)] ELSE home_hex_end END
+    home_hex_end = CASE WHEN array_length(p_hex_path, 1) > 0 THEN p_hex_path[array_length(p_hex_path, 1)] ELSE home_hex_end END,
+    total_distance_km = total_distance_km + p_distance_km,
+    total_runs = total_runs + 1,
+    avg_pace_min_per_km = CASE 
+      WHEN p_distance_km > 0 THEN 
+        (COALESCE(avg_pace_min_per_km, 0) * total_runs + (p_duration_seconds / 60.0) / p_distance_km) / (total_runs + 1)
+      ELSE avg_pace_min_per_km 
+    END,
+    avg_cv = CASE 
+      WHEN p_cv IS NOT NULL THEN 
+        (COALESCE(avg_cv, 0) * cv_run_count + p_cv) / (cv_run_count + 1)
+      ELSE avg_cv 
+    END,
+    cv_run_count = CASE WHEN p_cv IS NOT NULL THEN cv_run_count + 1 ELSE cv_run_count END
   WHERE id = p_user_id;
   
   -- Insert lightweight run history (PRESERVED across seasons)
   INSERT INTO run_history (
     user_id, run_date, start_time, end_time,
     distance_km, duration_seconds, avg_pace_min_per_km,
-    flip_count, points_earned, team_at_run
+    flip_count, points_earned, team_at_run, cv
   ) VALUES (
     p_user_id, p_end_time::DATE, p_start_time, p_end_time,
     p_distance_km, p_duration_seconds,
     CASE WHEN p_distance_km > 0 THEN (p_duration_seconds / 60.0) / p_distance_km ELSE NULL END,
-    v_total_flips, v_points, v_team
+    v_total_flips, v_points, v_team, p_cv
   );
   
   -- Return summary
   RETURN jsonb_build_object(
     'flips', v_total_flips,
-    'multiplier', GREATEST(p_yesterday_crew_count, 1),
+    'multiplier', v_multiplier,
     'points_earned', v_points,
     'server_validated', true
   );
@@ -1213,13 +1257,12 @@ $$ LANGUAGE plpgsql;
 
 **Design Principles:**
 - `hexes`: Only stores `last_runner_team`. No timestamps or runner IDs → privacy + cost.
-- `users`: Distance stats calculated via `run_history` aggregation on-demand.
+- `users`: Aggregate stats updated incrementally via `finalize_run()`.
 - `runs`: Heavy data with `hex_path` (H3 IDs) → **DELETED on season reset**.
-- `run_history`: Lightweight stats (distance, time, flips) → **PRESERVED across seasons**.
-- `crews`: `max_members` enforced via CHECK constraint. Leader = `member_ids[0]`.
-- `active_runs`: DEPRECATED — kept for potential future use. Crew run-start notifications removed.
+- `run_history`: Lightweight stats (distance, time, flips, cv) → **PRESERVED across seasons**.
+- `daily_buff_stats`: Team-based buff multipliers (District Leader, Province Range) calculated daily at midnight GMT+2.
 - **No daily flip limit**: Same hex can be flipped multiple times per day.
-- **Multiplier**: Calculated daily via `calculate_yesterday_checkins()` Edge Function at midnight GMT+2.
+- **Multiplier**: Team-based buff via `calculate_daily_buffs()` Edge Function at midnight GMT+2.
 - **Sync**: No real-time — all hex data uploaded via `finalize_run()` at run completion.
 - All security handled via RLS — **no separate backend API server needed**.
 
@@ -1227,7 +1270,7 @@ $$ LANGUAGE plpgsql;
 
 #### Why Partitioning Matters
 
-The 280-day season cycle means massive data accumulates and must be efficiently deleted. Traditional row-by-row DELETE is expensive and causes:
+The 40-day season cycle means data accumulates and must be efficiently deleted. Traditional row-by-row DELETE is expensive and causes:
 - Index fragmentation
 - VACUUM overhead
 - Performance degradation during reset
@@ -1242,8 +1285,7 @@ The 280-day season cycle means massive data accumulates and must be efficiently 
 | `run_history` | Monthly | **5 years** (then auto-deleted) | Never deleted on D-Day |
 | `daily_stats` | Monthly | **5 years** (then auto-deleted) | Never deleted on D-Day |
 | `hexes` | Not partitioned | Season only | `TRUNCATE TABLE` (instant) |
-| `crews` | Not partitioned | Season only | `TRUNCATE TABLE` (instant) |
-| `active_runs` | Not partitioned | Ephemeral | `TRUNCATE TABLE` (instant) |
+| `daily_buff_stats` | Not partitioned | Season only | `TRUNCATE TABLE` (instant) |
 
 **Data Retention Policy:**
 - `run_history` and `daily_stats` are retained for **5 years** from creation date.
@@ -1258,14 +1300,18 @@ The 280-day season cycle means massive data accumulates and must be efficiently 
 BEGIN;
   -- 1. Instant wipes (TRUNCATE = instant, no row-by-row cost)
   TRUNCATE TABLE hexes;
-  TRUNCATE TABLE crews CASCADE;
-  TRUNCATE TABLE active_runs;
+  TRUNCATE TABLE daily_buff_stats;
+  TRUNCATE TABLE daily_province_range_stats;
   
   -- 2. Reset user season data (UPDATE, not DELETE)
   UPDATE users SET
     season_points = 0,
-    crew_id = NULL,
-    team = NULL;  -- Forces re-selection
+    team = NULL,  -- Forces re-selection
+    total_distance_km = 0,
+    avg_pace_min_per_km = NULL,
+    avg_cv = NULL,
+    total_runs = 0,
+    cv_run_count = 0;
   
   -- 3. Drop season's runs partitions (heavy data, instant disk reclaim)
   -- pg_partman handles this via retention policy, or manual:
@@ -1286,26 +1332,30 @@ COMMIT;
 ```
 [During Run - Local Only]
   Runner GPS → Client Kalman filter → Local hex_path list
-  Hex flip detected → Local calculation using cached yesterday's multiplier
+  Hex flip detected → Local calculation using cached buff multiplier
   NO server communication (battery + cost optimization)
   NO daily flip limit (same hex can be flipped multiple times)
 
 [Run Completion - "The Final Sync"]
-  Client uploads: { startTime, endTime, distanceKm, hex_path[], yesterdayCrewCount, cv }
+  Client uploads: { startTime, endTime, distanceKm, hex_path[], cv }
   Server RPC: finalize_run() →
+    → Fetch buff_multiplier from daily_buff_stats
     → Count flips (color changes from current hex state)
     → Conflict resolution: later endTime wins hex color
     → UPDATE hexes, users (including CV aggregate)
     → INSERT INTO run_history (lightweight stats + cv, preserved)
   
 [Daily Maintenance - Edge Function (midnight GMT+2)]
-  calculate_yesterday_checkins() →
-    → Count crew members with ≥1 run yesterday
-    → Cache multiplier for today
+  calculate_daily_buffs() →
+    → Calculate team-based buffs for all active users
+    → RED: Elite (Top 20%) + City Leader + All Range
+    → BLUE: City Leader + All Range
+    → PURPLE: City Participation Rate
+    → INSERT INTO daily_buff_stats
 
 [D-Day - Reset Path]
-  TRUNCATE hexes, crews (instant)
-  UPDATE users (reset points/team)
+  TRUNCATE hexes, daily_buff_stats (instant)
+  UPDATE users (reset points/team/aggregates)
   DROP runs partitions (heavy data, instant disk reclaim)
   run_history PRESERVED (per-run stats)
   daily_stats PRESERVED (aggregated stats)
@@ -1335,7 +1385,7 @@ COMMIT;
     → Conflict Resolution:
       → UPDATE hexes SET last_runner_team = team
         WHERE endTime > existing (later run wins)
-    → Calculate points: total_flips × yesterdayCrewCount
+    → Calculate points: total_flips × buffMultiplier
     → UPDATE users SET season_points += points
     → INSERT INTO run_history (lightweight stats, preserved)
 ```
@@ -1345,9 +1395,8 @@ COMMIT;
 **Supabase Realtime Integration (Minimal Scope):**
 - **NO real-time features currently required** — all data synced on app launch and run completion
 - `hexes` and `users.season_points` → NO real-time broadcast (poll on app foreground)
-- Crew run-start notifications → **REMOVED** (no longer needed)
 - **Cost Optimization**: Eliminated ALL WebSocket usage for maximum cost savings
-- Future consideration: May add real-time for crew chat if feature is added later
+- Future consideration: May add real-time for social features if needed later
 
 ### 4.5 Local Storage (SQLite)
 
@@ -1389,10 +1438,10 @@ CREATE INDEX idx_laps_runId ON laps(runId);
 
 | Criterion | Firebase (Firestore) | Supabase (PostgreSQL) | Winner |
 |-----------|---------------------|----------------------|--------|
-| **Data Model** | NoSQL (Document) | Relational (SQL) | Supabase — crew/user/season relationships require JOINs |
+| **Data Model** | NoSQL (Document) | Relational (SQL) | Supabase — user/team/season relationships require JOINs |
 | **Query Complexity** | Limited (no JOINs, no aggregation) | Full SQL (JOIN, GROUP BY, SUM, Window functions) | Supabase — leaderboard & multiplier calculations |
 | **Cost Model** | Per-read/write operation | Instance-based (flat rate) | Supabase — no per-operation billing explosion at scale |
-| **Mass Deletion (D-Day)** | Per-document write cost ($0.18/1M deletes) | TRUNCATE/DROP = $0, instant | Supabase — critical for 280-day reset |
+| **Mass Deletion (D-Day)** | Per-document write cost ($0.18/1M deletes) | TRUNCATE/DROP = $0, instant | Supabase — critical for 40-day reset |
 | **Real-time** | Firestore listeners | Supabase Realtime (WebSocket) | Tie |
 | **Security** | Firebase Rules (custom DSL) | Row Level Security (SQL policies) | Supabase — standard SQL, no custom language |
 | **Backend API** | Requires Cloud Functions for complex logic | RLS + Edge Functions (optional) | Supabase — no separate API server needed |
@@ -1479,8 +1528,7 @@ lib/
 │   ├── team.dart                # Team enum (red/blue/purple)
 │   ├── user_model.dart          # User data model (with CV aggregates)
 │   ├── hex_model.dart           # Hex tile (lastRunnerTeam only)
-│   ├── crew_model.dart          # Crew with maxMembers/leaderId (uses RemoteConfigService)
-│   ├── app_config.dart          # Server-configurable constants (Season, Crew, GPS, Scoring, Hex, Timing)
+│   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
 │   ├── run_session.dart         # Active run session data
 │   ├── run_summary.dart         # Completed run (with hexPath, cv) - seasonal
 │   ├── run_history_model.dart   # Lightweight run stats (preserved)
@@ -1491,21 +1539,20 @@ lib/
 ├── providers/
 │   ├── app_state_provider.dart  # Global app state (team, user)
 │   ├── run_provider.dart        # Run lifecycle & hex capture
-│   ├── crew_provider.dart       # Crew management state
 │   └── hex_data_provider.dart   # Hex data cache & state
 ├── screens/
 │   ├── team_selection_screen.dart
 │   ├── home_screen.dart         # Main navigation hub + AppBar
 │   ├── map_screen.dart          # Hex map exploration view
 │   ├── running_screen.dart      # Pre-run & active run (unified)
-│   ├── crew_screen.dart         # Crew management
-│   ├── leaderboard_screen.dart  # Rankings (ALL/City/Zone scope)
+│   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
 │   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
 │   ├── remote_config_service.dart      # Server-configurable constants (fetch, cache, provide)
 │   ├── config_cache_service.dart       # Local JSON cache for remote config
+│   ├── prefetch_service.dart    # Home hex anchoring & scope data prefetch (2,401 hexes)
 │   ├── hex_service.dart         # H3 hex grid operations
 │   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
 │   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
@@ -1516,8 +1563,8 @@ lib/
 │   ├── in_memory_storage_service.dart  # In-memory (MVP/testing)
 │   ├── local_storage_service.dart      # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 280-day season countdown (uses RemoteConfigService)
-│   ├── crew_multiplier_service.dart    # Yesterday's check-in multiplier (daily batch, no realtime)
+│   ├── season_service.dart      # 40-day season countdown (uses RemoteConfigService)
+│   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
 │   ├── running_score_service.dart      # Pace validation for capture
 │   ├── app_lifecycle_manager.dart      # App foreground/background handling (uses RemoteConfigService)
 │   └── data_manager.dart        # Hot/Cold data separation
@@ -1574,11 +1621,8 @@ lib/
 | Speed filter (25 km/h) | ⬜ | In gps_validator.dart |
 | GPS accuracy filter (50m) | ⬜ | In gps_validator.dart |
 | Run history tracking | ⬜ | run_history table (preserved) |
-| Crew creation | ✅ | crew_model.dart |
-| Crew join (backend) | ⬜ | UI exists |
-| Crew auto-image generation | ⬜ | On creation |
+| Team-based buff system | ✅ | buff_service.dart |
 | Profile screen (manifesto) | ⬜ | |
-| Crew stats page | ⬜ | |
 
 ### Phase 1.5: Backend Migration (Month 2–3)
 
@@ -1602,7 +1646,6 @@ lib/
 | Batch points calculation | ⬜ | RPC: finalize_run (no daily limit) |
 | Leaderboard (ALL scope) | ⬜ | SQL function: get_leaderboard() |
 | Leaderboard (City/Zone scope) | ⬜ | Based on visible hex count |
-| Crew yesterday activity display | ⬜ | Show "X members ran yesterday" in Crew Screen |
 | Hex path in RunSummary | ⬜ | hex_path column in runs table |
 | SQLite hex cache | ⬜ | Offline support |
 
@@ -1610,11 +1653,10 @@ lib/
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| D-140 Purple unlock | ⬜ | Traitor's Gate |
-| Point reset on defection | ⬜ | seasonPoints = 0 |
-| Purple crew (24 max) | ⬜ | Larger capacity = higher potential multiplier |
-| Must-leave-crew gate | ⬜ | Pre-condition for defection |
-| 280-day season cycle | ⬜ | |
+| Purple unlock (anytime) | ✅ | Traitor's Gate |
+| Points preserved on defection | ✅ | seasonPoints unchanged |
+| Purple buff system | ✅ | Participation rate based multiplier |
+| 40-day season cycle | ⬜ | |
 | D-Day reset protocol | ⬜ | Edge Function: TRUNCATE/DROP (instant) |
 | Cold storage archive | ⬜ | Supabase Storage (S3-compatible) |
 | New season re-selection | ⬜ | Team re-pick after D-0 |
@@ -1634,13 +1676,9 @@ lib/
 | | D7 Retention | 30% | 35% | 40% |
 | | D30 Retention | 15% | 20% | 25% |
 | | Avg Session | 8 min | 12 min | 15 min |
-| **Social** | Crews Formed | 100 | 500 | 2,000 |
-| | Avg Crew Size | 4 | 6 | 8 |
-| | Avg Daily Check-ins/Crew | 2 | 4 | 6 |
 | **Activity** | Runs/Day | 500 | 2,000 | 6,000 |
 | | Avg Distance/Run | 3 km | 4 km | 5 km |
 | **Purple** | Defection Rate | — | — | 15% |
-| | Purple Crews | — | — | 50+ |
 
 ### Revenue (Post-Launch)
 
@@ -1659,27 +1697,30 @@ lib/
 
 | State | Avatar Display | Leaderboard Name |
 |-------|---------------|-----------------|
-| Solo (no crew) | Personal avatar | User name |
-| In Crew | Crew representative image (forced) | User name |
-| Left Crew | Reverts to personal avatar | User name |
-| Defected to Purple | Personal avatar (until joining Purple crew) | User name |
+| Red/Blue user | Personal avatar | User name |
+| Defected to Purple | Personal avatar | User name |
 
-### B. Yesterday's Check-in Multiplier Examples
+### B. Team-Based Buff Multiplier Examples
 
-| Scenario | Yesterday's Check-ins | Today's Multiplier | Flip Points per Flip |
-|----------|----------------------|-------------------|---------------------|
-| Solo runner (no crew) | — | 1x | 1 |
-| Red crew, 3 ran yesterday | 3 | 3x | 3 |
-| Blue crew, 12 ran yesterday | 12 | 12x | 12 |
-| Purple crew, 20 ran yesterday | 20 | 20x | 20 |
-| Purple crew, 24 ran yesterday (max) | 24 | 24x | 24 |
-| Red crew, 0 ran yesterday | 0 | 1x (minimum) | 1 |
+| Team | Scenario | Multiplier | Flip Points per Flip |
+|------|----------|------------|---------------------|
+| RED | Elite (Top 20%) + City Leader + All Range | 4x | 4 |
+| RED | Elite + City Leader (no All Range) | 3x | 3 |
+| RED | Elite (non-leader city) | 2x | 2 |
+| RED | Common (any city) | 1x | 1 |
+| BLUE | City Leader + All Range | 3x | 3 |
+| BLUE | City Leader (no All Range) | 2x | 2 |
+| BLUE | Non-leader city | 1x | 1 |
+| PURPLE | ≥60% city participation | 3x | 3 |
+| PURPLE | 30-59% city participation | 2x | 2 |
+| PURPLE | <30% city participation | 1x | 1 |
+| Any | New user (no yesterday data) | 1x | 1 |
 
-**Key Differences from Real-time System:**
-- Multiplier is fixed at midnight (GMT+2), not calculated per-second.
-- All crew members use the SAME multiplier throughout the day.
-- No need to coordinate running times — yesterday's activity determines today's multiplier.
-- Server calculates once per day via Edge Function, not on every flip.
+**Key Points:**
+- Multiplier is calculated at midnight (GMT+2), fixed for the entire day.
+- Buff is **frozen** when run starts — no changes mid-run.
+- Server calculates once per day via Edge Function.
+- City scope determined by user's home hex.
 
 ### C. Leaderboard Geographic Scope
 
@@ -1894,7 +1935,7 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 | | ☐ PowerSync (auto-sync, simpler dev) | |
 | | ☐ Standard REST API (inefficient for high-volume) | |
 | **Bulk Insert RPC** | ☑ `finalize_run(jsonb)` function | ✅ |
-| **Payload Contents** | ☑ endTime, distanceKm, hex_path[], yesterdayCrewCount | ✅ |
+| **Payload Contents** | ☑ endTime, distanceKm, hex_path[], buffMultiplier | ✅ |
 | **Compression** | ☑ Compress JSON payload (gzip) | ✅ |
 | | ☐ No compression | |
 | **Conflict Resolution** | ☑ Later `endTime` wins hex color | ✅ |
@@ -1918,9 +1959,9 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 │  Returns:                                                   │
 │  1. hex_map[]        - Latest hexagon colors (visible area) │
 │  2. ranking_snapshot - Leaderboard data (ALL/City/Zone)     │
-│  3. yesterday_multiplier - Crew check-in count (from 00:00) │
-│  4. crew_info        - Crew members, stats, pending invites │
-│  5. user_stats       - Personal season points, home_hex     │
+│  3. buff_multiplier  - Today's team-based buff (from daily) │
+│  4. user_stats       - Personal season points, home_hex     │
+│  5. app_config       - Server-configurable constants        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1951,23 +1992,20 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 │  Payload:                                                   │
 │  {                                                          │
 │    "run_id": "uuid",                                        │
+│    "start_time": "2026-01-26T19:00:00+09:00",              │
 │    "end_time": "2026-01-26T19:30:00+09:00",                 │
 │    "distance_km": 5.2,                                      │
+│    "duration_seconds": 1800,                                │
 │    "hex_path": ["8f28308280fffff", "8f28308281fffff", ...], │
-│    "yesterday_crew_count": 8,                               │
-│    "crew_actions": {                      // Optional       │
-│      "leave_crew": null,                                    │
-│      "join_crew": "crew_uuid",                              │
-│      "create_crew": { "name": "...", "image": "..." }       │
-│    }                                                        │
+│    "cv": 8.5                               // Optional      │
 │  }                                                          │
 │  ─────────────────────────────────────────────────────────  │
 │  Server actions:                                            │
-│  1. Update hex colors (ALL hexes get run's endTime)         │
-│  2. Calculate final points (server-side verification)       │
-│  3. Store start_hex (first) and end_hex (last) for home     │
-│  4. Update rankings                                         │
-│  5. Process crew actions if any                             │
+│  1. Fetch buff_multiplier from daily_buff_stats             │
+│  2. Update hex colors (ALL hexes get run's endTime)         │
+│  3. Calculate final points (server-side verification)       │
+│  4. Store start_hex (first) and end_hex (last) for home     │
+│  5. Update user aggregates (distance, pace, cv)             │
 │  6. Return updated user_stats                               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -1992,8 +2030,8 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 **OnResume Data Refresh (Foreground Trigger)**:
 - When app returns to foreground from background (iOS `applicationWillEnterForeground`, Android `onResume`):
   - Refresh hex map data for visible area
-  - Update yesterday's multiplier (in case midnight passed)
-  - Refresh crew info and ranking snapshot
+  - Update buff multiplier (in case midnight passed)
+  - Refresh ranking snapshot
 - **Throttling**: Skip refresh if last refresh was < 30 seconds ago
 - **During Active Run**: Skip refresh (avoid interrupting tracking)
 - This ensures map data stays current even after extended background periods
@@ -2109,7 +2147,7 @@ CREATE TABLE app_config (
 );
 
 -- Returned via app_launch_sync RPC
--- { user, yesterday_crew_count, hexes_in_viewport, app_config: { version, data } }
+-- { user, buff_multiplier, hexes_in_viewport, app_config: { version, data } }
 ```
 
 #### 9.12.3 AppConfig Model Structure
@@ -2118,11 +2156,11 @@ CREATE TABLE app_config (
 class AppConfig {
   final int configVersion;
   final SeasonConfig seasonConfig;
-  final CrewConfig crewConfig;
   final GpsConfig gpsConfig;
   final ScoringConfig scoringConfig;
   final HexConfig hexConfig;
   final TimingConfig timingConfig;
+  final BuffConfig buffConfig;
   
   factory AppConfig.defaults() => AppConfig(...);  // All hardcoded defaults
   factory AppConfig.fromJson(Map<String, dynamic> json) => ...;
@@ -2133,11 +2171,11 @@ class AppConfig {
 
 | Category | Constants | Example Values |
 |----------|-----------|----------------|
-| **Season** | `durationDays`, `serverTimezoneOffsetHours` | 280, 2 |
-| **Crew** | `maxMembersRegular`, `maxMembersPurple` | 12, 24 |
+| **Season** | `durationDays`, `serverTimezoneOffsetHours` | 40, 2 |
 | **GPS** | `maxSpeedMps`, `minSpeedMps`, `maxAccuracyMeters`, `maxAltitudeChangeMps`, `maxJumpDistanceMeters`, `movingAvgWindowSeconds`, `maxCapturePaceMinPerKm`, `pollingRateHz`, `minTimeBetweenPointsMs` | 6.94, 0.3, 50.0, 5.0, 100, 20, 8.0, 0.5, 1500 |
 | **Hex** | `baseResolution`, `zoneResolution`, `cityResolution`, `allResolution`, `captureCheckDistanceMeters`, `maxCacheSize` | 9, 8, 6, 4, 20.0, 4000 |
 | **Timing** | `accelerometerSamplingPeriodMs`, `refreshThrottleSeconds` | 200, 30 |
+| **Buff** | `elitePercentile`, `participationRateHigh`, `participationRateMid` | 20, 60, 30 |
 
 #### 9.12.5 Run Consistency (Freeze/Unfreeze)
 
@@ -2200,7 +2238,7 @@ await RemoteConfigService().initialize();
 | `AccelerometerService` | `timingConfig.accelerometerSamplingPeriodMs` |
 | `AppLifecycleManager` | `timingConfig.refreshThrottleSeconds` |
 | `H3Config` | All 4 resolution constants |
-| `CrewModel` | `crewConfig.maxMembersRegular`, `maxMembersPurple` |
+| `BuffService` | `buffConfig.elitePercentile`, `participationRateHigh`, `participationRateMid` |
 
 ---
 
@@ -2218,22 +2256,21 @@ await RemoteConfigService().initialize();
 | **Performance Config** | ✅ Complete | All Section 9 checkboxes selected |
 | **Home Hex System** | ✅ Complete | Asymmetric: Self=FIRST hex, Others=LAST hex. Stored in `home_hex_start`/`home_hex_end` columns |
 | **Communication Lifecycle** | ✅ Complete | Pre-patch on launch (1 GET), 0 calls during run, batch on completion (1 POST) |
-| **Crew Display** | ✅ Complete | "Yesterday's Crew Runners" replaces "Active Crew Runners" |
+| **Buff Display** | ✅ Complete | Shows current buff multiplier in UI |
 | **Supabase Realtime** | ✅ REMOVED | No WebSocket features needed — all data synced on launch/completion |
 | **Run History Timezone** | ✅ Complete | User-selectable timezone for history display |
 | **Daily Flip Limit** | ✅ REMOVED | No daily limit — same hex can be flipped multiple times per day |
 | **Table Separation** | ✅ Complete | `runs` (heavy, deleted on reset) vs `run_history` (light, preserved 5 years) |
 | **Pace Validation** | ✅ Complete | **Moving average pace (10 sec)** at hex entry (GPS noise smoothing) |
 | **Points Authority** | ✅ Complete | **Server verified** — points ≤ hex_count × multiplier |
-| **Mid-day Crew Change** | ✅ Complete | Keep old crew's multiplier until next day |
-| **Avatar Preservation** | ✅ Complete | `original_avatar` column preserves personal avatar when joining crew |
+| **Mid-run Buff Change** | ✅ Complete | Buff frozen at run start, no changes mid-run |
 | **Zero-hex Run** | ✅ Complete | Keep previous home hex values (no update) |
-| **Solo Runner Display** | ✅ Complete | **Hide multiplier UI** for users without crew |
+| **New User Display** | ✅ Complete | **Show 1x** for users without yesterday data |
 | **Data Retention** | ✅ Complete | **5 years** for run_history and daily_stats |
 | **Model Relationship** | ✅ Complete | RunSummary=upload, RunHistoryModel=display |
 | **Table Relationship** | ✅ Complete | Independent tables (no FK between runs and run_history) |
 | **iOS Accuracy** | ✅ Complete | `kCLLocationAccuracyHundredMeters` (50m request) |
-| **New User/Crew** | ✅ Complete | Default to 1x multiplier when no yesterday data |
+| **New User Buff** | ✅ Complete | Default to 1x multiplier when no yesterday data |
 
 ### Pending Items
 
@@ -2245,7 +2282,7 @@ await RemoteConfigService().initialize();
 | Korean font (Paperlogyfont) integration | Needs package setup | Custom font from freesentation.blog |
 | Stats/Numbers font identification | Needs check | Use current RunningScreen km font |
 | Accelerometer threshold calibration | Needs testing | MVP must include but threshold TBD via testing |
-| Crew auto-image generation algorithm | Needs design | How to auto-generate representative images |
+| Profile avatar generation | Needs design | How to auto-generate representative images |
 | Supabase Realtime channel design | ✅ REMOVED | No real-time features needed — all data synced on app launch/completion |
 | Edge Function: Yesterday's Check-in | Needs implementation | Daily midnight GMT+2 cron job |
 | Edge Function: D-Day reset | Needs setup | Season reset trigger mechanism |
@@ -2253,7 +2290,7 @@ await RemoteConfigService().initialize();
 | `app_launch_sync` RPC function | Needs implementation | Combined pre-patch endpoint (§9.6.1) |
 | Home Hex update logic | Needs implementation | Store both start_hex and end_hex on run completion |
 | Timezone selector UI | ✅ Implemented | Run History Screen dropdown for timezone selection |
-| OnResume data refresh | ✅ Implemented | AppLifecycleManager refreshes hex/crew/leaderboard on foreground |
+| OnResume data refresh | ✅ Implemented | AppLifecycleManager refreshes hex/buff/leaderboard on foreground |
 
 ### Next Steps
 
@@ -2268,6 +2305,41 @@ await RemoteConfigService().initialize();
 ---
 
 ## Changelog
+
+### 2026-01-30 (Session 10)
+
+**Run History Screen UI Redesign**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | `_buildPeriodStatsSection` | **기능/UI** | New period stats panel - smaller copy of ALL TIME design (16h/12v padding, radius 12, 24px distance font) |
+| 2 | `_buildMiniStatSmall` | **기능/UI** | Smaller mini stat helper (14px value, 8px label) for period panel |
+| 3 | Month calendar distance | **기능/UI** | Month view now shows distance (e.g., "5.2k") like week view instead of run count badge |
+| 4 | Removed `_buildStatsRow` | **리팩토링** | Replaced with `_buildPeriodStatsSection` in both portrait and landscape |
+| 5 | Removed `_buildStatCard` | **리팩토링** | Unused after `_buildStatsRow` replacement |
+| 6 | Removed `_buildActivityIndicator` | **리팩토링** | Unused after month calendar redesign |
+
+**Leaderboard Screen Simplification**
+
+| # | Change | Type | Description |
+|---|--------|------|-------------|
+| 1 | Removed geographic scope filter | **리팩토링/UI** | Removed Zone/City/All scope dropdown - now shows all users |
+| 2 | Removed `_scopeFilter` state | **리팩토링** | No longer tracking geographic scope state |
+| 3 | Removed `_buildFilterBar` | **리팩토링** | Removed filter bar containing scope dropdown |
+| 4 | Removed `_buildScopeDropdown` | **리팩토링** | Removed scope dropdown widget |
+| 5 | Removed `_getScopeIcon` | **리팩토링** | Removed scope icon helper |
+| 6 | Simplified `_getFilteredRunners` | **리팩토링** | No longer applies scope filtering |
+| 7 | Removed h3_config import | **리팩토링** | GeographicScope no longer used |
+
+**Files Modified:**
+- `lib/screens/run_history_screen.dart` — New period stats section, removed unused methods
+- `lib/widgets/run_calendar.dart` — Month view shows distance instead of activity indicator
+- `lib/screens/leaderboard_screen.dart` — Removed geographic scope filter, simplified to date-range only
+
+**Document Updates:**
+- DEVELOPMENT_SPEC.md: Updated §3.2.5 Leaderboard Screen, §3.2.6 Run History Screen specs, added changelog
+
+---
 
 ### 2026-01-28 (Session 9)
 
@@ -2320,7 +2392,7 @@ await RemoteConfigService().initialize();
 |---|--------|------|-------------|
 | 1 | `app_config` Supabase table | **기능/DB** | Single-row JSONB table for all 50+ game constants |
 | 2 | `app_launch_sync` RPC extended | **기능/API** | Returns config alongside user data on app launch |
-| 3 | `AppConfig` Dart model | **기능/클라이언트** | Typed model with nested classes (Season, Crew, GPS, Scoring, Hex, Timing) |
+| 3 | `AppConfig` Dart model | **기능/클라이언트** | Typed model with nested classes (Season, GPS, Scoring, Hex, Timing, Buff) |
 | 4 | `ConfigCacheService` | **기능/클라이언트** | Local JSON caching for offline fallback |
 | 5 | `RemoteConfigService` | **기능/클라이언트** | Singleton with fallback chain (server → cache → defaults) |
 | 6 | Config freeze for runs | **기능/로직** | `freezeForRun()` / `unfreezeAfterRun()` prevents mid-run config changes |
@@ -2371,7 +2443,7 @@ await RemoteConfigService().initialize();
 - `lib/screens/running_screen.dart` — Landscape layout (OrientationBuilder)
 - `lib/screens/home_screen.dart` — Reduced sizes in landscape
 - `lib/screens/leaderboard_screen.dart` — Responsive podium heights
-- `lib/screens/crew_screen.dart` — Responsive member grid
+- `lib/screens/leaderboard_screen.dart` — Responsive ranking grid
 - `lib/screens/profile_screen.dart` — Landscape adjustments
 - `lib/screens/run_history_screen.dart` — Side-by-side layout in landscape
 
@@ -2416,11 +2488,11 @@ await RemoteConfigService().initialize();
 | 1 | Hex conflict resolution | **Last sync wins** (no timestamp stored) |
 | 2 | Home hex storage | **Add both start & end** columns to users |
 | 3 | Pace validation | **Instantaneous pace** at hex entry |
-| 4 | Mid-day crew change | **Keep old multiplier** until next day |
+| 4 | Mid-run buff change | **Freeze buff** at run start |
 | 5 | Points authority | **Client authoritative** (server stores as-is) |
 | 6 | Avatar preservation | **Preserve & restore** via `original_avatar` column |
 | 7 | Zero-hex run | **Keep previous** home hex |
-| 8 | Crew actions in sync | **Keep bundled** with finalize_run |
+| 8 | Buff calculation | **Keep bundled** with finalize_run |
 | 9 | Purple after reset | **Force Red/Blue choice** |
 | 10 | Solo runner display | **Hide multiplier** UI |
 | 11 | Data retention | **5-year retention** for run_history/daily_stats |
@@ -2429,8 +2501,8 @@ await RemoteConfigService().initialize();
 | 14 | Deprecated RLS | **Remove policies** from active_runs |
 | 15 | Architecture diagram | **Remove Realtime** component |
 | 16 | iOS accuracy | **50m request** (kCLLocationAccuracyHundredMeters) |
-| 17 | Service description | **Update** crew_multiplier_service to "daily batch" |
-| 18 | New user/crew | **Default to 1x** multiplier |
+| 17 | Service description | **Update** buff_service to team-based system |
+| 18 | New user | **Default to 1x** multiplier |
 
 **Schema Changes:**
 - Added `original_avatar TEXT` to users table
@@ -2441,7 +2513,7 @@ await RemoteConfigService().initialize();
 **Document Updates:**
 - §2.3.1: Avatar preserve & restore rule
 - §2.4.2: Instantaneous pace clarification
-- §2.5.2: Mid-day crew change, new user default, solo runner rules
+- §2.5.2: Mid-run buff freeze, new user default
 - §2.5.3: "Last sync wins" conflict resolution, client authoritative points
 - §2.6.1: Zero-hex run preserves previous home hex
 - §3.2.4: Multiplier hidden for solo runners
@@ -2450,7 +2522,7 @@ await RemoteConfigService().initialize();
 - §4.2: users table schema, removed active_runs RLS
 - §4.3: 5-year data retention policy
 - §5.1: Removed Realtime from architecture diagram
-- §5.3: crew_multiplier_service description updated
+- §5.3: buff_service description updated
 - §9.1.2: iOS accuracy changed to 50m
 
 ### 2026-01-26 (Session 4)
@@ -2509,11 +2581,7 @@ await RemoteConfigService().initialize();
 - User can change timezone in history screen
 - Stored locally, not synced to server
 
-**Updated: §3.2.7 Crew Screen**
-- Replaced "Active Status" with "Yesterday's Runners" badge
-- Replaced "active runners count" with "yesterday's runner count"
-
-**Removed: Crew run-start notifications**
+**Removed: Real-time features**
 - `active_runs` table marked as DEPRECATED
 - Supabase Realtime: ALL WebSocket features removed
 - Maximum cost savings achieved
@@ -2550,7 +2618,7 @@ await RemoteConfigService().initialize();
 - §2.5.2: Changed multiplier from "Simultaneous Runner" (real-time) to "Yesterday's Check-in" (daily batch)
 - §2.5.3: Added "The Final Sync" — no server communication during runs
 - §2.6: Added Home Hex System for ranking scope (ZONE/CITY/ALL)
-- §4.1: Updated RunSummary model with `endTime`, `yesterdayCrewCount`
+- §4.1: Updated RunSummary model with `endTime`, `buffMultiplier`
 - §9.1-9.3: Selected battery-first GPS settings
 - §9.6: Added Data Synchronization Strategy section
 - Added SQL functions: `calculate_yesterday_checkins()`, `finalize_run()`

@@ -5,6 +5,7 @@ import '../models/run_summary.dart';
 import '../models/location_point.dart';
 import '../models/lap_model.dart';
 import '../services/storage_service.dart';
+import '../utils/gmt2_date_utils.dart';
 
 /// SQLite implementation of StorageService for local data persistence
 ///
@@ -16,8 +17,14 @@ import '../services/storage_service.dart';
 ///
 /// Note: daily_flips table removed - no daily flip limit per spec.
 class LocalStorage implements StorageService {
+  // Singleton pattern
+  static final LocalStorage _instance = LocalStorage._internal();
+  factory LocalStorage() => _instance;
+  LocalStorage._internal();
+
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 8; // Bumped for sync_queue table
+  static const int _databaseVersion =
+      9; // Bumped for today flip points tracking
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -28,6 +35,9 @@ class LocalStorage implements StorageService {
   static const String _tableSyncQueue = 'sync_queue';
 
   Database? _database;
+
+  /// Expose database for testing and utilities (debug only)
+  Database? get database => _database;
 
   @override
   Future<void> initialize() async {
@@ -56,7 +66,10 @@ class LocalStorage implements StorageService {
         hexesColored INTEGER NOT NULL DEFAULT 0,
         teamAtRun TEXT NOT NULL,
         isPurpleRunner INTEGER NOT NULL DEFAULT 0,
-        cv REAL
+        cv REAL,
+        sync_status TEXT DEFAULT 'pending',
+        flip_points INTEGER DEFAULT 0,
+        run_date TEXT
       )
     ''');
 
@@ -271,6 +284,37 @@ class LocalStorage implements StorageService {
         ''');
       } catch (e) {
         // Table may already exist
+      }
+    }
+    if (oldVersion < 9) {
+      // Migrate from v8 to v9: add sync tracking columns for today flip points
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN sync_status TEXT DEFAULT \'pending\'',
+        );
+      } catch (e) {
+        // Column may already exist
+      }
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN flip_points INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        // Column may already exist
+      }
+      try {
+        await db.execute('ALTER TABLE $_tableRuns ADD COLUMN run_date TEXT');
+      } catch (e) {
+        // Column may already exist
+      }
+      // Create index for efficient unsynced today points query
+      try {
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_runs_sync_date 
+          ON $_tableRuns(sync_status, run_date)
+        ''');
+      } catch (e) {
+        // Index may already exist
       }
     }
   }
@@ -596,6 +640,15 @@ class LocalStorage implements StorageService {
     return await _database!.query(_tableHexCache);
   }
 
+  /// Clear all cached hexes
+  Future<void> clearHexCache() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.delete(_tableHexCache);
+  }
+
   /// Update a single hex in cache
   Future<void> updateCachedHex(Map<String, dynamic> hex) async {
     if (_database == null) {
@@ -790,5 +843,133 @@ class LocalStorage implements StorageService {
     );
 
     return deleted;
+  }
+
+  // ============ TODAY FLIP POINTS TRACKING ============
+
+  /// Save a run with sync tracking information for today's flip points.
+  ///
+  /// [run] - The completed run session
+  /// [flipPoints] - Points earned in this run (hexes × multiplier)
+  /// [laps] - Optional lap data for CV calculation
+  /// [cv] - Optional CV value (calculated from laps)
+  Future<void> saveRunWithSyncTracking(
+    RunSession run, {
+    required int flipPoints,
+    List<LapModel>? laps,
+    double? cv,
+  }) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    // Calculate run_date in GMT+2
+    final runDate = Gmt2DateUtils.toGmt2DateString(
+      run.endTime ?? DateTime.now(),
+    );
+
+    // Convert to summary and add tracking fields
+    final summaryMap = run.toSummary().toMap();
+    summaryMap['cv'] = cv;
+    summaryMap['sync_status'] = 'pending';
+    summaryMap['flip_points'] = flipPoints;
+    summaryMap['run_date'] = runDate;
+
+    await _database!.transaction((txn) async {
+      // Insert run summary with sync tracking
+      await txn.insert(
+        _tableRuns,
+        summaryMap,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      // Insert route points (cold storage)
+      for (final point in run.route) {
+        await txn.insert(_tableRoutes, {
+          'runId': run.id,
+          'lat': point.latitude,
+          'lng': point.longitude,
+          'timestampMs': point.timestamp.millisecondsSinceEpoch,
+        });
+      }
+
+      // Insert lap data if provided
+      if (laps != null) {
+        for (final lap in laps) {
+          await txn.insert(_tableLaps, {'runId': run.id, ...lap.toMap()});
+        }
+      }
+    });
+  }
+
+  /// Sum flip points from unsynced runs that occurred today (GMT+2).
+  ///
+  /// Used for hybrid calculation: server_baseline + local_unsynced_today
+  Future<int> sumUnsyncedTodayPoints() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final today = Gmt2DateUtils.todayGmt2String;
+    final result = await _database!.rawQuery(
+      '''
+      SELECT COALESCE(SUM(flip_points), 0) as total
+      FROM $_tableRuns
+      WHERE sync_status = 'pending'
+        AND run_date = ?
+    ''',
+      [today],
+    );
+
+    return (result.first['total'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Update sync status for a run after successful server sync.
+  ///
+  /// [runId] - The run ID to update
+  /// [status] - New status: 'synced', 'failed', or 'pending'
+  Future<void> updateRunSyncStatus(String runId, String status) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.update(
+      _tableRuns,
+      {'sync_status': status},
+      where: 'id = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  /// Get all unsynced runs for retry on app launch.
+  Future<List<Map<String, dynamic>>> getUnsyncedRuns() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    return await _database!.query(
+      _tableRuns,
+      where: 'sync_status = ?',
+      whereArgs: ['pending'],
+      orderBy: 'endTime ASC',
+    );
+  }
+
+  /// Mark all runs from today as synced (after server confirms baseline).
+  ///
+  /// Called when server provides today_flip_points baseline,
+  /// indicating those runs are already counted server-side.
+  Future<void> markTodayRunsSynced() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final today = Gmt2DateUtils.todayGmt2String;
+    await _database!.update(
+      _tableRuns,
+      {'sync_status': 'synced'},
+      where: 'run_date = ? AND sync_status = ?',
+      whereArgs: [today, 'pending'],
+    );
   }
 }

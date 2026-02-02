@@ -63,9 +63,9 @@ class RunSession {
 
   /// Convert to RunSummary for "The Final Sync" upload
   ///
-  /// [yesterdayCrewCount] is the multiplier from yesterday's crew check-in.
-  /// Default to 1 for solo runners or new users/crews.
-  RunSummary toSummary({int yesterdayCrewCount = 1}) {
+  /// [buffMultiplier] is the team-based buff multiplier.
+  /// Default to 1 for new users or if buff system unavailable.
+  RunSummary toSummary({int buffMultiplier = 1}) {
     return RunSummary(
       id: id,
       endTime: endTime ?? DateTime.now(),
@@ -75,7 +75,7 @@ class RunSession {
       hexesColored: hexesColored,
       teamAtRun: teamAtRun,
       hexPath: List.from(hexesPassed),
-      yesterdayCrewCount: yesterdayCrewCount,
+      buffMultiplier: buffMultiplier,
       cv: cv,
     );
   }

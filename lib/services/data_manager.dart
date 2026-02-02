@@ -6,7 +6,7 @@ import '../models/daily_running_stat.dart';
 /// Centralized data manager for Hot/Cold data separation.
 ///
 /// HOT DATA (Season-scoped):
-/// - Hex colors, season points, crew memberships
+/// - Hex colors, season points
 /// - Reset on D-Day
 ///
 /// COLD DATA (Permanent):

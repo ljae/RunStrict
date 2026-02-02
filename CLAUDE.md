@@ -1,4 +1,4 @@
-# CLAUDE.md - RunStrict (Project Code: 280-Journey)
+# CLAUDE.md - RunStrict (The 40-Day Journey)
 
 > Guidelines for AI coding agents working in this Flutter/Dart codebase.
 
@@ -7,9 +7,9 @@
 **RunStrict** is a location-based running game that gamifies territory control through hexagonal maps.
 
 ### Core Concept
-- **Season**: Fixed **280 days** (Gestation period metaphor)
+- **Season**: Fixed **40 days**
 - **Reset**: On D-Day, all territories and scores are deleted (The Void). Only personal history remains.
-- **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - unlocks D-140)
+- **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - available anytime)
 
 ### Key Design
 - Hex displays the color of the **last runner** who passed through - NO ownership system
@@ -79,8 +79,7 @@ lib/
 │   ├── team.dart                # Team enum (red/blue/purple)
 │   ├── user_model.dart          # User data model (with CV aggregates)
 │   ├── hex_model.dart           # Hex tile model (lastRunnerTeam only)
-│   ├── crew_model.dart          # Crew with maxMembers/leaderId (uses RemoteConfigService)
-│   ├── app_config.dart          # Server-configurable constants (Season, Crew, GPS, Scoring, Hex, Timing)
+│   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
 │   ├── run_session.dart         # Active run session data
 │   ├── run_summary.dart         # Completed run (with hexPath, cv)
 │   ├── lap_model.dart           # Per-km lap data for CV calculation
@@ -90,15 +89,13 @@ lib/
 ├── providers/
 │   ├── app_state_provider.dart  # Global app state (team, user)
 │   ├── run_provider.dart        # Run lifecycle & hex capture
-│   ├── crew_provider.dart       # Crew management state
 │   └── hex_data_provider.dart   # Hex data cache & state
 ├── screens/
 │   ├── team_selection_screen.dart
 │   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
 │   ├── map_screen.dart          # Hex territory exploration
 │   ├── running_screen.dart      # Pre-run & active run tracking
-│   ├── crew_screen.dart         # Crew management
-│   ├── leaderboard_screen.dart  # Rankings (ALL/City/Zone scope)
+│   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
 │   └── profile_screen.dart      # Manifesto, avatar, stats
 ├── services/
@@ -115,8 +112,8 @@ lib/
 │   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
 │   ├── local_storage_service.dart # SharedPreferences helpers
 │   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 280-day season countdown (uses RemoteConfigService)
-│   ├── crew_multiplier_service.dart # Yesterday's check-in multiplier (daily batch)
+│   ├── season_service.dart      # 40-day season countdown (uses RemoteConfigService)
+│   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
 │   ├── running_score_service.dart # Pace validation for capture
 │   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
 │   └── data_manager.dart        # Hot/Cold data separation
@@ -153,7 +150,6 @@ enum Team {
   blue,   // Display: "WAVE" 🌊
   purple; // Display: "CHAOS" 💜
 
-  // No multiplier on Team — multiplier comes from yesterday's active crew members
   String get displayName => switch (this) {
     red => 'FLAME',
     blue => 'WAVE',
@@ -168,10 +164,8 @@ class UserModel {
   String id;
   String name;
   Team team;               // 'red' | 'blue' | 'purple'
-  String avatar;           // Overridden by crew image when in crew
-  String? originalAvatar;  // Preserved when joining crew, restored on leave
-  String? crewId;
-  int seasonPoints;        // Reset to 0 when defecting to Purple
+  String avatar;           // Emoji avatar
+  int seasonPoints;        // Preserved when defecting to Purple
   String? manifesto;       // 12-char declaration
   String? homeHexStart;    // H3 index of run start location (self only)
   String? homeHexEnd;      // H3 index of run end location (visible to others)
@@ -197,21 +191,6 @@ class HexModel {
 }
 ```
 **Important**: Minimal timestamp for fairness (last_flipped_at), no runner IDs - privacy optimized.
-
-### Crew Model (Supabase: crews table)
-```dart
-class CrewModel {
-  String id;
-  String name;
-  Team team;
-  List<String> memberIds; // [0] = leader. Max 12 (Red/Blue) or 24 (Purple)
-  String? pin;            // Optional 4-digit PIN
-
-  bool get isPurple => team == Team.purple;
-  int get maxMembers => isPurple ? 24 : 12;
-  String get leaderId => memberIds.isNotEmpty ? memberIds[0] : '';
-}
-```
 
 ### DailyRunningStat (Supabase: daily_stats table)
 ```dart
@@ -261,20 +240,36 @@ class RunSummary {
 
 ## Game Mechanics
 
-### Crew Economy: Yesterday's Check-in Multiplier
-- **Multiplier** = number of crew members who ran **yesterday**
-- Calculated daily at midnight GMT+2 via Edge Function
-- **Red/Blue Crew**: Max 12 members = up to 12x multiplier
-- **Purple Crew**: Max 24 members = up to 24x multiplier
-- **Solo runner or new user/crew** = 1x (default)
-- Fetched on app launch - no real-time tracking needed
+### Team-Based Buff System
+Buff multipliers are calculated daily at midnight GMT+2 via Edge Function:
 
-### Purple Crew (The Protocol of Chaos)
-- **Unlock**: D-140 (halfway point)
-- **Entry Cost**: All Flip Points reset to **0**
-- **Pre-condition**: Must leave current crew first
-- **Benefit**: Larger crew (24 max) = higher multiplier potential
-- **Rule**: Irreversible - cannot return to Red/Blue
+**RED FLAME:**
+| Scenario | Elite (Top 20%) | Common |
+|----------|-----------------|--------|
+| Normal (no wins) | 2x | 1x |
+| District win only | 3x | 1x |
+| Province win only | 3x | 2x |
+| District + Province | 4x | 2x |
+
+**BLUE WAVE:**
+| Scenario | Union |
+|----------|-------|
+| Normal (no wins) | 1x |
+| District win only | 2x |
+| Province win only | 2x |
+| District + Province | 3x |
+
+**PURPLE:** Participation Rate = 1x (<34%), 2x (34-66%), 3x (≥67%)
+
+- **New users** = 1x (default until yesterday's data exists)
+- Buff is **frozen** when run starts — no changes mid-run
+- Fetched on app launch via `get_user_buff()` RPC
+
+### Purple Team (The Protocol of Chaos)
+- **Unlock**: Available **anytime** during season
+- **Entry Cost**: Points are **PRESERVED** (not reset)
+- **Eligibility**: Any Red/Blue user
+- **Rule**: Irreversible - cannot return to Red/Blue for remainder of season
 
 ### Hex Capture Rules
 - Must be running at valid **moving average pace (last 20 sec)** (< 8:00 min/km)
@@ -310,9 +305,9 @@ if (laps.length == 1) return 0.0;  // No variance with single lap
 
 ### Flip Points Calculation
 ```
-flip_points = 1 × yesterday_active_crew_members
+flip_points = 1 × buff_multiplier
 ```
-Multiplier fetched on app launch via RPC: `get_crew_multiplier()`
+Multiplier fetched on app launch via RPC: `get_user_buff()`
 
 **Server Validation**: Points ≤ hex_count × multiplier (anti-cheat)
 
@@ -396,20 +391,20 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 ## Supabase Schema (Key Tables)
 
 ```sql
-users        -- id, name, team, avatar, original_avatar, crew_id, season_points, manifesto,
-             -- home_hex_start, home_hex_end, total_distance_km, avg_pace_min_per_km,
-             -- avg_cv, total_runs, cv_run_count
-crews        -- id, name, team, member_ids[], pin, representative_image
-hexes        -- id (H3 index), last_runner_team, last_flipped_at (conflict resolution)
-runs         -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
-run_history  -- id, user_id, run_date, distance_km, duration_seconds, cv (preserved across seasons)
-daily_stats  -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
--- active_runs  DEPRECATED: No longer used (no Realtime)
+users            -- id, name, team, avatar, season_points, manifesto,
+                 -- home_hex_start, home_hex_end, total_distance_km, avg_pace_min_per_km,
+                 -- avg_cv, total_runs, cv_run_count
+hexes            -- id (H3 index), last_runner_team, last_flipped_at (conflict resolution)
+runs             -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
+run_history      -- id, user_id, run_date, distance_km, duration_seconds, cv (preserved across seasons)
+daily_stats      -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
+daily_buff_stats -- user_id, date, buff_multiplier, is_elite, is_district_leader, has_province_range
 ```
 
 **Key RPC Functions:**
 - `finalize_run(...)` → batch sync on run completion, accepts `p_cv`, updates user aggregates
-- `get_crew_multiplier(crew_id)` → count of yesterday's active members
+- `get_user_buff(user_id)` → get user's current buff multiplier
+- `calculate_daily_buffs()` → daily Edge Function to compute all buffs at midnight
 - `get_leaderboard(limit)` → ranked users by season_points with CV aggregates
 - `app_launch_sync(...)` → pre-patch data on launch with CV fields
 
@@ -521,7 +516,6 @@ RemoteConfigService().unfreezeAfterRun(); // In stopRun()
 | Category | Examples |
 |----------|----------|
 | **Season** | `durationDays`, `serverTimezoneOffsetHours` |
-| **Crew** | `maxMembersRegular`, `maxMembersPurple` |
 | **GPS** | `maxSpeedMps`, `pollingRateHz`, `maxAccuracyMeters` |
 | **Scoring** | `maxCapturePaceMinPerKm`, `minMovingAvgWindowSec` |
 | **Hex** | `baseResolution`, `maxCacheSize` |

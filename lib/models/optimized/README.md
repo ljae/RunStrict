@@ -5,7 +5,6 @@
 ### HOT DATA (Season-scoped, Reset on D-Day)
 - `hexes/` - Last runner team colors
 - `seasonStats/` - Current season flip points
-- `crews/` - Crew memberships
 
 ### WARM DATA (Aggregated, Preserved)
 - `dailyStats/` - Daily aggregated stats (distance, pace, flips)
@@ -20,7 +19,7 @@
 1. **LRU Cache** for hex data (max 500 hexes in memory)
 2. **Pagination** for run history (load 20 at a time)
 3. **Lazy Loading** for routes (only when viewing detail)
-4. **Batch Writes** for Firestore (reduce write operations)
+4. **Batch Writes** for Supabase (reduce write operations)
 
 ## Season Reset Protocol
 

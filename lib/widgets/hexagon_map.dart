@@ -44,6 +44,8 @@ class HexagonMap extends StatefulWidget {
 class _HexagonMapState extends State<HexagonMap> {
   static const String _hexSourceId = 'hex-polygons-source';
   static const String _hexLayerId = 'hex-polygons-fill';
+  static const String _boundarySourceId = 'scope-boundary-source';
+  static const String _boundaryLayerId = 'scope-boundary-line';
 
   MapboxMap? _mapboxMap;
   // PolygonAnnotationManager? _polygonManager; // Removed for GeoJSON migration
@@ -57,6 +59,7 @@ class _HexagonMapState extends State<HexagonMap> {
   int _cameraChangeCounter = 0; // For forcing overlay updates
   int _lastRouteLength = 0; // Track route changes
   Timer? _debounceTimer; // Debounce for camera updates
+  GeographicScope? _lastBoundaryScope; // Track scope for boundary updates
 
   final HexDataProvider _hexProvider = HexDataProvider();
   StreamSubscription<latlong.LatLng>? _locationSubscription;
@@ -213,6 +216,27 @@ class _HexagonMapState extends State<HexagonMap> {
         'to-color',
         ['get', 'fill-outline-color'],
       ],
+    );
+
+    // Add GeoJSON source for scope boundary line (CITY/ALL view boundary)
+    await mapboxMap.style.addSource(
+      GeoJsonSource(
+        id: _boundarySourceId,
+        data: '{"type":"FeatureCollection","features":[]}',
+      ),
+    );
+
+    // Add line layer for scope boundary with soft/blurred styling
+    // Wide line with low opacity creates a blur-like effect to indicate range
+    await mapboxMap.style.addLayer(
+      LineLayer(
+        id: _boundaryLayerId,
+        sourceId: _boundarySourceId,
+        lineColor: Colors.white.toARGB32(),
+        lineWidth: 8.0, // Wide line for blur effect
+        lineOpacity: 0.15, // Low opacity for soft appearance
+        lineBlur: 4.0, // Blur the line edges
+      ),
     );
 
     // Enable location component if requested
@@ -418,6 +442,69 @@ class _HexagonMapState extends State<HexagonMap> {
     }
   }
 
+  /// Update scope boundary line for CITY/ALL views
+  /// Shows a soft blurred line around the parent hex boundary to indicate range
+  /// [parentHexId] - The parent hex at scope resolution (used to get H3 boundary)
+  Future<void> _updateScopeBoundary(
+    GeographicScope scope, {
+    String? parentHexId,
+  }) async {
+    if (_mapboxMap == null) return;
+
+    // Only show boundary for CITY and ALL scopes (not ZONE)
+    if (scope == GeographicScope.zone || parentHexId == null) {
+      // Clear boundary for ZONE view or when no parent hex
+      if (_lastBoundaryScope != GeographicScope.zone) {
+        try {
+          final source = await _mapboxMap!.style.getSource(_boundarySourceId);
+          if (source is GeoJsonSource) {
+            await source.updateGeoJSON(
+              '{"type":"FeatureCollection","features":[]}',
+            );
+          }
+          _lastBoundaryScope = GeographicScope.zone;
+        } catch (e) {
+          debugPrint('Error clearing scope boundary: $e');
+        }
+      }
+      return;
+    }
+
+    // Always update boundary when we have valid parentHexId
+    _lastBoundaryScope = scope;
+
+    try {
+      // Get the H3 parent hex's geometric boundary
+      final boundary = HexService().getHexBoundary(parentHexId);
+      if (boundary.isEmpty) return;
+
+      // Build GeoJSON LineString from parent hex boundary (closed polygon)
+      final coordinates = boundary
+          .map((p) => [p.longitude, p.latitude])
+          .toList();
+      coordinates.add(coordinates.first); // Close the loop
+
+      final geoJson = jsonEncode({
+        'type': 'FeatureCollection',
+        'features': [
+          {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': coordinates},
+            'properties': {},
+          },
+        ],
+      });
+
+      // Update the boundary source
+      final source = await _mapboxMap!.style.getSource(_boundarySourceId);
+      if (source is GeoJsonSource) {
+        await source.updateGeoJSON(geoJson);
+      }
+    } catch (e) {
+      debugPrint('Error updating scope boundary: $e');
+    }
+  }
+
   // Fixed resolution from remote config for consistent hex display across all screens and zoom levels
   static int get _fixedResolution =>
       RemoteConfigService().config.hexConfig.baseResolution;
@@ -545,45 +632,48 @@ class _HexagonMapState extends State<HexagonMap> {
       // Determine current scope based on zoom level
       final currentScope = _currentScope;
 
-      // Calculate k-ring radius based on scope
-      // k-ring formula: hexes = 1 + 3*k*(k+1)
-      int kRing;
-      if (currentScope == GeographicScope.zone) {
-        kRing = 5; // ZONE view: ~91 hexes (neighborhood) - no scope limit
-      } else if (currentScope == GeographicScope.city) {
-        kRing = 10; // CITY view: ~331 hexes (district) - City scope limit
-      } else {
-        kRing = 35; // ALL view: ~3,781 hexes (metro area) - All scope limit
-      }
-
-      // Determine center for hex generation:
-      // - ZONE view: use camera center (panning shows different hexes)
-      // - CITY/ALL views: use HOME HEX center (fixed scope boundary)
-      latlong.LatLng hexGenerationCenter;
+      // Generate hex IDs based on scope:
+      // - ZONE: camera-following k-ring (dynamic)
+      // - CITY/ALL: strict parent cell boundary (fixed)
+      List<String> hexIds;
+      String? parentHexForBoundary; // Track parent hex for boundary rendering
 
       if (currentScope == GeographicScope.zone) {
-        // ZONE: follow camera, no scope limit
+        // ZONE: camera-following k-ring (no boundary needed)
         final lat = center.coordinates.lat;
         final lng = center.coordinates.lng;
-        hexGenerationCenter = latlong.LatLng(lat.toDouble(), lng.toDouble());
+        final zoneCenter = latlong.LatLng(lat.toDouble(), lng.toDouble());
+        hexIds = HexService().getHexagonsInArea(zoneCenter, resolution, 5);
       } else {
-        // CITY/ALL: use home hex center for consistent scope boundary
+        // CITY/ALL: strict parent cell boundary
         final homeHex = PrefetchService().homeHex;
-        if (homeHex != null) {
-          hexGenerationCenter = HexService().getHexCenter(homeHex);
-        } else {
-          // Fallback to camera center if no home hex
+        if (homeHex == null) {
+          // Fallback to camera center with k-ring if no home hex
           final lat = center.coordinates.lat;
           final lng = center.coordinates.lng;
-          hexGenerationCenter = latlong.LatLng(lat.toDouble(), lng.toDouble());
+          final fallbackCenter = latlong.LatLng(lat.toDouble(), lng.toDouble());
+          hexIds = HexService().getHexagonsInArea(
+            fallbackCenter,
+            resolution,
+            10,
+          );
+        } else {
+          // Get parent cell at scope resolution, then expand to base resolution
+          final scopeResolution = currentScope.resolution;
+          parentHexForBoundary = HexService().getParentHexId(
+            homeHex,
+            scopeResolution,
+          );
+          hexIds = HexService().getAllChildrenAtResolution(
+            parentHexForBoundary,
+            resolution,
+          );
         }
       }
 
-      final hexIds = HexService().getHexagonsInArea(
-        hexGenerationCenter,
-        resolution,
-        kRing,
-      );
+      // Update scope boundary line (CITY/ALL views only)
+      // Pass the parent hex ID to draw H3's geometric boundary (soft blur line)
+      _updateScopeBoundary(currentScope, parentHexId: parentHexForBoundary);
 
       _visibleHexIds = hexIds;
 
@@ -693,6 +783,8 @@ class _HexagonMapState extends State<HexagonMap> {
         try {
           await mapboxMap.style.removeStyleLayer(_hexLayerId);
           await mapboxMap.style.removeStyleSource(_hexSourceId);
+          await mapboxMap.style.removeStyleLayer(_boundaryLayerId);
+          await mapboxMap.style.removeStyleSource(_boundarySourceId);
         } catch (e) {
           debugPrint('Error cleaning up hex layer/source: $e');
         }

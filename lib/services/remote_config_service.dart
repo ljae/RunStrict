@@ -101,7 +101,7 @@ class RemoteConfigService {
     return AppConfig.fromJson({
       'configVersion': version ?? 1,
       'seasonConfig': data['season'],
-      'crewConfig': data['crew'],
+      'buffConfig': data['buff'],
       'gpsConfig': data['gps'],
       'scoringConfig': data['scoring'],
       'hexConfig': data['hex'],

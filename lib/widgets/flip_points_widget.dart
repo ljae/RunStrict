@@ -58,7 +58,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   @override
   void initState() {
     super.initState();
-    _displayedPoints = widget.pointsService.currentPoints;
+    _displayedPoints = widget.pointsService.todayFlipPoints;
     _targetPoints = _displayedPoints;
 
     // Initialize digit controllers (6 digits max)
@@ -142,7 +142,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   }
 
   void _checkPendingPoints() {
-    final newPoints = widget.pointsService.currentPoints;
+    final newPoints = widget.pointsService.todayFlipPoints;
     if (newPoints != _displayedPoints) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
@@ -153,7 +153,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   }
 
   void _onPointsChanged() {
-    final newPoints = widget.pointsService.currentPoints;
+    final newPoints = widget.pointsService.todayFlipPoints;
     if (newPoints != _displayedPoints && !_isAnimating) {
       _animateToPoints(newPoints);
     }
@@ -205,7 +205,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
         });
 
         // Re-check: catch any points that arrived during animation
-        final latestPoints = widget.pointsService.currentPoints;
+        final latestPoints = widget.pointsService.todayFlipPoints;
         if (latestPoints != _displayedPoints) {
           Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted && !_isAnimating) {

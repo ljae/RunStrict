@@ -5,7 +5,7 @@
 class AppConfig {
   final int configVersion;
   final SeasonConfig seasonConfig;
-  final CrewConfig crewConfig;
+  final BuffConfig buffConfig;
   final GpsConfig gpsConfig;
   final ScoringConfig scoringConfig;
   final HexConfig hexConfig;
@@ -14,7 +14,7 @@ class AppConfig {
   const AppConfig({
     required this.configVersion,
     required this.seasonConfig,
-    required this.crewConfig,
+    required this.buffConfig,
     required this.gpsConfig,
     required this.scoringConfig,
     required this.hexConfig,
@@ -25,7 +25,7 @@ class AppConfig {
   factory AppConfig.defaults() => AppConfig(
     configVersion: 1,
     seasonConfig: SeasonConfig.defaults(),
-    crewConfig: CrewConfig.defaults(),
+    buffConfig: BuffConfig.defaults(),
     gpsConfig: GpsConfig.defaults(),
     scoringConfig: ScoringConfig.defaults(),
     hexConfig: HexConfig.defaults(),
@@ -38,8 +38,8 @@ class AppConfig {
     seasonConfig: SeasonConfig.fromJson(
       json['seasonConfig'] as Map<String, dynamic>? ?? {},
     ),
-    crewConfig: CrewConfig.fromJson(
-      json['crewConfig'] as Map<String, dynamic>? ?? {},
+    buffConfig: BuffConfig.fromJson(
+      json['buffConfig'] as Map<String, dynamic>? ?? {},
     ),
     gpsConfig: GpsConfig.fromJson(
       json['gpsConfig'] as Map<String, dynamic>? ?? {},
@@ -59,7 +59,7 @@ class AppConfig {
   Map<String, dynamic> toJson() => {
     'configVersion': configVersion,
     'seasonConfig': seasonConfig.toJson(),
-    'crewConfig': crewConfig.toJson(),
+    'buffConfig': buffConfig.toJson(),
     'gpsConfig': gpsConfig.toJson(),
     'scoringConfig': scoringConfig.toJson(),
     'hexConfig': hexConfig.toJson(),
@@ -70,7 +70,7 @@ class AppConfig {
   AppConfig copyWith({
     int? configVersion,
     SeasonConfig? seasonConfig,
-    CrewConfig? crewConfig,
+    BuffConfig? buffConfig,
     GpsConfig? gpsConfig,
     ScoringConfig? scoringConfig,
     HexConfig? hexConfig,
@@ -78,7 +78,7 @@ class AppConfig {
   }) => AppConfig(
     configVersion: configVersion ?? this.configVersion,
     seasonConfig: seasonConfig ?? this.seasonConfig,
-    crewConfig: crewConfig ?? this.crewConfig,
+    buffConfig: buffConfig ?? this.buffConfig,
     gpsConfig: gpsConfig ?? this.gpsConfig,
     scoringConfig: scoringConfig ?? this.scoringConfig,
     hexConfig: hexConfig ?? this.hexConfig,
@@ -97,10 +97,10 @@ class SeasonConfig {
   });
 
   factory SeasonConfig.defaults() =>
-      const SeasonConfig(durationDays: 280, serverTimezoneOffsetHours: 2);
+      const SeasonConfig(durationDays: 40, serverTimezoneOffsetHours: 2);
 
   factory SeasonConfig.fromJson(Map<String, dynamic> json) => SeasonConfig(
-    durationDays: (json['durationDays'] as num?)?.toInt() ?? 280,
+    durationDays: (json['durationDays'] as num?)?.toInt() ?? 40,
     serverTimezoneOffsetHours:
         (json['serverTimezoneOffsetHours'] as num?)?.toInt() ?? 2,
   );
@@ -118,34 +118,123 @@ class SeasonConfig {
       );
 }
 
-/// Crew-related configuration.
-class CrewConfig {
-  final int maxMembersRegular;
-  final int maxMembersPurple;
+/// Server-configurable buff system thresholds.
+class BuffConfig {
+  // RED team thresholds
+  final double redEliteThreshold;
+  final int redEliteCityLeaderBuff;
+  final int redEliteNonLeaderBuff;
+  final int redCommonCityLeaderBuff;
+  final int redCommonNonLeaderBuff;
 
-  const CrewConfig({
-    required this.maxMembersRegular,
-    required this.maxMembersPurple,
+  // BLUE team thresholds
+  final int blueUnionCityLeaderBuff;
+  final int blueUnionNonLeaderBuff;
+
+  // All Range bonus (additive)
+  final int allRangeBonus;
+
+  // PURPLE thresholds
+  final double purpleHighTierThreshold;
+  final double purpleMidTierThreshold;
+  final int purpleHighTierBuff;
+  final int purpleMidTierBuff;
+  final int purpleLowTierBuff;
+
+  const BuffConfig({
+    this.redEliteThreshold = 0.20,
+    this.redEliteCityLeaderBuff = 3,
+    this.redEliteNonLeaderBuff = 2,
+    this.redCommonCityLeaderBuff = 1,
+    this.redCommonNonLeaderBuff = 1,
+    this.blueUnionCityLeaderBuff = 2,
+    this.blueUnionNonLeaderBuff = 1,
+    this.allRangeBonus = 1,
+    this.purpleHighTierThreshold = 0.60,
+    this.purpleMidTierThreshold = 0.30,
+    this.purpleHighTierBuff = 3,
+    this.purpleMidTierBuff = 2,
+    this.purpleLowTierBuff = 1,
   });
 
-  factory CrewConfig.defaults() =>
-      const CrewConfig(maxMembersRegular: 12, maxMembersPurple: 24);
+  factory BuffConfig.defaults() => const BuffConfig();
 
-  factory CrewConfig.fromJson(Map<String, dynamic> json) => CrewConfig(
-    maxMembersRegular: (json['maxMembersRegular'] as num?)?.toInt() ?? 12,
-    maxMembersPurple: (json['maxMembersPurple'] as num?)?.toInt() ?? 24,
+  factory BuffConfig.fromJson(Map<String, dynamic> json) => BuffConfig(
+    redEliteThreshold: (json['redEliteThreshold'] as num?)?.toDouble() ?? 0.20,
+    redEliteCityLeaderBuff:
+        (json['redEliteCityLeaderBuff'] as num?)?.toInt() ?? 3,
+    redEliteNonLeaderBuff:
+        (json['redEliteNonLeaderBuff'] as num?)?.toInt() ?? 2,
+    redCommonCityLeaderBuff:
+        (json['redCommonCityLeaderBuff'] as num?)?.toInt() ?? 1,
+    redCommonNonLeaderBuff:
+        (json['redCommonNonLeaderBuff'] as num?)?.toInt() ?? 1,
+    blueUnionCityLeaderBuff:
+        (json['blueUnionCityLeaderBuff'] as num?)?.toInt() ?? 2,
+    blueUnionNonLeaderBuff:
+        (json['blueUnionNonLeaderBuff'] as num?)?.toInt() ?? 1,
+    allRangeBonus: (json['allRangeBonus'] as num?)?.toInt() ?? 1,
+    purpleHighTierThreshold:
+        (json['purpleHighTierThreshold'] as num?)?.toDouble() ?? 0.60,
+    purpleMidTierThreshold:
+        (json['purpleMidTierThreshold'] as num?)?.toDouble() ?? 0.30,
+    purpleHighTierBuff: (json['purpleHighTierBuff'] as num?)?.toInt() ?? 3,
+    purpleMidTierBuff: (json['purpleMidTierBuff'] as num?)?.toInt() ?? 2,
+    purpleLowTierBuff: (json['purpleLowTierBuff'] as num?)?.toInt() ?? 1,
   );
 
   Map<String, dynamic> toJson() => {
-    'maxMembersRegular': maxMembersRegular,
-    'maxMembersPurple': maxMembersPurple,
+    'redEliteThreshold': redEliteThreshold,
+    'redEliteCityLeaderBuff': redEliteCityLeaderBuff,
+    'redEliteNonLeaderBuff': redEliteNonLeaderBuff,
+    'redCommonCityLeaderBuff': redCommonCityLeaderBuff,
+    'redCommonNonLeaderBuff': redCommonNonLeaderBuff,
+    'blueUnionCityLeaderBuff': blueUnionCityLeaderBuff,
+    'blueUnionNonLeaderBuff': blueUnionNonLeaderBuff,
+    'allRangeBonus': allRangeBonus,
+    'purpleHighTierThreshold': purpleHighTierThreshold,
+    'purpleMidTierThreshold': purpleMidTierThreshold,
+    'purpleHighTierBuff': purpleHighTierBuff,
+    'purpleMidTierBuff': purpleMidTierBuff,
+    'purpleLowTierBuff': purpleLowTierBuff,
   };
 
-  CrewConfig copyWith({int? maxMembersRegular, int? maxMembersPurple}) =>
-      CrewConfig(
-        maxMembersRegular: maxMembersRegular ?? this.maxMembersRegular,
-        maxMembersPurple: maxMembersPurple ?? this.maxMembersPurple,
-      );
+  BuffConfig copyWith({
+    double? redEliteThreshold,
+    int? redEliteCityLeaderBuff,
+    int? redEliteNonLeaderBuff,
+    int? redCommonCityLeaderBuff,
+    int? redCommonNonLeaderBuff,
+    int? blueUnionCityLeaderBuff,
+    int? blueUnionNonLeaderBuff,
+    int? allRangeBonus,
+    double? purpleHighTierThreshold,
+    double? purpleMidTierThreshold,
+    int? purpleHighTierBuff,
+    int? purpleMidTierBuff,
+    int? purpleLowTierBuff,
+  }) => BuffConfig(
+    redEliteThreshold: redEliteThreshold ?? this.redEliteThreshold,
+    redEliteCityLeaderBuff:
+        redEliteCityLeaderBuff ?? this.redEliteCityLeaderBuff,
+    redEliteNonLeaderBuff: redEliteNonLeaderBuff ?? this.redEliteNonLeaderBuff,
+    redCommonCityLeaderBuff:
+        redCommonCityLeaderBuff ?? this.redCommonCityLeaderBuff,
+    redCommonNonLeaderBuff:
+        redCommonNonLeaderBuff ?? this.redCommonNonLeaderBuff,
+    blueUnionCityLeaderBuff:
+        blueUnionCityLeaderBuff ?? this.blueUnionCityLeaderBuff,
+    blueUnionNonLeaderBuff:
+        blueUnionNonLeaderBuff ?? this.blueUnionNonLeaderBuff,
+    allRangeBonus: allRangeBonus ?? this.allRangeBonus,
+    purpleHighTierThreshold:
+        purpleHighTierThreshold ?? this.purpleHighTierThreshold,
+    purpleMidTierThreshold:
+        purpleMidTierThreshold ?? this.purpleMidTierThreshold,
+    purpleHighTierBuff: purpleHighTierBuff ?? this.purpleHighTierBuff,
+    purpleMidTierBuff: purpleMidTierBuff ?? this.purpleMidTierBuff,
+    purpleLowTierBuff: purpleLowTierBuff ?? this.purpleLowTierBuff,
+  );
 }
 
 /// GPS tracking and validation configuration.
@@ -244,25 +333,17 @@ class ScoringConfig {
   final List<int> tierThresholdsKm;
   final List<int> tierPoints;
   final Map<String, double> paceMultipliers;
-  final Map<String, double> crewMultipliers;
 
   const ScoringConfig({
     required this.tierThresholdsKm,
     required this.tierPoints,
     required this.paceMultipliers,
-    required this.crewMultipliers,
   });
 
   factory ScoringConfig.defaults() => ScoringConfig(
     tierThresholdsKm: const [0, 3, 6, 9, 12, 15],
     tierPoints: const [10, 25, 50, 100, 150, 200],
     paceMultipliers: const {'slow': 0.8, 'normal': 1.0, 'fast': 1.2},
-    crewMultipliers: const {
-      'solo': 1.0,
-      'small': 1.5,
-      'medium': 2.0,
-      'large': 3.0,
-    },
   );
 
   factory ScoringConfig.fromJson(Map<String, dynamic> json) => ScoringConfig(
@@ -281,30 +362,22 @@ class ScoringConfig {
           (k, v) => MapEntry(k, (v as num).toDouble()),
         ) ??
         {'slow': 0.8, 'normal': 1.0, 'fast': 1.2},
-    crewMultipliers:
-        (json['crewMultipliers'] as Map<String, dynamic>?)?.map(
-          (k, v) => MapEntry(k, (v as num).toDouble()),
-        ) ??
-        {'solo': 1.0, 'small': 1.5, 'medium': 2.0, 'large': 3.0},
   );
 
   Map<String, dynamic> toJson() => {
     'tierThresholdsKm': tierThresholdsKm,
     'tierPoints': tierPoints,
     'paceMultipliers': paceMultipliers,
-    'crewMultipliers': crewMultipliers,
   };
 
   ScoringConfig copyWith({
     List<int>? tierThresholdsKm,
     List<int>? tierPoints,
     Map<String, double>? paceMultipliers,
-    Map<String, double>? crewMultipliers,
   }) => ScoringConfig(
     tierThresholdsKm: tierThresholdsKm ?? this.tierThresholdsKm,
     tierPoints: tierPoints ?? this.tierPoints,
     paceMultipliers: paceMultipliers ?? this.paceMultipliers,
-    crewMultipliers: crewMultipliers ?? this.crewMultipliers,
   );
 }
 
@@ -330,7 +403,7 @@ class HexConfig {
     baseResolution: 9,
     zoneResolution: 8,
     cityResolution: 6,
-    allResolution: 4,
+    allResolution: 5,
     captureCheckDistanceMeters: 20.0,
     maxCacheSize: 4000,
   );
@@ -339,7 +412,7 @@ class HexConfig {
     baseResolution: (json['baseResolution'] as num?)?.toInt() ?? 9,
     zoneResolution: (json['zoneResolution'] as num?)?.toInt() ?? 8,
     cityResolution: (json['cityResolution'] as num?)?.toInt() ?? 6,
-    allResolution: (json['allResolution'] as num?)?.toInt() ?? 4,
+    allResolution: (json['allResolution'] as num?)?.toInt() ?? 5,
     captureCheckDistanceMeters:
         (json['captureCheckDistanceMeters'] as num?)?.toDouble() ?? 20.0,
     maxCacheSize: (json['maxCacheSize'] as num?)?.toInt() ?? 4000,

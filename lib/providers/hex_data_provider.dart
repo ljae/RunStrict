@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/hex_model.dart';
 import '../models/team.dart';
 import '../services/hex_service.dart';
+import '../services/prefetch_service.dart';
 import '../services/remote_config_service.dart';
 import '../utils/lru_cache.dart';
 
@@ -76,7 +77,7 @@ class HexDataProvider with ChangeNotifier {
   /// Get cache stats for debugging/monitoring
   String get cacheStats => _hexCache.toString();
 
-  /// Get or create hex model for an ID (with simulated last runner if new)
+  /// Get or create hex model for an ID
   HexModel getHex(String hexId, dynamic center) {
     // center is expected to be LatLng from latlong2
     final cached = _hexCache.get(hexId);
@@ -94,17 +95,29 @@ class HexDataProvider with ChangeNotifier {
       return hex;
     }
 
-    // Create new hex with simulated last runner based on hash
+    // Check PrefetchService for server/dummy data
+    final prefetched = PrefetchService().getCachedHex(hexId);
+    if (prefetched != null) {
+      final hex = HexModel(
+        id: hexId,
+        center: center,
+        lastRunnerTeam: prefetched.lastRunnerTeam,
+      );
+      _hexCache.put(hexId, hex);
+      return hex;
+    }
+
+    // Fallback: Create hex with simulated last runner based on hash
     final hash = hexId.hashCode;
     final random = Random(hash);
 
     Team? lastRunner;
     final stateRoll = random.nextDouble();
 
-    // Simulation distribution:
-    // 20% Neutral (no one ran), 35% Blue, 35% Red, 10% Purple
+    // Fallback simulation distribution (only used when no prefetched data):
+    // 20% Neutral, 35% Blue, 35% Red, 10% Purple
     if (stateRoll < 0.20) {
-      lastRunner = null; // Neutral - no one ran here yet
+      lastRunner = null;
     } else if (stateRoll < 0.55) {
       lastRunner = Team.blue;
     } else if (stateRoll < 0.90) {

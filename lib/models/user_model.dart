@@ -5,16 +5,16 @@ class UserModel {
   final String name;
   final Team team;
   final String avatar;
-  final String? crewId;
   final int seasonPoints;
   final String? manifesto;
-
-  /// Original avatar preserved when joining crew (restored on leave)
-  final String? originalAvatar;
 
   /// Home hex (Res 9) - set once on first GPS fix, used for scope filtering
   /// Parent cells derived on-demand via HexService.getScopeHexId()
   final String? homeHex;
+
+  /// Season home hex (Res 9) - set once on first app launch of season
+  /// Used for leaderboard MY LEAGUE filtering and multiplier region
+  final String? seasonHomeHex;
 
   /// Total distance run in season (km)
   final double totalDistanceKm;
@@ -34,11 +34,10 @@ class UserModel {
     required this.name,
     required this.team,
     this.avatar = '🏃',
-    this.crewId,
     this.seasonPoints = 0,
     this.manifesto,
-    this.originalAvatar,
     this.homeHex,
+    this.seasonHomeHex,
     this.totalDistanceKm = 0,
     this.avgPaceMinPerKm,
     this.avgCv,
@@ -56,19 +55,16 @@ class UserModel {
 
   /// Copy with optional field updates.
   ///
-  /// Use [clearCrewId: true] to explicitly set crewId to null.
-  /// Use [clearOriginalAvatar: true] to explicitly set originalAvatar to null.
+  /// Use [clearSeasonHomeHex: true] to explicitly set seasonHomeHex to null.
   UserModel copyWith({
     String? name,
     Team? team,
-    String? crewId,
-    bool clearCrewId = false,
     String? avatar,
     int? seasonPoints,
     String? manifesto,
-    String? originalAvatar,
-    bool clearOriginalAvatar = false,
     String? homeHex,
+    String? seasonHomeHex,
+    bool clearSeasonHomeHex = false,
     double? totalDistanceKm,
     double? avgPaceMinPerKm,
     double? avgCv,
@@ -78,14 +74,13 @@ class UserModel {
       id: id,
       name: name ?? this.name,
       team: team ?? this.team,
-      crewId: clearCrewId ? null : (crewId ?? this.crewId),
       avatar: avatar ?? this.avatar,
       seasonPoints: seasonPoints ?? this.seasonPoints,
       manifesto: manifesto ?? this.manifesto,
-      originalAvatar: clearOriginalAvatar
-          ? null
-          : (originalAvatar ?? this.originalAvatar),
       homeHex: homeHex ?? this.homeHex,
+      seasonHomeHex: clearSeasonHomeHex
+          ? null
+          : (seasonHomeHex ?? this.seasonHomeHex),
       totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
       avgPaceMinPerKm: avgPaceMinPerKm ?? this.avgPaceMinPerKm,
       avgCv: avgCv ?? this.avgCv,
@@ -94,20 +89,17 @@ class UserModel {
   }
 
   /// Defect to Purple team (Protocol of Chaos).
-  /// Requires: User must leave crew first (crewId == null).
-  /// Resets season points to 0.
+  /// Points are PRESERVED on defection.
   UserModel defectToPurple() {
-    assert(crewId == null, 'Must leave crew before defecting to Purple');
     return UserModel(
       id: id,
       name: name,
       team: Team.purple,
-      crewId: null,
       avatar: avatar,
-      seasonPoints: 0,
+      seasonPoints: seasonPoints, // Points PRESERVED
       manifesto: manifesto,
-      originalAvatar: null, // Clear on defection
       homeHex: homeHex,
+      seasonHomeHex: seasonHomeHex,
       totalDistanceKm: totalDistanceKm,
       avgPaceMinPerKm: avgPaceMinPerKm,
       avgCv: avgCv,
@@ -120,11 +112,10 @@ class UserModel {
     name: row['name'] as String,
     team: Team.values.byName(row['team'] as String),
     avatar: row['avatar'] as String? ?? '🏃',
-    crewId: row['crew_id'] as String?,
     seasonPoints: (row['season_points'] as num?)?.toInt() ?? 0,
     manifesto: row['manifesto'] as String?,
-    originalAvatar: row['original_avatar'] as String?,
     homeHex: row['home_hex'] as String?,
+    seasonHomeHex: row['season_home_hex'] as String?,
     totalDistanceKm: (row['total_distance_km'] as num?)?.toDouble() ?? 0,
     avgPaceMinPerKm: (row['avg_pace_min_per_km'] as num?)?.toDouble(),
     avgCv: (row['avg_cv'] as num?)?.toDouble(),
@@ -135,11 +126,10 @@ class UserModel {
     'name': name,
     'team': team.name,
     'avatar': avatar,
-    'crew_id': crewId,
     'season_points': seasonPoints,
     'manifesto': manifesto,
-    'original_avatar': originalAvatar,
     'home_hex': homeHex,
+    'season_home_hex': seasonHomeHex,
     'total_distance_km': totalDistanceKm,
     'avg_pace_min_per_km': avgPaceMinPerKm,
     'avg_cv': avgCv,
@@ -151,11 +141,10 @@ class UserModel {
     'name': name,
     'team': team.name,
     'avatar': avatar,
-    'crewId': crewId,
     'seasonPoints': seasonPoints,
     'manifesto': manifesto,
-    'originalAvatar': originalAvatar,
     'homeHex': homeHex,
+    'seasonHomeHex': seasonHomeHex,
     'totalDistanceKm': totalDistanceKm,
     'avgPaceMinPerKm': avgPaceMinPerKm,
     'avgCv': avgCv,
@@ -167,11 +156,10 @@ class UserModel {
     name: json['name'] as String,
     team: Team.values.byName(json['team'] as String),
     avatar: json['avatar'] as String? ?? '🏃',
-    crewId: json['crewId'] as String?,
     seasonPoints: (json['seasonPoints'] as num?)?.toInt() ?? 0,
     manifesto: json['manifesto'] as String?,
-    originalAvatar: json['originalAvatar'] as String?,
     homeHex: json['homeHex'] as String?,
+    seasonHomeHex: json['seasonHomeHex'] as String?,
     totalDistanceKm: (json['totalDistanceKm'] as num?)?.toDouble() ?? 0,
     avgPaceMinPerKm: (json['avgPaceMinPerKm'] as num?)?.toDouble(),
     avgCv: (json['avgCv'] as num?)?.toDouble(),

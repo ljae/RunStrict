@@ -6,8 +6,7 @@ import 'remote_config_service.dart';
 ///
 /// On resume (AppLifecycleState.resumed):
 /// - Refreshes hex map data
-/// - Refreshes yesterday's multiplier (in case midnight passed)
-/// - Refreshes crew info and ranking
+/// - Refreshes leaderboard rankings
 ///
 /// Constraints:
 /// - 30-second throttle to prevent excessive refreshes

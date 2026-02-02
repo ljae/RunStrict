@@ -1,24 +1,115 @@
 import 'package:flutter/foundation.dart';
+import '../storage/local_storage.dart';
 
+/// Manages flip points with hybrid calculation for today's points.
+///
+/// Today's flip points = server baseline + local unsynced runs
+///
+/// This architecture handles:
+/// - "The Final Sync" (no real-time sync during runs)
+/// - Multi-device scenarios (server has other device's synced runs)
+/// - Local runs that haven't synced yet
 class PointsService extends ChangeNotifier {
-  int _currentPoints;
+  int _seasonPoints;
+  int _serverTodayBaseline; // From app_launch_sync (synced runs only)
+  int _localUnsyncedToday; // From local DB (pending sync runs)
 
-  PointsService({int initialPoints = 0}) : _currentPoints = initialPoints;
+  final LocalStorage _localStorage;
 
-  int get currentPoints => _currentPoints;
+  PointsService({
+    int initialPoints = 0,
+    int todayPoints = 0,
+    LocalStorage? localStorage,
+  }) : _seasonPoints = initialPoints,
+       _serverTodayBaseline = todayPoints,
+       _localUnsyncedToday = 0,
+       _localStorage = localStorage ?? LocalStorage();
 
+  int get seasonPoints => _seasonPoints;
+
+  /// Today's flip points using hybrid calculation.
+  /// = server baseline (synced runs) + local unsynced runs
+  int get todayFlipPoints => _serverTodayBaseline + _localUnsyncedToday;
+
+  @Deprecated('Use todayFlipPoints for header display, seasonPoints for totals')
+  int get currentPoints => todayFlipPoints;
+
+  /// Add points from a run (updates both season and local unsynced today).
+  /// Called during active runs when hexes are flipped.
   void addRunPoints(int points) {
-    _currentPoints += points;
+    _seasonPoints += points;
+    _localUnsyncedToday += points;
     notifyListeners();
   }
 
+  void setSeasonPoints(int points) {
+    _seasonPoints = points;
+    notifyListeners();
+  }
+
+  /// Set the server baseline for today's flip points.
+  /// Called on app launch after receiving data from app_launch_sync.
+  ///
+  /// The server baseline includes all synced runs from today (including
+  /// runs from other devices). Local unsynced runs are added on top.
+  void setServerTodayBaseline(int points) {
+    _serverTodayBaseline = points;
+    notifyListeners();
+  }
+
+  /// Refresh local unsynced points from database.
+  /// Call this on app launch and after sync operations.
+  Future<void> refreshLocalUnsyncedPoints() async {
+    try {
+      _localUnsyncedToday = await _localStorage.sumUnsyncedTodayPoints();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('PointsService: Failed to refresh local unsynced points - $e');
+    }
+  }
+
+  /// Called after a successful Final Sync.
+  /// The synced run's points move from local unsynced to server baseline.
+  void onRunSynced(int syncedPoints) {
+    // Points are now server-side, so they'll be in server baseline on next launch
+    // For immediate UI accuracy, we can transfer them:
+    // However, since we can't update server baseline without a server call,
+    // we keep the points in local unsynced until next app launch.
+    // The total remains correct either way.
+    notifyListeners();
+  }
+
+  /// Mark local runs as synced and refresh the calculation.
+  /// Called after server confirms today's points baseline.
+  Future<void> markLocalRunsSynced() async {
+    await _localStorage.markTodayRunsSynced();
+    _localUnsyncedToday = 0;
+    notifyListeners();
+  }
+
+  @Deprecated('Use setSeasonPoints instead')
   void setPoints(int points) {
-    _currentPoints = points;
+    _seasonPoints = points;
+    notifyListeners();
+  }
+
+  @Deprecated('Use setServerTodayBaseline + refreshLocalUnsyncedPoints instead')
+  void setTodayFlipPoints(int points) {
+    _serverTodayBaseline = points;
+    _localUnsyncedToday = 0;
     notifyListeners();
   }
 
   void resetForNewSeason() {
-    _currentPoints = 0;
+    _seasonPoints = 0;
+    _serverTodayBaseline = 0;
+    _localUnsyncedToday = 0;
+    notifyListeners();
+  }
+
+  void resetTodayPoints() {
+    _serverTodayBaseline = 0;
+    _localUnsyncedToday = 0;
     notifyListeners();
   }
 

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/sponsor.dart';
 import '../widgets/sponsor_logo_painter.dart';
 
-/// Generates crew representative images from sponsor logos using Canvas.
+/// Generates team representative images from sponsor logos using Canvas.
 class SponsorImageGenerator {
   /// Renders a sponsor logo to a PNG image as Uint8List.
   ///

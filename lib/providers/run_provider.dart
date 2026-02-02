@@ -9,9 +9,11 @@ import '../services/run_tracker.dart';
 import '../services/storage_service.dart';
 import '../services/points_service.dart';
 import '../services/supabase_service.dart';
+import '../services/buff_service.dart';
 import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
+import '../storage/local_storage.dart';
 
 enum RunEvent { pointEarned }
 
@@ -31,6 +33,7 @@ class RunProvider with ChangeNotifier {
   final RunTracker _runTracker;
   final StorageService _storageService;
   final SupabaseService _supabaseService;
+  final BuffService _buffService;
   PointsService? _pointsService;
 
   RunSession? _activeRun;
@@ -43,8 +46,7 @@ class RunProvider with ChangeNotifier {
   /// Flag to show stop button immediately while GPS initializes
   bool _isStartingRun = false;
 
-  /// Yesterday's crew count for multiplier (fetched on run start)
-  int _yesterdayCrewCount = 1;
+  /// Buff multiplier for runs (from BuffService)
 
   // Event stream for transient UI feedback
   final _eventController = StreamController<RunEvent>.broadcast();
@@ -58,11 +60,13 @@ class RunProvider with ChangeNotifier {
     required RunTracker runTracker,
     required StorageService storageService,
     SupabaseService? supabaseService,
+    BuffService? buffService,
     PointsService? pointsService,
   }) : _locationService = locationService,
        _runTracker = runTracker,
        _storageService = storageService,
        _supabaseService = supabaseService ?? SupabaseService(),
+       _buffService = buffService ?? BuffService(),
        _pointsService = pointsService;
 
   /// Update the points service reference (for ProxyProvider)
@@ -162,23 +166,13 @@ class RunProvider with ChangeNotifier {
     }
   }
 
-  /// Set the crew multiplier for the next run.
-  ///
-  /// Call this before starting a run to apply the crew bonus.
-  /// The multiplier is the number of crew members who ran yesterday.
-  void setCrewMultiplier(int multiplier) {
-    _yesterdayCrewCount = multiplier > 0 ? multiplier : 1;
-    debugPrint('RunProvider: Crew multiplier set to $_yesterdayCrewCount');
-  }
-
-  /// Get the current crew multiplier
-  int get crewMultiplier => _yesterdayCrewCount;
+  /// Get the current buff multiplier from BuffService
+  int get buffMultiplier => _buffService.getEffectiveMultiplier();
 
   /// Start a new run
   ///
   /// [team] - The team the runner belongs to
-  /// [crewId] - Optional crew ID for multiplier lookup (if not already set)
-  Future<void> startRun({required Team team, String? crewId}) async {
+  Future<void> startRun({required Team team}) async {
     if (isRunning) {
       throw StateError('A run is already in progress');
     }
@@ -192,6 +186,9 @@ class RunProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Freeze buff multiplier for this run
+      _buffService.freezeForRun();
+
       // Now start GPS tracking (this may take a moment)
       await _locationService.startTracking();
 
@@ -220,11 +217,6 @@ class RunProvider with ChangeNotifier {
       _isStartingRun = false; // No longer "starting", now actually running
       notifyListeners();
 
-      // Fetch crew multiplier in BACKGROUND (non-blocking)
-      if (crewId != null && _yesterdayCrewCount == 1) {
-        _fetchCrewMultiplierInBackground(crewId);
-      }
-
       // Listen to location updates for UI sync
       _locationSubscription = _locationService.locationStream.listen((point) {
         _activeRun = _runTracker.currentRun;
@@ -242,34 +234,19 @@ class RunProvider with ChangeNotifier {
     } on LocationPermissionException {
       _isStartingRun = false;
       _stopTimer();
+      _buffService.unfreezeAfterRun();
       await _locationService.stopTracking();
       notifyListeners();
       rethrow;
     } catch (e) {
       _isStartingRun = false;
       _stopTimer();
+      _buffService.unfreezeAfterRun();
       _setError('Failed to start run: $e');
       await _locationService.stopTracking();
       notifyListeners();
       rethrow;
     }
-  }
-
-  /// Fetches crew multiplier in background without blocking UI
-  void _fetchCrewMultiplierInBackground(String crewId) {
-    _supabaseService
-        .getYesterdayCrewCount(crewId)
-        .then((multiplier) {
-          _yesterdayCrewCount = multiplier > 0 ? multiplier : 1;
-          debugPrint(
-            'RunProvider: Fetched crew multiplier: $_yesterdayCrewCount',
-          );
-          notifyListeners(); // Update UI with multiplier
-        })
-        .catchError((e) {
-          debugPrint('RunProvider: Failed to fetch multiplier, using 1 - $e');
-          _yesterdayCrewCount = 1;
-        });
   }
 
   bool _handleHexCapture(String hexId, Team runnerTeam) {
@@ -280,11 +257,17 @@ class RunProvider with ChangeNotifier {
     );
 
     if (result == HexUpdateResult.flipped) {
-      final oldPoints = _pointsService?.currentPoints ?? 0;
-      _pointsService?.addRunPoints(1);
-      final newPoints = _pointsService?.currentPoints ?? 0;
+      final oldPoints = _pointsService?.todayFlipPoints ?? 0;
+
+      // Use buff multiplier from BuffService (frozen at run start)
+      final effectiveMultiplier = _buffService.getEffectiveMultiplier();
+      final pointsToAdd = effectiveMultiplier;
+
+      _pointsService?.addRunPoints(pointsToAdd);
+      final newPoints = _pointsService?.todayFlipPoints ?? 0;
       debugPrint(
-        'POINTS ADDED: $oldPoints -> $newPoints (pointsService=$_pointsService)',
+        'POINTS ADDED: $oldPoints -> $newPoints (hexId=$hexId, '
+        'effectiveMultiplier=$effectiveMultiplier, pointsService=$_pointsService)',
       );
       _eventController.add(RunEvent.pointEarned);
       notifyListeners();
@@ -318,6 +301,7 @@ class RunProvider with ChangeNotifier {
 
     try {
       _stopTimer();
+      _buffService.unfreezeAfterRun();
       final result = _runTracker.stopRun();
       await _locationService.stopTracking();
 
@@ -330,23 +314,40 @@ class RunProvider with ChangeNotifier {
         final completedRun = result.session.copyWith(cv: result.cv);
         final capturedHexIds = result.capturedHexIds;
 
+        // Calculate flip points for this run (hexes × multiplier)
+        final effectiveMultiplier = _buffService.getEffectiveMultiplier();
+        final flipPoints = completedRun.hexesColored * effectiveMultiplier;
+
         debugPrint(
           'RunProvider: Run completed - '
           'distance=${completedRun.distanceKm.toStringAsFixed(2)}km, '
           'flips=${completedRun.hexesColored}, '
+          'flipPoints=$flipPoints (multiplier=$effectiveMultiplier), '
           'stability=${completedRun.stabilityScore ?? "N/A"}, '
           'hexIds for sync: ${capturedHexIds.length}',
         );
 
-        // Save to local database (includes CV for stability score)
-        await _storageService.saveRun(completedRun);
+        // Save to local database with sync tracking for today's flip points
+        // Uses saveRunWithSyncTracking if storage is LocalStorage
+        final storageService = _storageService;
+        if (storageService is LocalStorage) {
+          await storageService.saveRunWithSyncTracking(
+            completedRun,
+            flipPoints: flipPoints,
+            cv: result.cv,
+          );
+        } else {
+          // Fallback for other storage implementations
+          await _storageService.saveRun(completedRun);
+        }
 
         // === THE FINAL SYNC ===
         // Upload run summary with hex captures to server
+        bool syncSucceeded = false;
         if (capturedHexIds.isNotEmpty) {
           try {
             final runSummary = completedRun.toSummary(
-              yesterdayCrewCount: _yesterdayCrewCount,
+              buffMultiplier: effectiveMultiplier,
             );
             final syncResult = await _supabaseService.finalizeRun(runSummary);
             debugPrint(
@@ -355,11 +356,22 @@ class RunProvider with ChangeNotifier {
               'points=${syncResult['points_earned']}, '
               'multiplier=${syncResult['multiplier']}',
             );
+            syncSucceeded = true;
           } catch (e) {
             // Log but don't fail - local data is already saved
             debugPrint('RunProvider: Final Sync failed - $e');
-            // TODO: Queue for retry on next app launch
+            // Run remains 'pending' in local DB for retry on next app launch
           }
+        } else {
+          // No hex captures = nothing to sync, mark as synced
+          syncSucceeded = true;
+        }
+
+        // Update sync status if Final Sync succeeded
+        if (syncSucceeded && storageService is LocalStorage) {
+          await storageService.updateRunSyncStatus(completedRun.id, 'synced');
+          // Notify points service that sync completed (for potential UI update)
+          _pointsService?.onRunSynced(flipPoints);
         }
 
         // Refresh history and stats

@@ -121,7 +121,7 @@ final result = await supabase.rpc('finalize_run', params: {
   'p_distance_km': distanceKm,
   'p_duration_seconds': durationSeconds,
   'p_hex_path': hexPath,
-  'p_yesterday_crew_count': yesterdayCount,
+  'p_buff_multiplier': buffMultiplier,
   'p_cv': cvValue,  // NEW: Optional CV data
 });
 ```

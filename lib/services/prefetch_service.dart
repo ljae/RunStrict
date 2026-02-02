@@ -4,7 +4,9 @@ import 'package:latlong2/latlong.dart';
 
 import '../config/h3_config.dart';
 import '../models/team.dart';
+import '../storage/local_storage.dart';
 import 'hex_service.dart';
+import 'season_service.dart';
 import 'supabase_service.dart';
 
 /// Status of the prefetch operation
@@ -127,9 +129,12 @@ class PrefetchService {
 
   final HexService _hexService = HexService();
   final SupabaseService _supabase = SupabaseService();
+  final LocalStorage _localStorage = LocalStorage();
 
   PrefetchStatus _status = PrefetchStatus.notStarted;
   String? _homeHex;
+  String? _seasonHomeHex;
+  String? _storedSeasonStartDate;
   DateTime? _lastPrefetchTime;
   String? _errorMessage;
 
@@ -137,10 +142,13 @@ class PrefetchService {
   final Map<String, CachedHex> _hexCache = {};
   final List<CachedLeaderboardEntry> _leaderboardCache = [];
 
-  // Pre-computed parent hexes for each scope
+  // Pre-computed parent hexes for each scope (location-based homeHex)
   String? _homeHexZone; // Res 8 parent
   String? _homeHexCity; // Res 6 parent
-  String? _homeHexAll; // Res 4 parent
+  String? _homeHexAll; // Res 5 parent
+
+  // Pre-computed parent hex for season home (used for leaderboard/multiplier)
+  String? _seasonHomeHexAll; // Res 5 parent of seasonHomeHex
 
   // ---------------------------------------------------------------------------
   // GETTERS
@@ -148,10 +156,13 @@ class PrefetchService {
 
   PrefetchStatus get status => _status;
   String? get homeHex => _homeHex;
+  String? get seasonHomeHex => _seasonHomeHex;
+  String? get seasonHomeHexAll => _seasonHomeHexAll;
   String? get errorMessage => _errorMessage;
   DateTime? get lastPrefetchTime => _lastPrefetchTime;
   bool get isInitialized => _status == PrefetchStatus.completed;
   bool get hasHomeHex => _homeHex != null;
+  bool get hasSeasonHomeHex => _seasonHomeHex != null;
 
   /// Get parent hex at specific scope level
   String? getHomeHexAtScope(GeographicScope scope) {
@@ -210,22 +221,24 @@ class PrefetchService {
       // Compute parent hexes for each scope
       _computeParentHexes();
 
+      // Step 1b: Handle season home hex (for leaderboard/multiplier)
+      await _handleSeasonHomeHex();
+
       // Step 2: Download hex data for All range
       await _downloadHexData();
 
       // Step 3: Download leaderboard data
       await _downloadLeaderboardData();
 
-      // Step 4: Download crew data (if user has crew)
-      // TODO: Implement crew data prefetch
-
       _lastPrefetchTime = DateTime.now();
       _status = PrefetchStatus.completed;
       debugPrint('PrefetchService: Initialization completed');
       debugPrint('  Home hex: $_homeHex');
+      debugPrint('  Season home hex: $_seasonHomeHex');
       debugPrint('  Zone parent: $_homeHexZone');
       debugPrint('  City parent: $_homeHexCity');
       debugPrint('  All parent: $_homeHexAll');
+      debugPrint('  Season All parent: $_seasonHomeHexAll');
       debugPrint('  Cached hexes: ${_hexCache.length}');
       debugPrint('  Cached leaderboard entries: ${_leaderboardCache.length}');
     } catch (e) {
@@ -279,6 +292,44 @@ class PrefetchService {
     _homeHexAll = _hexService.getScopeHexId(_homeHex!, GeographicScope.all);
   }
 
+  /// Handle season home hex logic for leaderboard/multiplier anchoring
+  Future<void> _handleSeasonHomeHex() async {
+    final seasonService = SeasonService();
+    final currentSeasonStart = seasonService.seasonStartDate
+        .toIso8601String()
+        .split('T')[0];
+
+    _storedSeasonStartDate = await _loadStoredSeasonStart();
+
+    final isNewSeason =
+        _storedSeasonStartDate == null ||
+        _storedSeasonStartDate != currentSeasonStart;
+
+    if (isNewSeason) {
+      _seasonHomeHex = _homeHex;
+      _seasonHomeHexAll = _hexService.getScopeHexId(
+        _seasonHomeHex!,
+        GeographicScope.all,
+      );
+      await _saveSeasonHomeHex(_seasonHomeHex!);
+      await _saveStoredSeasonStart(currentSeasonStart);
+      debugPrint(
+        'PrefetchService: New season detected - set seasonHomeHex: $_seasonHomeHex',
+      );
+    } else {
+      _seasonHomeHex = await _loadSeasonHomeHex();
+      if (_seasonHomeHex != null) {
+        _seasonHomeHexAll = _hexService.getScopeHexId(
+          _seasonHomeHex!,
+          GeographicScope.all,
+        );
+      }
+      debugPrint(
+        'PrefetchService: Same season - loaded seasonHomeHex: $_seasonHomeHex',
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // DATA DOWNLOAD
   // ---------------------------------------------------------------------------
@@ -287,10 +338,17 @@ class PrefetchService {
   Future<void> _downloadHexData() async {
     if (_homeHexAll == null) return;
 
+    // In debug mode, skip Supabase download - dummy data will be loaded separately
+    if (kDebugMode) {
+      debugPrint(
+        'PrefetchService: Skipping Supabase hex download (debug mode)',
+      );
+      return;
+    }
+
     debugPrint('PrefetchService: Downloading hex data for All range...');
 
     try {
-      // Call Supabase RPC to get all hexes in the All parent cell
       final result = await _supabase.client.rpc(
         'get_hexes_in_scope',
         params: {
@@ -318,7 +376,6 @@ class PrefetchService {
       debugPrint('PrefetchService: Downloaded ${_hexCache.length} hexes');
     } catch (e) {
       debugPrint('PrefetchService: Failed to download hex data - $e');
-      // Don't throw - allow partial success
     }
   }
 
@@ -394,6 +451,16 @@ class PrefetchService {
     }).toList();
   }
 
+  /// Check if a hex is within the user's home region (Res 5 parent).
+  ///
+  /// Check if hex is within the user's home region (Res 5 parent cell).
+  bool isInHomeRegion(String hexId) {
+    if (_seasonHomeHexAll == null) return true;
+
+    final hexParent = _hexService.getScopeHexId(hexId, GeographicScope.all);
+    return hexParent == _seasonHomeHexAll;
+  }
+
   // ---------------------------------------------------------------------------
   // REFRESH
   // ---------------------------------------------------------------------------
@@ -437,6 +504,25 @@ class PrefetchService {
     );
   }
 
+  /// Load dummy hex data directly into memory cache.
+  ///
+  /// Used for testing/demo purposes. Replaces any existing hex cache.
+  /// [hexData] - List of maps with 'hex_id', 'last_runner_team', 'last_updated'
+  void loadDummyHexData(List<Map<String, dynamic>> hexData) {
+    _hexCache.clear();
+    for (final hex in hexData) {
+      final teamName = hex['last_runner_team'] as String?;
+      _hexCache[hex['hex_id'] as String] = CachedHex(
+        hexId: hex['hex_id'] as String,
+        lastRunnerTeam: teamName != null ? Team.values.byName(teamName) : null,
+        lastUpdated: hex['last_updated'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(hex['last_updated'] as int)
+            : null,
+      );
+    }
+    debugPrint('PrefetchService: Loaded ${_hexCache.length} dummy hexes');
+  }
+
   // ---------------------------------------------------------------------------
   // PERSISTENCE
   // ---------------------------------------------------------------------------
@@ -447,17 +533,67 @@ class PrefetchService {
   Future<void> saveHomeHex(String homeHex) async {
     _homeHex = homeHex;
     _computeParentHexes();
-    // TODO: Save to SharedPreferences or SQLite
-    debugPrint('PrefetchService: Saved home hex: $homeHex');
+    try {
+      await _localStorage.saveHomeHex(homeHex);
+      debugPrint('PrefetchService: Saved home hex: $homeHex');
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to save home hex - $e');
+    }
   }
 
   /// Load home hex from persistent storage
   ///
   /// Called on app startup to restore home hex without GPS.
   Future<void> loadHomeHex() async {
-    // TODO: Load from SharedPreferences or SQLite
-    // For now, homeHex will be null and require GPS fix
     debugPrint('PrefetchService: Loading home hex from storage...');
+    try {
+      final storedHomeHex = await _localStorage.getHomeHex();
+      if (storedHomeHex != null) {
+        _homeHex = storedHomeHex;
+        _computeParentHexes();
+        debugPrint('PrefetchService: Loaded home hex: $storedHomeHex');
+      } else {
+        debugPrint('PrefetchService: No stored home hex found');
+      }
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to load home hex - $e');
+    }
+  }
+
+  Future<void> _saveSeasonHomeHex(String seasonHomeHex) async {
+    try {
+      await _localStorage.savePrefetchMeta('season_home_hex', seasonHomeHex);
+      debugPrint('PrefetchService: Saved seasonHomeHex: $seasonHomeHex');
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to save seasonHomeHex - $e');
+    }
+  }
+
+  Future<String?> _loadSeasonHomeHex() async {
+    try {
+      return await _localStorage.getPrefetchMeta('season_home_hex');
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to load seasonHomeHex - $e');
+      return null;
+    }
+  }
+
+  Future<void> _saveStoredSeasonStart(String seasonStart) async {
+    try {
+      await _localStorage.savePrefetchMeta('season_start_date', seasonStart);
+      debugPrint('PrefetchService: Saved season start: $seasonStart');
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to save season start - $e');
+    }
+  }
+
+  Future<String?> _loadStoredSeasonStart() async {
+    try {
+      return await _localStorage.getPrefetchMeta('season_start_date');
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to load season start - $e');
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -468,6 +604,9 @@ class PrefetchService {
   void reset() {
     _status = PrefetchStatus.notStarted;
     _homeHex = null;
+    _seasonHomeHex = null;
+    _seasonHomeHexAll = null;
+    _storedSeasonStartDate = null;
     _homeHexZone = null;
     _homeHexCity = null;
     _homeHexAll = null;
@@ -482,5 +621,14 @@ class PrefetchService {
     _homeHex = homeHex;
     _computeParentHexes();
     _status = PrefetchStatus.completed;
+  }
+
+  @visibleForTesting
+  void setSeasonHomeHexForTesting(String seasonHomeHex) {
+    _seasonHomeHex = seasonHomeHex;
+    _seasonHomeHexAll = _hexService.getScopeHexId(
+      seasonHomeHex,
+      GeographicScope.all,
+    );
   }
 }
