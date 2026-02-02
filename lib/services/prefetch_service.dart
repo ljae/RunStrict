@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../config/h3_config.dart';
 import '../models/team.dart';
+import '../repositories/hex_repository.dart';
 import '../storage/local_storage.dart';
 import 'hex_service.dart';
 import 'season_service.dart';
@@ -334,11 +335,9 @@ class PrefetchService {
   // DATA DOWNLOAD
   // ---------------------------------------------------------------------------
 
-  /// Download hex data for the entire "All" scope range
   Future<void> _downloadHexData() async {
     if (_homeHexAll == null) return;
 
-    // In debug mode, skip Supabase download - dummy data will be loaded separately
     if (kDebugMode) {
       debugPrint(
         'PrefetchService: Skipping Supabase hex download (debug mode)',
@@ -346,22 +345,71 @@ class PrefetchService {
       return;
     }
 
-    debugPrint('PrefetchService: Downloading hex data for All range...');
+    final repo = HexRepository();
+    final lastTime = await _loadLastPrefetchTime();
+    final isDelta = lastTime != null && _hexCache.isNotEmpty;
 
     try {
-      final result = await _supabase.client.rpc(
-        'get_hexes_in_scope',
-        params: {
-          'p_parent_hex': _homeHexAll,
-          'p_scope_resolution': GeographicScope.all.resolution,
-        },
+      final hexes = await _supabase.getHexesDelta(
+        _homeHexAll!,
+        sinceTime: isDelta ? lastTime : null,
       );
 
-      final hexes = result as List<dynamic>? ?? [];
-      _hexCache.clear();
+      if (isDelta) {
+        repo.mergeFromServer(hexes);
+        for (final hex in hexes) {
+          _hexCache[hex['hex_id'] as String] = CachedHex(
+            hexId: hex['hex_id'] as String,
+            lastRunnerTeam: hex['last_runner_team'] != null
+                ? Team.values.byName(hex['last_runner_team'] as String)
+                : null,
+            lastUpdated: hex['last_flipped_at'] != null
+                ? DateTime.parse(hex['last_flipped_at'] as String)
+                : null,
+          );
+        }
+        debugPrint(
+          'PrefetchService: Delta sync - ${hexes.length} hexes updated',
+        );
+      } else {
+        _hexCache.clear();
+        repo.bulkLoadFromServer(hexes);
+        for (final hex in hexes) {
+          _hexCache[hex['hex_id'] as String] = CachedHex(
+            hexId: hex['hex_id'] as String,
+            lastRunnerTeam: hex['last_runner_team'] != null
+                ? Team.values.byName(hex['last_runner_team'] as String)
+                : null,
+            lastUpdated: hex['last_flipped_at'] != null
+                ? DateTime.parse(hex['last_flipped_at'] as String)
+                : null,
+          );
+        }
+        debugPrint('PrefetchService: Full sync - ${_hexCache.length} hexes');
+      }
 
+      _lastPrefetchTime = DateTime.now();
+      await _saveLastPrefetchTime(_lastPrefetchTime!);
+    } catch (e) {
+      if (isDelta) {
+        debugPrint(
+          'PrefetchService: Delta sync failed, falling back to full - $e',
+        );
+        await _downloadHexDataFull();
+      } else {
+        debugPrint('PrefetchService: Failed to download hex data - $e');
+      }
+    }
+  }
+
+  Future<void> _downloadHexDataFull() async {
+    final repo = HexRepository();
+    try {
+      final hexes = await _supabase.getHexesDelta(_homeHexAll!);
+      _hexCache.clear();
+      repo.bulkLoadFromServer(hexes);
       for (final hex in hexes) {
-        final cachedHex = CachedHex(
+        _hexCache[hex['hex_id'] as String] = CachedHex(
           hexId: hex['hex_id'] as String,
           lastRunnerTeam: hex['last_runner_team'] != null
               ? Team.values.byName(hex['last_runner_team'] as String)
@@ -370,12 +418,14 @@ class PrefetchService {
               ? DateTime.parse(hex['last_flipped_at'] as String)
               : null,
         );
-        _hexCache[cachedHex.hexId] = cachedHex;
       }
-
-      debugPrint('PrefetchService: Downloaded ${_hexCache.length} hexes');
+      _lastPrefetchTime = DateTime.now();
+      await _saveLastPrefetchTime(_lastPrefetchTime!);
+      debugPrint(
+        'PrefetchService: Fallback full sync - ${_hexCache.length} hexes',
+      );
     } catch (e) {
-      debugPrint('PrefetchService: Failed to download hex data - $e');
+      debugPrint('PrefetchService: Fallback full sync failed - $e');
     }
   }
 
@@ -592,6 +642,28 @@ class PrefetchService {
       return await _localStorage.getPrefetchMeta('season_start_date');
     } catch (e) {
       debugPrint('PrefetchService: Failed to load season start - $e');
+      return null;
+    }
+  }
+
+  Future<void> _saveLastPrefetchTime(DateTime time) async {
+    try {
+      await _localStorage.savePrefetchMeta(
+        'last_prefetch_time',
+        time.toUtc().toIso8601String(),
+      );
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to save prefetch time - $e');
+    }
+  }
+
+  Future<DateTime?> _loadLastPrefetchTime() async {
+    try {
+      final value = await _localStorage.getPrefetchMeta('last_prefetch_time');
+      if (value == null) return null;
+      return DateTime.parse(value);
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to load prefetch time - $e');
       return null;
     }
   }

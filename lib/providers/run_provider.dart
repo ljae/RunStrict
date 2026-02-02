@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
-import '../models/run_session.dart';
+import '../models/run.dart';
 import '../models/location_point.dart';
 import '../services/location_service.dart';
 import '../services/run_tracker.dart';
@@ -36,8 +36,8 @@ class RunProvider with ChangeNotifier {
   final BuffService _buffService;
   PointsService? _pointsService;
 
-  RunSession? _activeRun;
-  List<RunSession> _runHistory = [];
+  Run? _activeRun;
+  List<Run> _runHistory = [];
   Map<String, dynamic>? _totalStats;
   bool _isLoading = false;
   String? _error;
@@ -75,8 +75,8 @@ class RunProvider with ChangeNotifier {
   }
 
   // Getters
-  RunSession? get activeRun => _activeRun;
-  List<RunSession> get runHistory => _runHistory;
+  Run? get activeRun => _activeRun;
+  List<Run> get runHistory => _runHistory;
   Map<String, dynamic>? get totalStats => _totalStats;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -97,7 +97,7 @@ class RunProvider with ChangeNotifier {
   /// Current speed in km/h or mph
   double get currentSpeed {
     if (!isRunning) return 0.0;
-    final paceMinPerKm = _activeRun?.paceMinPerKm ?? 0;
+    final paceMinPerKm = _activeRun?.avgPaceMinPerKm ?? 0;
     if (paceMinPerKm <= 0 || paceMinPerKm.isInfinite) return 0.0;
     final speedKmh = 60 / paceMinPerKm;
     return _isMetric ? speedKmh : speedKmh * 0.621371;
@@ -135,7 +135,7 @@ class RunProvider with ChangeNotifier {
   /// Formatted pace
   String get formattedPace {
     if (_activeRun == null) return '-:--';
-    final pace = _activeRun!.paceMinPerKm;
+    final pace = _activeRun!.avgPaceMinPerKm;
     if (pace == 0 || pace.isInfinite || pace.isNaN) return '-:--';
     final m = pace.floor();
     final s = ((pace - m) * 60).round();
@@ -342,14 +342,15 @@ class RunProvider with ChangeNotifier {
         }
 
         // === THE FINAL SYNC ===
-        // Upload run summary with hex captures to server
+        // Upload run with hex captures to server
         bool syncSucceeded = false;
         if (capturedHexIds.isNotEmpty) {
           try {
-            final runSummary = completedRun.toSummary(
+            // Update run with buff multiplier for sync
+            final runForSync = completedRun.copyWith(
               buffMultiplier: effectiveMultiplier,
             );
-            final syncResult = await _supabaseService.finalizeRun(runSummary);
+            final syncResult = await _supabaseService.finalizeRun(runForSync);
             debugPrint(
               'RunProvider: Final Sync completed - '
               'flips=${syncResult['flips']}, '

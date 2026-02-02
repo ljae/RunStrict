@@ -1,26 +1,29 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/user_model.dart';
 import '../models/team.dart';
+import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 
+/// AppStateProvider - Thin wrapper around UserRepository for Provider pattern.
+///
+/// Delegates user state to UserRepository (single source of truth).
+/// Manages UI concerns: loading state, error handling, auth service integration.
 class AppStateProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
-  static const String _userFileName = 'local_user.json';
+  final UserRepository _userRepository = UserRepository();
 
-  UserModel? _currentUser;
   bool _isLoading = false;
   String? _error;
   bool _isInitialized = false;
 
-  UserModel? get currentUser => _currentUser;
+  /// Current user from UserRepository (single source of truth)
+  UserModel? get currentUser => _userRepository.currentUser;
+
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasUser => _currentUser != null;
+  bool get hasUser => _userRepository.hasUser;
   bool get isInitialized => _isInitialized;
-  Team? get userTeam => _currentUser?.team;
+  Team? get userTeam => _userRepository.userTeam;
 
   /// Whether current user is linked to Supabase auth
   bool get isLinkedToAuth => _authService.isAuthenticated;
@@ -32,45 +35,19 @@ class AppStateProvider with ChangeNotifier {
   double get redPercentage => _redPercentage;
   double get bluePercentage => _bluePercentage;
 
-  // --- Local User Persistence ---
-
-  Future<File> get _localUserFile async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$_userFileName');
+  AppStateProvider() {
+    // Listen to UserRepository changes and forward notifications
+    _userRepository.addListener(_onUserRepositoryChanged);
   }
 
-  Future<void> _saveLocalUser() async {
-    if (_currentUser == null) return;
-    try {
-      final file = await _localUserFile;
-      await file.writeAsString(jsonEncode(_currentUser!.toJson()));
-      debugPrint('AppStateProvider: Local user saved');
-    } catch (e) {
-      debugPrint('AppStateProvider: Failed to save local user - $e');
-    }
+  void _onUserRepositoryChanged() {
+    notifyListeners();
   }
 
-  Future<UserModel?> _loadLocalUser() async {
-    try {
-      final file = await _localUserFile;
-      if (!await file.exists()) return null;
-      final contents = await file.readAsString();
-      return UserModel.fromJson(jsonDecode(contents));
-    } catch (e) {
-      debugPrint('AppStateProvider: Failed to load local user - $e');
-      return null;
-    }
-  }
-
-  Future<void> _deleteLocalUser() async {
-    try {
-      final file = await _localUserFile;
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (e) {
-      debugPrint('AppStateProvider: Failed to delete local user - $e');
-    }
+  @override
+  void dispose() {
+    _userRepository.removeListener(_onUserRepositoryChanged);
+    super.dispose();
   }
 
   /// Initialize app state - try to restore previous session
@@ -84,17 +61,16 @@ class AppStateProvider with ChangeNotifier {
       // First try Supabase session (for linked accounts)
       final authUser = await _authService.restoreSession();
       if (authUser != null) {
-        _currentUser = authUser;
+        await _userRepository.setUser(authUser);
         debugPrint(
           'AppStateProvider: Auth session restored for ${authUser.name}',
         );
       } else {
         // Fall back to local user (for unlinked accounts)
-        final localUser = await _loadLocalUser();
-        if (localUser != null) {
-          _currentUser = localUser;
+        await _userRepository.loadFromDisk();
+        if (_userRepository.currentUser != null) {
           debugPrint(
-            'AppStateProvider: Local user restored for ${localUser.name}',
+            'AppStateProvider: Local user restored for ${_userRepository.currentUser!.name}',
           );
         }
       }
@@ -110,9 +86,9 @@ class AppStateProvider with ChangeNotifier {
   }
 
   void setUser(UserModel user) {
-    _currentUser = user;
+    _userRepository.setUser(user);
     _error = null;
-    notifyListeners();
+    // notifyListeners() called via _onUserRepositoryChanged
   }
 
   /// Sign up new user with email/password (for future use)
@@ -133,7 +109,7 @@ class AppStateProvider with ChangeNotifier {
         username: username,
         team: team,
       );
-      _currentUser = user;
+      await _userRepository.setUser(user);
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -156,7 +132,7 @@ class AppStateProvider with ChangeNotifier {
 
     try {
       final user = await _authService.signIn(email: email, password: password);
-      _currentUser = user;
+      await _userRepository.setUser(user);
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -180,15 +156,16 @@ class AppStateProvider with ChangeNotifier {
       // Create local-only user for MVP (no Supabase auth required)
       // User ID is a UUID that will be used if they later sign up
       final localId = DateTime.now().millisecondsSinceEpoch.toString();
-      _currentUser = UserModel(
+      final user = UserModel(
         id: localId,
         name: username,
         team: team,
         seasonPoints: 0,
       );
 
+      await _userRepository.setUser(user);
       // Persist locally
-      await _saveLocalUser();
+      await _userRepository.saveToDisk();
 
       _error = null;
       debugPrint('AppStateProvider: Local user created - $localId');
@@ -209,7 +186,7 @@ class AppStateProvider with ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    if (_currentUser == null) {
+    if (_userRepository.currentUser == null) {
       throw StateError('No user to link');
     }
 
@@ -221,12 +198,14 @@ class AppStateProvider with ChangeNotifier {
       final user = await _authService.signUp(
         email: email,
         password: password,
-        username: _currentUser!.name,
-        team: _currentUser!.team,
+        username: _userRepository.currentUser!.name,
+        team: _userRepository.currentUser!.team,
       );
 
       // Update local user with server ID
-      _currentUser = user.copyWith(seasonPoints: _currentUser!.seasonPoints);
+      await _userRepository.setUser(
+        user.copyWith(seasonPoints: _userRepository.seasonPoints),
+      );
       _error = null;
       debugPrint('AppStateProvider: Account linked - ${user.id}');
     } catch (e) {
@@ -247,21 +226,21 @@ class AppStateProvider with ChangeNotifier {
 
   /// Update user's season points
   void updateSeasonPoints(int additionalPoints) {
-    if (_currentUser != null) {
-      _currentUser = _currentUser!.copyWith(
-        seasonPoints: _currentUser!.seasonPoints + additionalPoints,
-      );
-      _saveLocalUser(); // Persist change
-      notifyListeners();
+    if (_userRepository.currentUser != null) {
+      final newPoints = _userRepository.seasonPoints + additionalPoints;
+      _userRepository.updateSeasonPoints(newPoints);
+      _userRepository.saveToDisk(); // Persist change
+      // notifyListeners() called via _onUserRepositoryChanged
     }
   }
 
   /// Join Purple Team (The Traitor's Gate)
   /// Points are PRESERVED on defection.
   void defectToPurple() {
-    if (_currentUser != null && _currentUser!.team != Team.purple) {
-      _currentUser = _currentUser!.defectToPurple();
-      notifyListeners();
+    if (_userRepository.currentUser != null &&
+        _userRepository.userTeam != Team.purple) {
+      _userRepository.defectToPurple();
+      // notifyListeners() called via _onUserRepositoryChanged
     }
   }
 
@@ -287,14 +266,14 @@ class AppStateProvider with ChangeNotifier {
       }
 
       // Delete local user file
-      await _deleteLocalUser();
+      await _userRepository.deleteFromDisk();
 
-      _currentUser = null;
+      _userRepository.clear();
       _error = null;
     } catch (e) {
       debugPrint('AppStateProvider: Sign out failed - $e');
       // Still clear local state even if remote fails
-      _currentUser = null;
+      _userRepository.clear();
       _error = null;
     } finally {
       _isLoading = false;
@@ -304,13 +283,15 @@ class AppStateProvider with ChangeNotifier {
 
   /// Refresh user profile from server
   Future<void> refreshUserProfile() async {
-    if (_currentUser == null) return;
+    if (_userRepository.currentUser == null) return;
 
     try {
-      final user = await _authService.fetchUserProfile(_currentUser!.id);
+      final user = await _authService.fetchUserProfile(
+        _userRepository.currentUser!.id,
+      );
       if (user != null) {
-        _currentUser = user;
-        notifyListeners();
+        await _userRepository.setUser(user);
+        // notifyListeners() called via _onUserRepositoryChanged
       }
     } catch (e) {
       debugPrint('AppStateProvider: Failed to refresh profile - $e');
@@ -319,10 +300,10 @@ class AppStateProvider with ChangeNotifier {
 
   /// Update user profile on server
   Future<void> saveUserProfile() async {
-    if (_currentUser == null) return;
+    if (_userRepository.currentUser == null) return;
 
     try {
-      await _authService.updateUserProfile(_currentUser!);
+      await _authService.updateUserProfile(_userRepository.currentUser!);
     } catch (e) {
       debugPrint('AppStateProvider: Failed to save profile - $e');
       rethrow;

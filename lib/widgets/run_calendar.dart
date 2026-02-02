@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import '../models/run_session.dart';
+import '../models/run.dart';
 import '../theme/app_theme.dart';
 
 /// Display mode for the calendar - adapts shape based on period selection
@@ -18,7 +18,7 @@ enum CalendarDisplayMode { week, month, year }
 /// - Internal navigation (default): Widget manages its own navigation state
 /// - External navigation: Parent controls range via [externalRangeStart]/[externalRangeEnd]
 class RunCalendar extends StatefulWidget {
-  final List<RunSession> runs;
+  final List<Run> runs;
   final DateTime? selectedDate;
   final ValueChanged<DateTime>? onDateSelected;
   final ValueChanged<DateTime>? onMonthChanged;
@@ -103,19 +103,21 @@ class _RunCalendarState extends State<RunCalendar> {
   }
 
   /// Group runs by date (year-month-day key) in display timezone
-  Map<String, List<RunSession>> get _runsByDate {
-    final map = <String, List<RunSession>>{};
+  Map<String, List<Run>> get _runsByDate {
+    final map = <String, List<Run>>{};
     for (final run in widget.runs) {
-      final displayTime = _convertTime(run.startTime);
-      final key = _dateKey(displayTime);
-      map.putIfAbsent(key, () => []).add(run);
+      final dateKey = DateFormat('yyyy-MM-dd').format(run.startTime);
+      map.putIfAbsent(dateKey, () => []);
+      map[dateKey]!.add(run);
     }
     return map;
   }
 
-  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+  String _dateKey(DateTime date) {
+    return DateFormat('yyyy-MM-dd').format(date);
+  }
 
-  List<RunSession> _runsForDate(DateTime date) {
+  List<Run> _runsForDate(DateTime date) {
     return _runsByDate[_dateKey(date)] ?? [];
   }
 
@@ -746,7 +748,7 @@ class _RunCalendarState extends State<RunCalendar> {
 /// Shows runs for a selected date as a compact list.
 class SelectedDateRuns extends StatelessWidget {
   final DateTime date;
-  final List<RunSession> runs;
+  final List<Run> runs;
 
   /// Optional function to convert UTC time to display timezone.
   final DateTime Function(DateTime)? timezoneConverter;
@@ -828,7 +830,7 @@ class SelectedDateRuns extends StatelessWidget {
     );
   }
 
-  Widget _buildRunCard(RunSession run) {
+  Widget _buildRunCard(Run run) {
     final displayTime = _convertTime(run.startTime);
     final timeStr =
         '${displayTime.hour.toString().padLeft(2, '0')}:${displayTime.minute.toString().padLeft(2, '0')}';

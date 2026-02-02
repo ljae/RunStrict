@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../models/run_session.dart';
+import '../models/run.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/run_provider.dart';
 import '../theme/app_theme.dart';
@@ -413,8 +413,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   Widget _buildLandscapeLayout(
-    List<RunSession> allRuns,
-    List<RunSession> periodRuns,
+    List<Run> allRuns,
+    List<Run> periodRuns,
     double totalDistance,
     double avgPace,
     int totalPoints,
@@ -508,7 +508,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
-  Widget _buildCalendarContainer(List<RunSession> allRuns) {
+  Widget _buildCalendarContainer(List<Run> allRuns) {
     // Map period selection to calendar display mode
     // DAY → month calendar (to select a day)
     // WEEK → week view
@@ -578,7 +578,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   /// Build 5-year calendar view for YEAR period (with toggle)
-  Widget _buildFiveYearCalendarWithToggle(List<RunSession> allRuns) {
+  Widget _buildFiveYearCalendarWithToggle(List<Run> allRuns) {
     final currentYear = DateTime.now().year;
     final years = List.generate(5, (i) => currentYear - 4 + i);
 
@@ -1168,7 +1168,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
-  Widget _buildChartCard(List<RunSession> runs, HistoryPeriod period) {
+  Widget _buildChartCard(List<Run> runs, HistoryPeriod period) {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
       decoration: BoxDecoration(
@@ -1272,7 +1272,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     );
   }
 
-  Widget _buildChart(List<RunSession> runs, HistoryPeriod period) {
+  Widget _buildChart(List<Run> runs, HistoryPeriod period) {
     // Prepare data buckets for distance and pace
     final Map<int, double> distanceBuckets = {};
     final Map<int, double> durationBuckets = {}; // in minutes
@@ -1549,7 +1549,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     }
   }
 
-  Widget _buildRunTile(RunSession run) {
+  Widget _buildRunTile(Run run) {
     // Convert time to selected timezone for display
     final displayTime = _convertToDisplayTimezone(run.startTime);
 
@@ -1639,7 +1639,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     Icon(Icons.speed_rounded, size: 12, color: Colors.white30),
                     const SizedBox(width: 4),
                     Text(
-                      _formatPace(run.paceMinPerKm),
+                      _formatPace(run.avgPaceMinPerKm),
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         color: Colors.white38,
@@ -1737,7 +1737,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   }
 
   /// Build run list for entire range (when no specific day is selected)
-  Widget _buildRangeRunsList(List<RunSession> runs) {
+  Widget _buildRangeRunsList(List<Run> runs) {
     if (runs.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(24),
@@ -1892,7 +1892,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   /// Calculate weighted average stability score from runs
   /// Only includes runs >= 1km with valid stability scores
   /// Weight is based on distance (longer runs count more)
-  int? _calculateWeightedStability(List<RunSession> runs) {
+  int? _calculateWeightedStability(List<Run> runs) {
     double totalWeight = 0.0;
     double weightedSum = 0.0;
 
@@ -1909,7 +1909,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     return (weightedSum / totalWeight).round().clamp(0, 100);
   }
 
-  List<RunSession> _runsForDate(List<RunSession> runs, DateTime date) {
+  List<Run> _runsForDate(List<Run> runs, DateTime date) {
     return runs.where((run) {
       final displayTime = _convertToDisplayTimezone(run.startTime);
       return displayTime.year == date.year &&
@@ -1918,8 +1918,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     }).toList();
   }
 
-  List<RunSession> _filterRunsByPeriod(
-    List<RunSession> runs,
+  List<Run> _filterRunsByPeriod(
+    List<Run> runs,
     HistoryPeriod period,
   ) {
     // Filter runs by the current range boundaries (for chart/calendar)
@@ -1950,8 +1950,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   /// - WEEK: Selected week range (Sun-Sat)
   /// - MONTH: Current month only
   /// - YEAR: Current year only
-  List<RunSession> _filterRunsForStats(
-    List<RunSession> runs,
+  List<Run> _filterRunsForStats(
+    List<Run> runs,
     HistoryPeriod period,
   ) {
     final now = DateTime.now();

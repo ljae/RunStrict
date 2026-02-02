@@ -1,7 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import '../models/run_session.dart';
-import '../models/run_summary.dart';
+import '../models/run.dart';
 import '../models/location_point.dart';
 import '../models/lap_model.dart';
 import '../services/storage_service.dart';
@@ -23,8 +22,7 @@ class LocalStorage implements StorageService {
   LocalStorage._internal();
 
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion =
-      9; // Bumped for today flip points tracking
+  static const int _databaseVersion = 10; // Bumped to drop sync_queue table
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -317,22 +315,27 @@ class LocalStorage implements StorageService {
         // Index may already exist
       }
     }
+    if (oldVersion < 10) {
+      // Migrate from v9 to v10: drop sync_queue table (superseded by runs.sync_status)
+      try {
+        await db.execute('DROP TABLE IF EXISTS sync_queue');
+      } catch (e) {
+        // Table may not exist
+      }
+    }
   }
 
   @override
-  Future<void> saveRun(RunSession run) async {
+  Future<void> saveRun(Run run) async {
     if (_database == null) {
       throw StateError('Database not initialized. Call initialize() first.');
     }
 
-    // Convert to summary for storage
-    final summary = run.toSummary();
-
     await _database!.transaction((txn) async {
-      // Insert run summary
+      // Insert run
       await txn.insert(
         _tableRuns,
-        summary.toMap(),
+        run.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
@@ -350,10 +353,10 @@ class LocalStorage implements StorageService {
 
   /// Save a completed run with lap data for CV calculation
   ///
-  /// Stores run summary (including CV), route points, and individual lap data.
+  /// Stores run (including CV), route points, and individual lap data.
   /// Use this instead of [saveRun] when lap data is available.
   Future<void> saveRunWithLaps(
-    RunSession run,
+    Run run,
     List<LapModel> laps, {
     double? cv,
   }) async {
@@ -361,15 +364,15 @@ class LocalStorage implements StorageService {
       throw StateError('Database not initialized. Call initialize() first.');
     }
 
-    // Convert to summary and add CV
-    final summaryMap = run.toSummary().toMap();
-    summaryMap['cv'] = cv;
+    // Create run map with CV
+    final runMap = run.toMap();
+    runMap['cv'] = cv;
 
     await _database!.transaction((txn) async {
-      // Insert run summary with CV
+      // Insert run with CV
       await txn.insert(
         _tableRuns,
-        summaryMap,
+        runMap,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
@@ -414,8 +417,8 @@ class LocalStorage implements StorageService {
     }).toList();
   }
 
-  /// Get run summary by ID (includes CV)
-  Future<RunSummary?> getRunSummaryById(String id) async {
+  /// Get run by ID (includes CV)
+  Future<Run?> getRunById(String id) async {
     if (_database == null) {
       throw StateError('Database not initialized. Call initialize() first.');
     }
@@ -428,11 +431,11 @@ class LocalStorage implements StorageService {
     );
 
     if (runMaps.isEmpty) return null;
-    return RunSummary.fromMap(runMaps.first);
+    return Run.fromMap(runMaps.first);
   }
 
   @override
-  Future<List<RunSession>> getAllRuns() async {
+  Future<List<Run>> getAllRuns() async {
     if (_database == null) {
       throw StateError('Database not initialized. Call initialize() first.');
     }
@@ -442,28 +445,14 @@ class LocalStorage implements StorageService {
       orderBy: 'startTime DESC',
     );
 
-    // Return as RunSession for backward compatibility
+    // Return as Run
     // Routes are NOT loaded here (lazy loading)
-    // Note: Using endTime as startTime approximation for display purposes
     return runMaps.map((map) {
-      final summary = RunSummary.fromMap(map);
-      return RunSession(
-        id: summary.id,
-        startTime: summary.endTime.subtract(
-          Duration(seconds: summary.durationSeconds),
-        ),
-        endTime: summary.endTime,
-        distanceMeters: summary.distanceKm * 1000,
-        isActive: false,
-        teamAtRun: summary.teamAtRun,
-        hexesColored: summary.hexesColored,
-        cv: summary.cv,
-      );
+      return Run.fromMap(map);
     }).toList();
   }
 
-  @override
-  Future<RunSession?> getRunById(String id) async {
+  Future<Run?> getRunSummaryById(String id) async {
     if (_database == null) {
       throw StateError('Database not initialized. Call initialize() first.');
     }
@@ -477,22 +466,10 @@ class LocalStorage implements StorageService {
 
     if (runMaps.isEmpty) return null;
 
-    final summary = RunSummary.fromMap(runMaps.first);
+    final run = Run.fromMap(runMaps.first);
     final route = await _getRouteForRun(id);
 
-    return RunSession(
-      id: summary.id,
-      startTime: summary.endTime.subtract(
-        Duration(seconds: summary.durationSeconds),
-      ),
-      endTime: summary.endTime,
-      distanceMeters: summary.distanceKm * 1000,
-      route: route,
-      isActive: false,
-      teamAtRun: summary.teamAtRun,
-      hexesColored: summary.hexesColored,
-      cv: summary.cv,
-    );
+    return run.copyWith(route: route);
   }
 
   /// Get route points for a specific run (lazy loading)
@@ -748,103 +725,6 @@ class LocalStorage implements StorageService {
     });
   }
 
-  // ============ SYNC QUEUE METHODS (Offline Retry) ============
-
-  /// Queue a failed sync operation for retry.
-  ///
-  /// [runId] - Unique run ID (prevents duplicate queue entries)
-  /// [payload] - JSON string of RunSummary data to sync
-  /// [error] - Optional error message from the failed attempt
-  Future<void> queueSync(String runId, String payload, {String? error}) async {
-    if (_database == null) {
-      throw StateError('Database not initialized. Call initialize() first.');
-    }
-
-    await _database!.insert(_tableSyncQueue, {
-      'run_id': runId,
-      'payload': payload,
-      'created_at': DateTime.now().millisecondsSinceEpoch,
-      'retry_count': 0,
-      'last_error': error,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  /// Get all pending sync operations (oldest first).
-  ///
-  /// Returns list of maps with: run_id, payload, created_at, retry_count, last_error
-  Future<List<Map<String, dynamic>>> getPendingSyncs() async {
-    if (_database == null) {
-      throw StateError('Database not initialized. Call initialize() first.');
-    }
-
-    return await _database!.query(_tableSyncQueue, orderBy: 'created_at ASC');
-  }
-
-  /// Get count of pending sync operations.
-  Future<int> getPendingSyncCount() async {
-    if (_database == null) {
-      throw StateError('Database not initialized. Call initialize() first.');
-    }
-
-    final result = await _database!.rawQuery(
-      'SELECT COUNT(*) as count FROM $_tableSyncQueue',
-    );
-    return result.first['count'] as int? ?? 0;
-  }
-
-  /// Update retry count and error for a sync operation.
-  Future<void> updateSyncRetry(
-    String runId,
-    int retryCount,
-    String? error,
-  ) async {
-    if (_database == null) {
-      throw StateError('Database not initialized. Call initialize() first.');
-    }
-
-    await _database!.update(
-      _tableSyncQueue,
-      {'retry_count': retryCount, 'last_error': error},
-      where: 'run_id = ?',
-      whereArgs: [runId],
-    );
-  }
-
-  /// Remove a sync operation from the queue (after successful sync).
-  Future<void> removeSyncFromQueue(String runId) async {
-    if (_database == null) {
-      throw StateError('Database not initialized. Call initialize() first.');
-    }
-
-    await _database!.delete(
-      _tableSyncQueue,
-      where: 'run_id = ?',
-      whereArgs: [runId],
-    );
-  }
-
-  /// Remove old sync entries that have exceeded max retries.
-  ///
-  /// [maxRetries] - Maximum retry attempts before discarding (default: 5)
-  /// [maxAge] - Maximum age in days before discarding (default: 7)
-  Future<int> cleanupSyncQueue({int maxRetries = 5, int maxAge = 7}) async {
-    if (_database == null) {
-      throw StateError('Database not initialized. Call initialize() first.');
-    }
-
-    final cutoffTime = DateTime.now()
-        .subtract(Duration(days: maxAge))
-        .millisecondsSinceEpoch;
-
-    final deleted = await _database!.delete(
-      _tableSyncQueue,
-      where: 'retry_count >= ? OR created_at < ?',
-      whereArgs: [maxRetries, cutoffTime],
-    );
-
-    return deleted;
-  }
-
   // ============ TODAY FLIP POINTS TRACKING ============
 
   /// Save a run with sync tracking information for today's flip points.
@@ -854,7 +734,7 @@ class LocalStorage implements StorageService {
   /// [laps] - Optional lap data for CV calculation
   /// [cv] - Optional CV value (calculated from laps)
   Future<void> saveRunWithSyncTracking(
-    RunSession run, {
+    Run run, {
     required int flipPoints,
     List<LapModel>? laps,
     double? cv,
@@ -868,18 +748,18 @@ class LocalStorage implements StorageService {
       run.endTime ?? DateTime.now(),
     );
 
-    // Convert to summary and add tracking fields
-    final summaryMap = run.toSummary().toMap();
-    summaryMap['cv'] = cv;
-    summaryMap['sync_status'] = 'pending';
-    summaryMap['flip_points'] = flipPoints;
-    summaryMap['run_date'] = runDate;
+    // Create run map with tracking fields
+    final runMap = run.toMap();
+    runMap['cv'] = cv;
+    runMap['sync_status'] = 'pending';
+    runMap['flip_points'] = flipPoints;
+    runMap['run_date'] = runDate;
 
     await _database!.transaction((txn) async {
-      // Insert run summary with sync tracking
+      // Insert run with sync tracking
       await txn.insert(
         _tableRuns,
-        summaryMap,
+        runMap,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 

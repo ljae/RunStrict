@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../models/run_summary.dart';
+import '../models/run.dart';
 import '../models/route_point.dart';
 import '../models/daily_running_stat.dart';
 
@@ -28,18 +28,18 @@ abstract class DataManager {
   // ============ RUN HISTORY (COLD) ============
 
   /// Save completed run summary (without route)
-  Future<void> saveRunSummary(RunSummary summary);
+  Future<void> saveRunSummary(Run run);
 
   /// Get paginated run history
   /// [limit] - max items per page
   /// [offset] - skip this many items
-  Future<List<RunSummary>> getRunHistory({int limit = 20, int offset = 0});
+  Future<List<Run>> getRunHistory({int limit = 20, int offset = 0});
 
   /// Get run count (for pagination UI)
   Future<int> getRunCount();
 
   /// Get runs for a specific date range
-  Future<List<RunSummary>> getRunsInRange(DateTime start, DateTime end);
+  Future<List<Run>> getRunsInRange(DateTime start, DateTime end);
 
   // ============ ROUTE ARCHIVE (COLD) ============
 
@@ -125,7 +125,7 @@ class SeasonAggregate {
 
 /// In-memory implementation for MVP/testing
 class InMemoryDataManager implements DataManager {
-  final List<RunSummary> _runSummaries = [];
+  final List<Run> _runs = [];
   final Map<String, CompressedRoute> _routes = {};
   final Map<String, DailyRunningStat> _dailyStats = {};
   bool _initialized = false;
@@ -142,38 +142,36 @@ class InMemoryDataManager implements DataManager {
   }
 
   @override
-  Future<void> saveRunSummary(RunSummary summary) async {
+  Future<void> saveRunSummary(Run run) async {
     _checkInitialized();
     // Insert at beginning (newest first)
-    _runSummaries.insert(0, summary);
-    debugPrint('DataManager: Saved run summary ${summary.id}');
+    _runs.insert(0, run);
+    debugPrint('DataManager: Saved run ${run.id}');
   }
 
   @override
-  Future<List<RunSummary>> getRunHistory({
-    int limit = 20,
-    int offset = 0,
-  }) async {
+  Future<List<Run>> getRunHistory({int limit = 20, int offset = 0}) async {
     _checkInitialized();
-    if (offset >= _runSummaries.length) return [];
-    final end = (offset + limit).clamp(0, _runSummaries.length);
-    return _runSummaries.sublist(offset, end);
+    if (offset >= _runs.length) return [];
+    final end = (offset + limit).clamp(0, _runs.length);
+    return _runs.sublist(offset, end);
   }
 
   @override
   Future<int> getRunCount() async {
     _checkInitialized();
-    return _runSummaries.length;
+    return _runs.length;
   }
 
   @override
-  Future<List<RunSummary>> getRunsInRange(DateTime start, DateTime end) async {
+  Future<List<Run>> getRunsInRange(DateTime start, DateTime end) async {
     _checkInitialized();
-    return _runSummaries
+    return _runs
         .where(
           (r) =>
-              r.endTime.isAfter(start.subtract(const Duration(seconds: 1))) &&
-              r.endTime.isBefore(end.add(const Duration(seconds: 1))),
+              r.endTime != null &&
+              r.endTime!.isAfter(start.subtract(const Duration(seconds: 1))) &&
+              r.endTime!.isBefore(end.add(const Duration(seconds: 1))),
         )
         .toList();
   }

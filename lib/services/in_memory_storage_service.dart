@@ -1,9 +1,9 @@
 import 'storage_service.dart';
-import '../models/run_session.dart';
+import '../models/run.dart';
 
 /// In-memory implementation of StorageService for MVP/Testing
 class InMemoryStorageService implements StorageService {
-  final List<RunSession> _runs = [];
+  final List<Run> _runs = [];
   bool _isInitialized = false;
 
   @override
@@ -12,7 +12,7 @@ class InMemoryStorageService implements StorageService {
   }
 
   @override
-  Future<void> saveRun(RunSession run) async {
+  Future<void> saveRun(Run run) async {
     _checkInitialized();
     // Replace if exists, otherwise add
     final index = _runs.indexWhere((r) => r.id == run.id);
@@ -24,13 +24,13 @@ class InMemoryStorageService implements StorageService {
   }
 
   @override
-  Future<List<RunSession>> getAllRuns() async {
+  Future<List<Run>> getAllRuns() async {
     _checkInitialized();
     return List.from(_runs);
   }
 
   @override
-  Future<RunSession?> getRunById(String id) async {
+  Future<Run?> getRunById(String id) async {
     _checkInitialized();
     try {
       return _runs.firstWhere((r) => r.id == id);

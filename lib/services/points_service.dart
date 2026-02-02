@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import '../repositories/user_repository.dart';
 import '../storage/local_storage.dart';
 
 /// Manages flip points with hybrid calculation for today's points.
 ///
+/// Season points delegate to UserRepository (single source of truth).
 /// Today's flip points = server baseline + local unsynced runs
 ///
 /// This architecture handles:
@@ -10,7 +12,7 @@ import '../storage/local_storage.dart';
 /// - Multi-device scenarios (server has other device's synced runs)
 /// - Local runs that haven't synced yet
 class PointsService extends ChangeNotifier {
-  int _seasonPoints;
+  final UserRepository _userRepository = UserRepository();
   int _serverTodayBaseline; // From app_launch_sync (synced runs only)
   int _localUnsyncedToday; // From local DB (pending sync runs)
 
@@ -20,12 +22,29 @@ class PointsService extends ChangeNotifier {
     int initialPoints = 0,
     int todayPoints = 0,
     LocalStorage? localStorage,
-  }) : _seasonPoints = initialPoints,
-       _serverTodayBaseline = todayPoints,
+  }) : _serverTodayBaseline = todayPoints,
        _localUnsyncedToday = 0,
-       _localStorage = localStorage ?? LocalStorage();
+       _localStorage = localStorage ?? LocalStorage() {
+    // Initialize UserRepository if initial points provided
+    if (initialPoints > 0) {
+      _userRepository.updateSeasonPoints(initialPoints);
+    }
+    // Listen to UserRepository changes and forward notifications
+    _userRepository.addListener(_onUserRepositoryChanged);
+  }
 
-  int get seasonPoints => _seasonPoints;
+  void _onUserRepositoryChanged() {
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _userRepository.removeListener(_onUserRepositoryChanged);
+    super.dispose();
+  }
+
+  /// Season points from UserRepository (single source of truth)
+  int get seasonPoints => _userRepository.seasonPoints;
 
   /// Today's flip points using hybrid calculation.
   /// = server baseline (synced runs) + local unsynced runs
@@ -37,14 +56,14 @@ class PointsService extends ChangeNotifier {
   /// Add points from a run (updates both season and local unsynced today).
   /// Called during active runs when hexes are flipped.
   void addRunPoints(int points) {
-    _seasonPoints += points;
+    _userRepository.updateSeasonPoints(seasonPoints + points);
     _localUnsyncedToday += points;
-    notifyListeners();
+    // notifyListeners() called via _onUserRepositoryChanged
   }
 
   void setSeasonPoints(int points) {
-    _seasonPoints = points;
-    notifyListeners();
+    _userRepository.updateSeasonPoints(points);
+    // notifyListeners() called via _onUserRepositoryChanged
   }
 
   /// Set the server baseline for today's flip points.
@@ -89,8 +108,8 @@ class PointsService extends ChangeNotifier {
 
   @Deprecated('Use setSeasonPoints instead')
   void setPoints(int points) {
-    _seasonPoints = points;
-    notifyListeners();
+    _userRepository.updateSeasonPoints(points);
+    // notifyListeners() called via _onUserRepositoryChanged
   }
 
   @Deprecated('Use setServerTodayBaseline + refreshLocalUnsyncedPoints instead')
@@ -101,10 +120,10 @@ class PointsService extends ChangeNotifier {
   }
 
   void resetForNewSeason() {
-    _seasonPoints = 0;
+    _userRepository.updateSeasonPoints(0);
     _serverTodayBaseline = 0;
     _localUnsyncedToday = 0;
-    notifyListeners();
+    // notifyListeners() called via _onUserRepositoryChanged
   }
 
   void resetTodayPoints() {

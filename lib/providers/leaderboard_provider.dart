@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../config/h3_config.dart';
 import '../models/team.dart';
+import '../repositories/leaderboard_repository.dart';
 import '../services/hex_service.dart';
 import '../services/prefetch_service.dart';
 import '../services/supabase_service.dart';
@@ -70,25 +71,42 @@ class LeaderboardEntry {
   }
 }
 
+/// LeaderboardProvider - Thin wrapper around LeaderboardRepository for Provider pattern.
+///
+/// Delegates leaderboard state to LeaderboardRepository (single source of truth).
+/// Manages UI concerns: loading state, error handling, Supabase fetching.
 class LeaderboardProvider with ChangeNotifier {
   final SupabaseService _supabaseService;
   final PrefetchService _prefetchService;
+  final LeaderboardRepository _leaderboardRepository = LeaderboardRepository();
 
-  List<LeaderboardEntry> _entries = [];
   bool _isLoading = false;
   String? _error;
-  DateTime? _lastFetch;
 
   LeaderboardProvider({
     SupabaseService? supabaseService,
     PrefetchService? prefetchService,
   }) : _supabaseService = supabaseService ?? SupabaseService(),
-       _prefetchService = prefetchService ?? PrefetchService();
+       _prefetchService = prefetchService ?? PrefetchService() {
+    // Listen to LeaderboardRepository changes and forward notifications
+    _leaderboardRepository.addListener(_onRepositoryChanged);
+  }
 
-  List<LeaderboardEntry> get entries => _entries;
+  void _onRepositoryChanged() {
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _leaderboardRepository.removeListener(_onRepositoryChanged);
+    super.dispose();
+  }
+
+  /// Entries from LeaderboardRepository (single source of truth)
+  List<LeaderboardEntry> get entries => _leaderboardRepository.entries;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasData => _entries.isNotEmpty;
+  bool get hasData => _leaderboardRepository.hasData;
 
   Future<void> fetchLeaderboard({
     int limit = 50,
@@ -96,10 +114,8 @@ class LeaderboardProvider with ChangeNotifier {
   }) async {
     if (_isLoading) return;
 
-    final now = DateTime.now();
-    if (!forceRefresh &&
-        _lastFetch != null &&
-        now.difference(_lastFetch!).inSeconds < 30) {
+    // Use repository's throttle check
+    if (!forceRefresh && !_leaderboardRepository.canRefresh) {
       return;
     }
 
@@ -110,11 +126,13 @@ class LeaderboardProvider with ChangeNotifier {
     try {
       final result = await _supabaseService.getLeaderboard(limit: limit);
 
-      _entries = result.asMap().entries.map((entry) {
+      final newEntries = result.asMap().entries.map((entry) {
         return LeaderboardEntry.fromJson(entry.value, entry.key + 1);
       }).toList();
 
-      _lastFetch = now;
+      // Store in repository (single source of truth)
+      _leaderboardRepository.loadEntries(newEntries);
+      _leaderboardRepository.markFetched();
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -126,8 +144,8 @@ class LeaderboardProvider with ChangeNotifier {
   }
 
   List<LeaderboardEntry> filterByTeam(Team? team) {
-    if (team == null) return _entries;
-    return _entries.where((e) => e.team == team).toList();
+    if (team == null) return entries;
+    return entries.where((e) => e.team == team).toList();
   }
 
   /// Filter entries by geographic scope using home hex anchoring.
@@ -138,7 +156,7 @@ class LeaderboardProvider with ChangeNotifier {
   /// For [GeographicScope.all], returns all entries (no geographic filter).
   List<LeaderboardEntry> filterByScope(GeographicScope scope) {
     // All scope means no geographic filtering
-    if (scope == GeographicScope.all) return _entries;
+    if (scope == GeographicScope.all) return entries;
 
     final referenceHex =
         _prefetchService.seasonHomeHex ?? _prefetchService.homeHex;
@@ -146,10 +164,10 @@ class LeaderboardProvider with ChangeNotifier {
       debugPrint(
         'LeaderboardProvider: No season/home hex set, returning all entries',
       );
-      return _entries;
+      return entries;
     }
 
-    return _entries.where((e) => e.isInScope(referenceHex, scope)).toList();
+    return entries.where((e) => e.isInScope(referenceHex, scope)).toList();
   }
 
   /// Filter entries by both team and scope.
@@ -167,7 +185,7 @@ class LeaderboardProvider with ChangeNotifier {
   }
 
   int? getUserRank(String userId) {
-    final index = _entries.indexWhere((e) => e.id == userId);
+    final index = entries.indexWhere((e) => e.id == userId);
     return index >= 0 ? index + 1 : null;
   }
 
@@ -182,17 +200,16 @@ class LeaderboardProvider with ChangeNotifier {
 
   LeaderboardEntry? getUser(String userId) {
     try {
-      return _entries.firstWhere((e) => e.id == userId);
+      return entries.firstWhere((e) => e.id == userId);
     } catch (_) {
       return null;
     }
   }
 
   void clear() {
-    _entries = [];
-    _lastFetch = null;
+    _leaderboardRepository.clear();
     _error = null;
-    notifyListeners();
+    // notifyListeners() called via _onRepositoryChanged
   }
 
   /// Refresh leaderboard data (force fetch, bypasses cache).

@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
-import '../models/run_summary.dart';
+import '../models/run.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -24,7 +24,7 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(result as List);
   }
 
-  Future<Map<String, dynamic>> finalizeRun(RunSummary runSummary) async {
+  Future<Map<String, dynamic>> finalizeRun(Run run) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) {
       throw Exception('User not authenticated');
@@ -34,13 +34,13 @@ class SupabaseService {
       'finalize_run',
       params: {
         'p_user_id': userId,
-        'p_start_time': runSummary.startTime.toIso8601String(),
-        'p_end_time': runSummary.endTime.toIso8601String(),
-        'p_distance_km': runSummary.distanceKm,
-        'p_duration_seconds': runSummary.durationSeconds,
-        'p_hex_path': runSummary.hexPath,
-        'p_buff_multiplier': runSummary.buffMultiplier,
-        'p_cv': runSummary.cv,
+        'p_start_time': run.startTime.toIso8601String(),
+        'p_end_time': run.endTime?.toIso8601String(),
+        'p_distance_km': run.distanceKm,
+        'p_duration_seconds': run.durationSeconds,
+        'p_hex_path': run.hexPath,
+        'p_buff_multiplier': run.buffMultiplier,
+        'p_cv': run.cv,
       },
     );
     return result as Map<String, dynamic>;
@@ -99,5 +99,19 @@ class SupabaseService {
       params: {'p_city_hex': cityHex},
     );
     return result as Map<String, dynamic>? ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> getHexesDelta(
+    String parentHex, {
+    DateTime? sinceTime,
+  }) async {
+    final result = await client.rpc(
+      'get_hexes_delta',
+      params: {
+        'p_parent_hex': parentHex,
+        'p_since_time': sinceTime?.toUtc().toIso8601String(),
+      },
+    );
+    return List<Map<String, dynamic>>.from(result as List? ?? []);
   }
 }

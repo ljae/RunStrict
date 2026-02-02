@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/location_point.dart';
-import '../models/run_session.dart';
+import '../models/run.dart';
 import '../models/team.dart';
 import '../models/lap_model.dart';
 import '../services/gps_validator.dart';
@@ -21,7 +21,7 @@ typedef TierChangeCallback =
 
 /// Result of stopping a run, including data for "The Final Sync"
 class RunStopResult {
-  final RunSession session;
+  final Run session;
   final List<String> capturedHexIds;
   final double? cv;
   final int? stabilityScore;
@@ -49,7 +49,7 @@ class RunTracker {
   static double get _captureCheckDistanceMeters =>
       RemoteConfigService().configSnapshot.hexConfig.captureCheckDistanceMeters;
 
-  RunSession? _currentRun;
+  Run? _currentRun;
   LocationPoint? _lastValidPoint;
   StreamSubscription<LocationPoint>? _locationSubscription;
 
@@ -80,7 +80,7 @@ class RunTracker {
   int? _currentLapStartTimestampMs;
 
   /// Get the current active run session
-  RunSession? get currentRun => _currentRun;
+  Run? get currentRun => _currentRun;
 
   /// Get current impact tier
   ImpactTier get currentTier => _currentTier;
@@ -100,7 +100,7 @@ class RunTracker {
   /// Get current running score state
   RunningScoreState get scoreState => RunningScoreState(
     totalDistanceKm: (_currentRun?.distanceMeters ?? 0) / 1000,
-    currentPaceMinPerKm: _currentRun?.paceMinPerKm ?? 7.0,
+    currentPaceMinPerKm: _currentRun?.avgPaceMinPerKm ?? 7.0,
     currentHexId: _currentRun?.currentHexId,
     flipCount: _currentRun?.hexesColored ?? 0,
   );
@@ -143,13 +143,14 @@ class RunTracker {
     // Start accelerometer for anti-spoofing
     _accelerometerService.startListening();
 
-    _currentRun = RunSession(
+    _currentRun = Run(
       id: runId,
       startTime: DateTime.now(),
       distanceMeters: 0,
       isActive: true,
       teamAtRun: team ?? Team.blue,
       hexesColored: 0,
+      durationSeconds: 0,
     );
 
     _lastValidPoint = null;

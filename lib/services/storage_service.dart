@@ -1,4 +1,4 @@
-import '../models/run_session.dart';
+import '../models/run.dart';
 
 /// Abstract interface for data persistence
 /// This allows easy swapping between SQLite (MVP) and Firebase (future)
@@ -6,16 +6,16 @@ abstract class StorageService {
   /// Initialize the storage service
   Future<void> initialize();
 
-  /// Save a completed run session
-  Future<void> saveRun(RunSession run);
+  /// Save a completed run
+  Future<void> saveRun(Run run);
 
-  /// Get all run sessions, sorted by date (newest first)
-  Future<List<RunSession>> getAllRuns();
+  /// Get all runs, sorted by date (newest first)
+  Future<List<Run>> getAllRuns();
 
-  /// Get a specific run session by ID
-  Future<RunSession?> getRunById(String id);
+  /// Get a specific run by ID
+  Future<Run?> getRunById(String id);
 
-  /// Delete a run session
+  /// Delete a run
   Future<void> deleteRun(String id);
 
   /// Get total statistics
