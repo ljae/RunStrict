@@ -104,51 +104,80 @@ class Run {
     }
   }
 
-  /// Mark run as complete
+  /// Mark run as complete and record end time
   void complete() {
     isActive = false;
+    endTime = DateTime.now();
   }
 
   // SERIALIZATION
 
   /// For local SQLite storage (milliseconds epoch)
+  /// Note: Database stores distanceKm (not meters) for backward compatibility
+  /// SQLite only supports: num, String, Uint8List (NOT List, bool, Map)
   Map<String, dynamic> toMap() => {
     'id': id,
     'startTime': startTime.millisecondsSinceEpoch,
-    'endTime': endTime?.millisecondsSinceEpoch,
-    'distanceMeters': distanceMeters,
+    'endTime':
+        endTime?.millisecondsSinceEpoch ?? startTime.millisecondsSinceEpoch,
+    'distanceKm': distanceMeters / 1000, // Convert meters to km for DB
     'durationSeconds': durationSeconds,
+    'avgPaceSecPerKm': avgPaceMinPerKm * 60, // Convert min/km to sec/km for DB
     'hexesColored': hexesColored,
     'teamAtRun': teamAtRun.name,
-    'hexPath': hexPath,
-    'buffMultiplier': buffMultiplier,
+    'isPurpleRunner': teamAtRun == Team.purple ? 1 : 0, // Legacy field
     'cv': cv,
-    'syncStatus': syncStatus,
-    'currentHexId': currentHexId,
-    'distanceInCurrentHex': distanceInCurrentHex,
-    'isActive': isActive,
+    'sync_status': syncStatus,
+    'flip_points': flipPoints,
   };
 
   /// From local SQLite storage
-  factory Run.fromMap(Map<String, dynamic> map) => Run(
-    id: map['id'] as String,
-    startTime: DateTime.fromMillisecondsSinceEpoch(map['startTime'] as int),
-    endTime: map['endTime'] != null
+  /// Note: Database stores distanceKm (not meters) for backward compatibility
+  factory Run.fromMap(Map<String, dynamic> map) {
+    // Handle both distanceKm (old DB) and distanceMeters (new format)
+    double distanceMeters;
+    if (map['distanceKm'] != null) {
+      distanceMeters = (map['distanceKm'] as num).toDouble() * 1000; // km to m
+    } else if (map['distanceMeters'] != null) {
+      distanceMeters = (map['distanceMeters'] as num).toDouble();
+    } else {
+      distanceMeters = 0;
+    }
+
+    // Parse timestamps
+    final startTime = DateTime.fromMillisecondsSinceEpoch(
+      map['startTime'] as int,
+    );
+    final endTime = map['endTime'] != null
         ? DateTime.fromMillisecondsSinceEpoch(map['endTime'] as int)
-        : null,
-    distanceMeters: (map['distanceMeters'] as num).toDouble(),
-    durationSeconds: (map['durationSeconds'] as num).toInt(),
-    hexesColored: (map['hexesColored'] as num?)?.toInt() ?? 0,
-    teamAtRun: Team.values.byName(map['teamAtRun'] as String),
-    hexPath: List<String>.from(map['hexPath'] as List? ?? []),
-    buffMultiplier: (map['buffMultiplier'] as num?)?.toInt() ?? 1,
-    cv: (map['cv'] as num?)?.toDouble(),
-    syncStatus: map['syncStatus'] as String? ?? 'pending',
-    currentHexId: map['currentHexId'] as String?,
-    distanceInCurrentHex:
-        (map['distanceInCurrentHex'] as num?)?.toDouble() ?? 0,
-    isActive: (map['isActive'] as bool?) ?? false,
-  );
+        : null;
+
+    // Get durationSeconds from DB, or calculate from timestamps
+    int durationSeconds;
+    if (map['durationSeconds'] != null) {
+      durationSeconds = (map['durationSeconds'] as num).toInt();
+    } else if (endTime != null) {
+      durationSeconds = endTime.difference(startTime).inSeconds;
+    } else {
+      durationSeconds = 0;
+    }
+
+    return Run(
+      id: map['id'] as String,
+      startTime: startTime,
+      endTime: endTime,
+      distanceMeters: distanceMeters,
+      durationSeconds: durationSeconds,
+      hexesColored: (map['hexesColored'] as num?)?.toInt() ?? 0,
+      teamAtRun: Team.values.byName(map['teamAtRun'] as String),
+      buffMultiplier: (map['buffMultiplier'] as num?)?.toInt() ?? 1,
+      cv: (map['cv'] as num?)?.toDouble(),
+      syncStatus:
+          map['sync_status'] as String? ??
+          map['syncStatus'] as String? ??
+          'pending',
+    );
+  }
 
   /// To Supabase row (snake_case) for finalize_run RPC
   /// CRITICAL: Must match RunSummary.toRow() format for server sync

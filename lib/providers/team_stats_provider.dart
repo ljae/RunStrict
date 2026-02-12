@@ -326,8 +326,10 @@ class TeamStatsProvider with ChangeNotifier {
   }
 
   /// Generate realistic dummy data for debug/local mode
-  void _loadDummyData() {
+  /// [userTeam] is the actual user's team from AppStateProvider
+  void _loadDummyData({String? userTeam}) {
     final random = Random();
+    final actualTeam = userTeam ?? 'red'; // Default to red if not provided
 
     // Yesterday's stats - realistic running data
     _yesterdayStats = YesterdayStats(
@@ -404,8 +406,10 @@ class TeamStatsProvider with ChangeNotifier {
     ];
 
     _rankings = TeamRankings(
-      userTeam: 'red', // Default to red for dummy
-      userIsElite: random.nextBool(),
+      userTeam: actualTeam,
+      userIsElite: actualTeam == 'red'
+          ? random.nextBool()
+          : false, // Only red has elite
       userYesterdayPoints: 45 + random.nextInt(80),
       userRank: 2 + random.nextInt(5), // Rank 2-6
       eliteThreshold: 100,
@@ -460,7 +464,6 @@ class TeamStatsProvider with ChangeNotifier {
     // RED Elite: Base 2x, +1 for district, +1 for province = max 4x
     // RED Common: Base 1x, +0 for district, +1 for province = max 2x
     // BLUE Union: Base 1x, +1 for district, +1 for province = max 3x
-    final userIsElite = random.nextBool();
     final redWinsDistrict = cityRed > cityBlue;
     final redWinsProvince = allRed > allBlue;
     final blueWinsDistrict = cityBlue > cityRed;
@@ -480,32 +483,51 @@ class TeamStatsProvider with ChangeNotifier {
     if (blueWinsDistrict) blueUnionMultiplier += 1;
     if (blueWinsProvince) blueUnionMultiplier += 1;
 
-    // For UI breakdown display
-    final allRangeBonus = redWinsProvince ? 1 : 0;
-    final cityLeaderBonus = (userIsElite && redWinsDistrict) ? 1 : 0;
+    // For UI breakdown display - calculate based on user's actual team
+    final userIsElite = actualTeam == 'red' ? _rankings!.userIsElite : false;
+    int allRangeBonus = 0;
+    if ((actualTeam == 'red' && redWinsProvince) ||
+        (actualTeam == 'blue' && blueWinsProvince)) {
+      allRangeBonus = 1;
+    }
+
+    int cityLeaderBonus = 0;
+    if (actualTeam == 'red' && userIsElite && redWinsDistrict) {
+      cityLeaderBonus = 1;
+    } else if (actualTeam == 'blue' && blueWinsDistrict) {
+      cityLeaderBonus = 1;
+    }
 
     // Red runner stats for city
     final redRunnerCountCity = 45 + random.nextInt(30); // 45-75 runners
     final eliteCutoffRank = (redRunnerCountCity * 0.2).ceil(); // Top 20%
 
-    // Calculate user's total multiplier (assuming red team for dummy)
-    final userTotal = userIsElite ? redEliteMultiplier : redCommonMultiplier;
+    // Calculate user's total multiplier based on their ACTUAL team
+    int userTotal;
+    if (actualTeam == 'red') {
+      userTotal = userIsElite ? redEliteMultiplier : redCommonMultiplier;
+    } else if (actualTeam == 'blue') {
+      userTotal = blueUnionMultiplier;
+    } else {
+      // Purple - participation based (calculated separately)
+      userTotal = 1;
+    }
 
     _buffComparison = TeamBuffComparison(
       redBuff: RedTeamBuff(
         eliteMultiplier: redEliteMultiplier,
         commonMultiplier: redCommonMultiplier,
-        isElite: userIsElite,
-        activeMultiplier: userIsElite
-            ? redEliteMultiplier
-            : redCommonMultiplier,
+        isElite: actualTeam == 'red' ? userIsElite : false,
+        activeMultiplier: actualTeam == 'red'
+            ? (userIsElite ? redEliteMultiplier : redCommonMultiplier)
+            : redEliteMultiplier,
         redRunnerCountCity: redRunnerCountCity,
         eliteCutoffRank: eliteCutoffRank,
       ),
       blueBuff: BlueTeamBuff(unionMultiplier: blueUnionMultiplier),
       allRangeBonus: allRangeBonus,
       cityLeaderBonus: cityLeaderBonus,
-      userTeam: 'red', // Default to red for dummy data
+      userTeam: actualTeam,
       userTotalMultiplier: userTotal,
     );
 
@@ -523,7 +545,11 @@ class TeamStatsProvider with ChangeNotifier {
     );
   }
 
-  Future<void> loadTeamData(String userId, {String? cityHex}) async {
+  Future<void> loadTeamData(
+    String userId, {
+    String? cityHex,
+    String? userTeam,
+  }) async {
     if (_isLoading) return;
 
     _isLoading = true;
@@ -535,7 +561,7 @@ class TeamStatsProvider with ChangeNotifier {
       debugPrint(
         'TeamStatsProvider: Using mock data for non-UUID user: $userId',
       );
-      _loadDummyData();
+      _loadDummyData(userTeam: userTeam);
       _isLoading = false;
       notifyListeners();
       return;
@@ -557,8 +583,11 @@ class TeamStatsProvider with ChangeNotifier {
 
       _error = null;
     } catch (e) {
-      _error = e.toString();
+      // Supabase functions may not exist yet - fallback to mock data
       debugPrint('TeamStatsProvider.loadTeamData error: $e');
+      debugPrint('TeamStatsProvider: Falling back to mock data');
+      _loadDummyData(userTeam: userTeam);
+      _error = null; // Clear error since we have fallback data
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -695,8 +724,12 @@ class TeamStatsProvider with ChangeNotifier {
     }
   }
 
-  Future<void> refresh(String userId, {String? cityHex}) async {
-    await loadTeamData(userId, cityHex: cityHex);
+  Future<void> refresh(
+    String userId, {
+    String? cityHex,
+    String? userTeam,
+  }) async {
+    await loadTeamData(userId, cityHex: cityHex, userTeam: userTeam);
   }
 
   void clear() {

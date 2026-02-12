@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/team.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/team_stats_provider.dart';
+import '../config/h3_config.dart';
 import '../services/hex_service.dart';
 import '../theme/app_theme.dart';
 import 'traitor_gate_screen.dart';
@@ -24,17 +25,33 @@ class _TeamScreenState extends State<TeamScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
-  void _loadData() {
+  Future<void> _loadData() async {
     final appState = context.read<AppStateProvider>();
     final userId = appState.currentUser?.id;
+    final userTeam = appState.userTeam?.name;
     final homeHex =
         appState.currentUser?.seasonHomeHex ?? appState.currentUser?.homeHex;
     final cityHex = homeHex != null && homeHex.length >= 10
         ? homeHex.substring(0, 10)
         : null;
     if (userId != null) {
-      _statsProvider.loadTeamData(userId, cityHex: cityHex);
+      await _statsProvider.loadTeamData(
+        userId,
+        cityHex: cityHex,
+        userTeam: userTeam,
+      );
+      _syncTerritoryBalance(appState);
     }
+  }
+
+  void _syncTerritoryBalance(AppStateProvider appState) {
+    final dominance = _statsProvider.dominance;
+    if (dominance == null) return;
+    final total = dominance.allRange.total;
+    if (total == 0) return;
+    final red = (dominance.allRange.redHexCount / total) * 100;
+    final blue = (dominance.allRange.blueHexCount / total) * 100;
+    appState.updateTerritoryBalance(red, blue);
   }
 
   @override
@@ -268,6 +285,13 @@ class _TeamScreenState extends State<TeamScreen> {
         ? HexService().getCityNumber(homeHex)
         : (dominance?.districtNumber ?? 1);
 
+    final provinceHexCount = H3Config.childrenPerParent(
+      H3Config.baseResolution - H3Config.allResolution,
+    );
+    final districtHexCount = H3Config.childrenPerParent(
+      H3Config.baseResolution - H3Config.cityResolution,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -292,7 +316,7 @@ class _TeamScreenState extends State<TeamScreen> {
             Expanded(
               child: _buildTerritoryCard(
                 territoryName,
-                '2,401 hexes',
+                _formatHexCount(provinceHexCount),
                 dominance?.allRange,
                 isTerritory: true,
               ),
@@ -301,7 +325,7 @@ class _TeamScreenState extends State<TeamScreen> {
             Expanded(
               child: _buildTerritoryCard(
                 'District $districtNumber',
-                '343 hexes',
+                _formatHexCount(districtHexCount),
                 dominance?.cityRange,
                 isTerritory: false,
               ),
@@ -310,6 +334,15 @@ class _TeamScreenState extends State<TeamScreen> {
         ),
       ],
     );
+  }
+
+  String _formatHexCount(int count) {
+    if (count >= 1000) {
+      final thousands = count ~/ 1000;
+      final remainder = count % 1000;
+      return '$thousands,${remainder.toString().padLeft(3, '0')} hexes';
+    }
+    return '$count hexes';
   }
 
   /// Badge showing data is from yesterday's snapshot
@@ -1392,7 +1425,9 @@ class _TeamScreenState extends State<TeamScreen> {
             currentMultiplier: redBuff.commonMultiplier,
             isActive: !redBuff.isElite && isUserTeam,
             description: 'Base tier',
-            color: Colors.white.withValues(alpha: 0.5),
+            color: !redBuff.isElite && isUserTeam
+                ? AppTheme.athleticRed
+                : Colors.white.withValues(alpha: 0.5),
             icon: Icons.person_outline,
           ),
         ],

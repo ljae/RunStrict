@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../models/team.dart';
 import '../providers/leaderboard_provider.dart';
 import '../providers/app_state_provider.dart';
+import '../services/season_service.dart';
 
 /// League scope for leaderboard rankings
 enum LeagueScope { myLeague, globalTop100 }
@@ -22,16 +23,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late AnimationController _entranceController;
-  final bool _useMockData = false;
-
-  // League and season state
   LeagueScope _selectedScope = LeagueScope.myLeague;
-  int _currentSeason = 1; // Current season number
-  static const int _totalSeasons = 1; // Total available seasons (will grow)
+  late int _currentSeason;
+  late int _totalSeasons;
 
   @override
   void initState() {
     super.initState();
+    final seasonService = SeasonService();
+    _currentSeason = seasonService.seasonNumber;
+    _totalSeasons = seasonService.seasonNumber;
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -63,218 +65,24 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     return 'SEASON $_currentSeason';
   }
 
-  // Mock Data
-  final List<LeaderboardRunner> _allRunners = [
-    LeaderboardRunner(
-      id: 'user_1',
-      name: 'SpeedKing',
-      team: Team.red,
-      flipPoints: 2847,
-      totalDistanceKm: 154.2,
-      avatar: '🦊',
-      lastHexId: '89283082803ffff',
-      zoneHexId: '88283082807ffff',
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 5.25,
-      stabilityScore: 92,
-    ),
-    LeaderboardRunner(
-      id: 'user_2',
-      name: 'AquaDash',
-      team: Team.blue,
-      flipPoints: 2654,
-      totalDistanceKm: 148.5,
-      avatar: '🐬',
-      lastHexId: '89283082813ffff',
-      zoneHexId: '88283082817ffff',
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 5.45,
-      stabilityScore: 88,
-    ),
-    LeaderboardRunner(
-      id: 'user_3',
-      name: 'CrimsonBlur',
-      team: Team.red,
-      flipPoints: 2412,
-      totalDistanceKm: 142.8,
-      avatar: '🔥',
-      lastHexId: '89283082823ffff',
-      zoneHexId: '88283082827ffff',
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 5.10,
-      stabilityScore: 85,
-    ),
-    LeaderboardRunner(
-      id: 'user_4',
-      name: 'WaveRider',
-      team: Team.blue,
-      flipPoints: 2198,
-      totalDistanceKm: 135.0,
-      avatar: '🌊',
-      lastHexId: '89283082833ffff',
-      zoneHexId: '88283082837ffff',
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 6.00,
-      stabilityScore: 78,
-    ),
-    LeaderboardRunner(
-      id: 'user_5',
-      name: 'ChaosAgent',
-      team: Team.purple,
-      flipPoints: 2156,
-      totalDistanceKm: 68.2,
-      avatar: '💀',
-      lastHexId: '89283082843ffff',
-      zoneHexId: '88283082847ffff',
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 4.80,
-      stabilityScore: 45,
-    ),
-    LeaderboardRunner(
-      id: 'user_6',
-      name: 'NightOwl',
-      team: Team.red,
-      flipPoints: 1987,
-      totalDistanceKm: 128.4,
-      avatar: '🦉',
-      lastHexId: '89283082853ffff',
-      zoneHexId: '88283082857ffff',
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 5.55,
-      stabilityScore: 82,
-    ),
-    LeaderboardRunner(
-      id: 'user_7',
-      name: 'StormChaser',
-      team: Team.blue,
-      flipPoints: 1845,
-      totalDistanceKm: 122.1,
-      avatar: '⚡',
-      lastHexId: '89283082863ffff',
-      zoneHexId: null,
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 5.30,
-      stabilityScore: 75,
-    ),
-    LeaderboardRunner(
-      id: 'user_8',
-      name: 'VoidWalker',
-      team: Team.purple,
-      flipPoints: 1756,
-      totalDistanceKm: 44.5,
-      avatar: '🌀',
-      lastHexId: '89283082873ffff',
-      zoneHexId: null,
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 4.50,
-      stabilityScore: 38,
-    ),
-    LeaderboardRunner(
-      id: 'user_9',
-      name: 'BlazeRunner',
-      team: Team.red,
-      flipPoints: 1634,
-      totalDistanceKm: 115.7,
-      avatar: '🌟',
-      lastHexId: '89283082883ffff',
-      zoneHexId: null,
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 5.80,
-      stabilityScore: 70,
-    ),
-    LeaderboardRunner(
-      id: 'user_10',
-      name: 'OceanSpirit',
-      team: Team.blue,
-      flipPoints: 1523,
-      totalDistanceKm: 109.3,
-      avatar: '🐋',
-      lastHexId: '89283082893ffff',
-      zoneHexId: null,
-      cityHexId: '86283080fffffff',
-      avgPaceMinPerKm: 6.20,
-      stabilityScore: 65,
-    ),
-    LeaderboardRunner(
-      id: 'user_11',
-      name: 'PhoenixRise',
-      team: Team.red,
-      flipPoints: 1412,
-      totalDistanceKm: 105.0,
-      avatar: '🦅',
-      avgPaceMinPerKm: 5.40,
-      stabilityScore: 80,
-    ),
-    LeaderboardRunner(
-      id: 'user_12',
-      name: 'DeepDive',
-      team: Team.blue,
-      flipPoints: 1298,
-      totalDistanceKm: 98.6,
-      avatar: '🐙',
-      avgPaceMinPerKm: 5.90,
-      stabilityScore: 72,
-    ),
-    LeaderboardRunner(
-      id: 'user_13',
-      name: 'ShadowTraitor',
-      team: Team.purple,
-      flipPoints: 1245,
-      totalDistanceKm: 32.1,
-      avatar: '👁️',
-      avgPaceMinPerKm: 4.30,
-      stabilityScore: 28,
-    ),
-    LeaderboardRunner(
-      id: 'user_14',
-      name: 'SparkPlug',
-      team: Team.red,
-      flipPoints: 1156,
-      totalDistanceKm: 95.2,
-      avatar: '✨',
-      avgPaceMinPerKm: 5.70,
-      stabilityScore: 68,
-    ),
-    LeaderboardRunner(
-      id: 'user_15',
-      name: 'TidalWave',
-      team: Team.blue,
-      flipPoints: 1087,
-      totalDistanceKm: 92.1,
-      avatar: '🌊',
-      avgPaceMinPerKm: 6.10,
-      stabilityScore: 60,
-    ),
-  ];
-
   List<LeaderboardRunner> _getFilteredRunners(BuildContext context) {
     final leaderboardProvider = context.watch<LeaderboardProvider>();
     final entries = leaderboardProvider.entries;
 
-    List<LeaderboardRunner> runners;
-
-    if (_useMockData || entries.isEmpty) {
-      // Use mock data for development/testing
-      runners = List<LeaderboardRunner>.from(_allRunners);
-    } else {
-      // Use real data - all users, no geographic filtering
-      runners = entries
-          .map(
-            (e) => LeaderboardRunner(
-              id: e.id,
-              name: e.name,
-              team: e.team,
-              flipPoints: e.seasonPoints,
-              totalDistanceKm: e.totalDistanceKm,
-              avatar: e.avatar,
-              avgPaceMinPerKm: e.avgPaceMinPerKm,
-              stabilityScore: e.stabilityScore,
-            ),
-          )
-          .toList();
-    }
-
-    return runners;
+    return entries
+        .map(
+          (e) => LeaderboardRunner(
+            id: e.id,
+            name: e.name,
+            team: e.team,
+            flipPoints: e.seasonPoints,
+            totalDistanceKm: e.totalDistanceKm,
+            avatar: e.avatar,
+            avgPaceMinPerKm: e.avgPaceMinPerKm,
+            stabilityScore: e.stabilityScore,
+          ),
+        )
+        .toList();
   }
 
   String? _getCurrentUserId(BuildContext context) {
@@ -308,8 +116,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     final leaderboardProvider = context.read<LeaderboardProvider>();
     final entries = leaderboardProvider.entries;
 
-    // Try to get from leaderboard provider first
-    if (!_useMockData && entries.isNotEmpty) {
+    if (entries.isNotEmpty) {
       final entry = leaderboardProvider.getUser(currentUser.id);
       if (entry != null) {
         return LeaderboardRunner(

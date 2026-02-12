@@ -239,8 +239,11 @@ void main() {
       });
     });
 
-    group('toMap/fromMap Serialization', () {
-      test('roundtrip preserves all fields', () {
+    group('toMap/fromMap Serialization (SQLite Format)', () {
+      // Note: toMap/fromMap are for SQLite local storage.
+      // SQLite schema stores: distanceKm (not meters), sync_status (not syncStatus)
+      // Transient fields (hexPath, route, hexesPassed, currentHexId, etc.) are NOT stored.
+      test('roundtrip preserves stored fields', () {
         final original = Run(
           id: 'run123',
           startTime: startTime,
@@ -249,8 +252,8 @@ void main() {
           durationSeconds: 1800,
           hexesColored: 10,
           teamAtRun: Team.blue,
-          hexPath: const ['hex1', 'hex2', 'hex3'],
-          buffMultiplier: 2,
+          hexPath: const ['hex1', 'hex2', 'hex3'], // NOT stored in SQLite
+          buffMultiplier: 2, // NOT stored in SQLite (restored as default 1)
           cv: 12.5,
           syncStatus: 'synced',
           route: const [],
@@ -263,6 +266,7 @@ void main() {
         final map = original.toMap();
         final restored = Run.fromMap(map);
 
+        // Stored fields should be preserved
         expect(restored.id, equals(original.id));
         // DateTime loses microsecond precision in millisecond conversion
         expect(
@@ -277,19 +281,20 @@ void main() {
         expect(restored.durationSeconds, equals(original.durationSeconds));
         expect(restored.hexesColored, equals(original.hexesColored));
         expect(restored.teamAtRun, equals(original.teamAtRun));
-        expect(restored.hexPath, equals(original.hexPath));
-        expect(restored.buffMultiplier, equals(original.buffMultiplier));
         expect(restored.cv, equals(original.cv));
         expect(restored.syncStatus, equals(original.syncStatus));
-        expect(restored.currentHexId, equals(original.currentHexId));
-        expect(
-          restored.distanceInCurrentHex,
-          equals(original.distanceInCurrentHex),
-        );
-        expect(restored.isActive, equals(original.isActive));
+
+        // NOT stored fields get defaults after restore
+        expect(restored.hexPath, equals(const [])); // Not stored
+        expect(restored.buffMultiplier, equals(1)); // Not stored, defaults to 1
+        expect(restored.route, equals(const [])); // Transient
+        expect(restored.hexesPassed, equals(const [])); // Transient
+        expect(restored.currentHexId, isNull); // Transient
+        expect(restored.distanceInCurrentHex, equals(0)); // Transient
+        expect(restored.isActive, equals(false)); // Transient
       });
 
-      test('toMap produces expected keys', () {
+      test('toMap produces expected SQLite schema keys', () {
         final run = Run(
           id: 'run1',
           startTime: startTime,
@@ -311,17 +316,24 @@ void main() {
 
         final map = run.toMap();
 
+        // SQLite schema keys (see local_storage.dart)
         expect(map.containsKey('id'), isTrue);
         expect(map.containsKey('startTime'), isTrue);
         expect(map.containsKey('endTime'), isTrue);
-        expect(map.containsKey('distanceMeters'), isTrue);
+        expect(map.containsKey('distanceKm'), isTrue); // NOT distanceMeters
         expect(map.containsKey('durationSeconds'), isTrue);
+        expect(map.containsKey('avgPaceSecPerKm'), isTrue);
         expect(map.containsKey('hexesColored'), isTrue);
         expect(map.containsKey('teamAtRun'), isTrue);
-        expect(map.containsKey('hexPath'), isTrue);
-        expect(map.containsKey('buffMultiplier'), isTrue);
         expect(map.containsKey('cv'), isTrue);
-        expect(map.containsKey('syncStatus'), isTrue);
+        expect(map.containsKey('sync_status'), isTrue); // NOT syncStatus
+        expect(map.containsKey('flip_points'), isTrue);
+
+        // NOT stored in SQLite
+        expect(map.containsKey('hexPath'), isFalse);
+        expect(map.containsKey('buffMultiplier'), isFalse);
+        expect(map.containsKey('distanceMeters'), isFalse);
+        expect(map.containsKey('syncStatus'), isFalse);
       });
 
       test('handles null CV in roundtrip', () {

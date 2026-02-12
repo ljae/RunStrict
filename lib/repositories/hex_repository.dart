@@ -124,10 +124,43 @@ class HexRepository extends ChangeNotifier {
   }
 
   void bulkLoadFromServer(List<Map<String, dynamic>> hexes) {
+    final hexService = HexService();
     for (final hexData in hexes) {
       try {
-        final hex = HexModel.fromRow(hexData);
-        _hexCache.put(hex.id, hex);
+        // Support both 'id' (full row) and 'hex_id' (delta sync)
+        final hexId = (hexData['id'] ?? hexData['hex_id']) as String;
+        final teamName = hexData['last_runner_team'] as String?;
+        final team = teamName != null ? Team.values.byName(teamName) : null;
+        final flippedAt = hexData['last_flipped_at'] != null
+            ? DateTime.parse(hexData['last_flipped_at'] as String)
+            : null;
+
+        // Calculate center from hex ID (delta sync doesn't include coordinates)
+        // Use provided lat/lng if available, otherwise calculate from hex ID
+        LatLng hexCenter;
+        if (hexData['latitude'] != null && hexData['longitude'] != null) {
+          hexCenter = LatLng(
+            (hexData['latitude'] as num).toDouble(),
+            (hexData['longitude'] as num).toDouble(),
+          );
+        } else {
+          try {
+            hexCenter = hexService.getHexCenter(hexId);
+          } catch (_) {
+            // Fallback for invalid hex IDs (e.g., in tests)
+            hexCenter = const LatLng(0, 0);
+          }
+        }
+
+        _hexCache.put(
+          hexId,
+          HexModel(
+            id: hexId,
+            center: hexCenter,
+            lastRunnerTeam: team,
+            lastFlippedAt: flippedAt,
+          ),
+        );
       } catch (e) {
         debugPrint('HexRepository: Failed to load hex from server: $e');
       }

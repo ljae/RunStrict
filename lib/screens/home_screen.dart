@@ -143,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final pointsService = context.watch<PointsService>();
     final topPadding = MediaQuery.of(context).padding.top;
-    final contentHeight = isLandscape ? 52.0 : 68.0;
+    final contentHeight = isLandscape ? 52.0 : 60.0;
 
     return PreferredSize(
       preferredSize: Size.fromHeight(topPadding + contentHeight),
@@ -151,66 +151,101 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: EdgeInsets.only(top: topPadding),
         child: Container(
           margin: isLandscape
-              ? const EdgeInsets.fromLTRB(16, 4, 16, 4)
-              : const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              ? const EdgeInsets.fromLTRB(12, 4, 12, 4)
+              : const EdgeInsets.fromLTRB(12, 6, 12, 6),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceColor.withOpacity(0.85),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+            // Glass-morphism effect with team accent tint
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.surfaceColor.withValues(alpha: 0.92),
+                AppTheme.surfaceColor.withValues(alpha: 0.88),
+                accentColor.withValues(alpha: 0.06),
+              ],
+              stops: const [0.0, 0.7, 1.0],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: accentColor.withValues(alpha: 0.12),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: accentColor.withValues(alpha: 0.08),
                 blurRadius: 20,
+                spreadRadius: -4,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Stack(
             children: [
-              SizedBox(
-                height: isLandscape ? 40 : 52,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        'assets/images/runner_logo_transparent.png',
-                        height: isLandscape ? 20 : 24,
-                        fit: BoxFit.contain,
-                      ),
-                      const Spacer(),
-                      SeasonCountdownWidget(
+              // Main content row
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isLandscape ? 12 : 14,
+                  vertical: isLandscape ? 8 : 10,
+                ),
+                child: Row(
+                  children: [
+                    // Logo
+                    Image.asset(
+                      'assets/images/runner_logo_transparent.png',
+                      height: isLandscape ? 20 : 22,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(width: 10),
+                    // Season countdown (flexible to shrink)
+                    Flexible(
+                      child: SeasonCountdownWidget(
                         seasonService: _seasonService,
                         compact: true,
                       ),
-                      const SizedBox(width: 8),
-                      _BuffBadge(accentColor: accentColor),
-                      const SizedBox(width: 8),
-                      FlipPointsWidget(
-                        pointsService: pointsService,
-                        accentColor: accentColor,
-                        compact: true,
+                    ),
+                    const SizedBox(width: 8),
+                    // Buff badge
+                    _BuffBadge(accentColor: accentColor),
+                    const SizedBox(width: 6),
+                    // Flip points
+                    FlipPointsWidget(
+                      pointsService: pointsService,
+                      accentColor: accentColor,
+                      compact: true,
+                    ),
+                  ],
+                ),
+              ),
+              // Team accent line at bottom
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 0,
+                child: Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        accentColor.withValues(alpha: 0.0),
+                        accentColor.withValues(alpha: 0.5),
+                        accentColor.withValues(alpha: 0.5),
+                        accentColor.withValues(alpha: 0.0),
+                      ],
+                      stops: const [0.0, 0.3, 0.7, 1.0],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accentColor.withValues(alpha: 0.3),
+                        blurRadius: 6,
+                        spreadRadius: 0,
                       ),
                     ],
                   ),
-                ),
-              ),
-              // Team accent glow line at bottom edge
-              Container(
-                height: 1,
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      accentColor.withOpacity(0.0),
-                      accentColor.withOpacity(0.3),
-                      accentColor.withOpacity(0.3),
-                      accentColor.withOpacity(0.0),
-                    ],
-                    stops: const [0.0, 0.3, 0.7, 1.0],
-                  ),
-                  borderRadius: BorderRadius.circular(1),
                 ),
               ),
             ],
@@ -327,39 +362,37 @@ class _BuffBadge extends StatelessWidget {
       listenable: BuffService(),
       builder: (context, _) {
         final multiplier = BuffService().multiplier;
+        final isBuffed = multiplier > 1;
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceColor.withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: multiplier > 1
-                  ? accentColor.withValues(alpha: 0.2)
-                  : Colors.white.withValues(alpha: 0.08),
-              width: 1.0,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Bolt icon with glow when buffed
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: isBuffed
+                  ? BoxDecoration(
+                      color: accentColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    )
+                  : null,
+              child: Icon(
                 Icons.bolt_rounded,
-                size: 10,
-                color: multiplier > 1 ? accentColor : AppTheme.textMuted,
+                size: 14,
+                color: isBuffed ? accentColor : AppTheme.textMuted,
               ),
-              const SizedBox(width: 4),
-              Text(
-                '${multiplier}x',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: multiplier > 1 ? accentColor : AppTheme.textPrimary,
-                  letterSpacing: -0.3,
-                ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${multiplier}x',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isBuffed ? accentColor : AppTheme.textSecondary,
+                letterSpacing: -0.3,
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );

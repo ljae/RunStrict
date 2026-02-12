@@ -72,17 +72,49 @@ class RemoteConfigService {
       final userId = supabase.client.auth.currentUser?.id;
 
       if (userId == null) {
-        final result = await supabase.client.rpc(
-          'app_launch_sync',
-          params: {'p_user_id': null},
-        );
-        return _parseConfigFromResponse(result);
+        return _fetchConfigDirect(supabase);
       }
 
       final result = await supabase.appLaunchSync(userId);
-      return _parseConfigFromResponse(result);
+      final config = _parseConfigFromResponse(result);
+      if (config != null) return config;
+
+      return _fetchConfigDirect(supabase);
     } catch (e) {
       debugPrint('RemoteConfigService: Failed to fetch from server - $e');
+      return null;
+    }
+  }
+
+  Future<AppConfig?> _fetchConfigDirect(SupabaseService supabase) async {
+    try {
+      final row = await supabase.client
+          .from('app_config')
+          .select('config_version, config_data')
+          .eq('id', 1)
+          .maybeSingle();
+
+      if (row == null) return null;
+
+      final version = row['config_version'] as int?;
+      final data = row['config_data'] as Map<String, dynamic>?;
+      if (data == null) return null;
+
+      debugPrint(
+        'RemoteConfigService: Loaded config v$version directly from app_config table',
+      );
+
+      return AppConfig.fromJson({
+        'configVersion': version ?? 1,
+        'seasonConfig': data['season'],
+        'buffConfig': data['buff'],
+        'gpsConfig': data['gps'],
+        'scoringConfig': data['scoring'],
+        'hexConfig': data['hex'],
+        'timingConfig': data['timing'],
+      });
+    } catch (e) {
+      debugPrint('RemoteConfigService: Direct config fetch failed - $e');
       return null;
     }
   }

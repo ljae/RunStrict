@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/run_provider.dart';
 import '../services/season_service.dart';
 
 /// Traitor's Gate - Purple team defection screen.
@@ -149,8 +150,10 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
           );
         }
 
+        // Check if user is currently running
+        final isRunning = context.watch<RunProvider>().isRunning;
         final currentPoints = user.seasonPoints;
-        final canDefect = !_isDefecting;
+        final canDefect = !_isDefecting && !isRunning;
 
         return Scaffold(
           backgroundColor: AppTheme.backgroundStart,
@@ -332,10 +335,12 @@ class _TraitorGateScreenState extends State<TraitorGateScreen> {
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text('💀'),
+                              Text(isRunning ? '🏃' : '💀'),
                               const SizedBox(width: AppTheme.spacingS),
                               Text(
-                                'DEFECT TO CHAOS',
+                                isRunning
+                                    ? 'CANNOT DEFECT WHILE RUNNING'
+                                    : 'DEFECT TO CHAOS',
                                 style: Theme.of(context).textTheme.labelLarge
                                     ?.copyWith(
                                       color: Colors.white,

@@ -36,8 +36,10 @@ class LocalStorageService {
       if (!await file.exists()) return null;
 
       final contents = await file.readAsString();
+      if (contents.isEmpty) return null;
+
       final data = jsonDecode(contents);
-      
+
       return {
         'latitude': data['latitude'] as double,
         'longitude': data['longitude'] as double,

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import '../models/user_model.dart';
 import '../models/team.dart';
 import '../repositories/user_repository.dart';
@@ -155,7 +156,7 @@ class AppStateProvider with ChangeNotifier {
     try {
       // Create local-only user for MVP (no Supabase auth required)
       // User ID is a UUID that will be used if they later sign up
-      final localId = DateTime.now().millisecondsSinceEpoch.toString();
+      final localId = const Uuid().v4();
       final user = UserModel(
         id: localId,
         name: username,

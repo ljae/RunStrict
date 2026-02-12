@@ -570,6 +570,10 @@ class PrefetchService {
             : null,
       );
     }
+
+    // Also load into HexRepository for HexagonMap to access via HexDataProvider
+    HexRepository().bulkLoadFromServer(hexData);
+
     debugPrint('PrefetchService: Loaded ${_hexCache.length} dummy hexes');
   }
 

@@ -1,0 +1,1465 @@
+{
+  "last_day": 1,
+  "seed": 100,
+  "users": [
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000000",
+      "name": "AlexRunner",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "star",
+      "home_hex": "89283082803ffff"
+    },
+    {
+      "id": "aaaaaaaa-0001-0001-0001-000000000001",
+      "name": "JordanDash",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "star",
+      "home_hex": "89283082807ffff"
+    },
+    {
+      "id": "aaaaaaaa-0002-0002-0002-000000000002",
+      "name": "CaseySwift",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "star",
+      "home_hex": "8928308280bffff"
+    },
+    {
+      "id": "aaaaaaaa-0003-0003-0003-000000000003",
+      "name": "RileyFlash",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "star",
+      "home_hex": "8928308280fffff"
+    },
+    {
+      "id": "aaaaaaaa-0004-0004-0004-000000000004",
+      "name": "MorganBolt",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc3a",
+      "archetype": "star",
+      "home_hex": "89283082813ffff"
+    },
+    {
+      "id": "aaaaaaaa-0005-0005-0005-000000000005",
+      "name": "TaylorStride",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83e\udd85",
+      "archetype": "star",
+      "home_hex": "89283082817ffff"
+    },
+    {
+      "id": "aaaaaaaa-0006-0006-0006-000000000006",
+      "name": "QuinnPace",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc2c",
+      "archetype": "star",
+      "home_hex": "8928308281bffff"
+    },
+    {
+      "id": "aaaaaaaa-0007-0007-0007-000000000007",
+      "name": "AverySprint",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udd25",
+      "archetype": "star",
+      "home_hex": "8928308281fffff"
+    },
+    {
+      "id": "aaaaaaaa-0008-0008-0008-000000000008",
+      "name": "BlakeBlaze",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udca8",
+      "archetype": "star",
+      "home_hex": "89283082823ffff"
+    },
+    {
+      "id": "aaaaaaaa-0009-0009-0009-000000000009",
+      "name": "CameronStorm",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\u26a1",
+      "archetype": "star",
+      "home_hex": "89283082827ffff"
+    },
+    {
+      "id": "aaaaaaaa-0010-0010-0010-000000000010",
+      "name": "DakotaWind",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udf0a",
+      "archetype": "regular",
+      "home_hex": "8928308282bffff"
+    },
+    {
+      "id": "aaaaaaaa-0011-0011-0011-000000000011",
+      "name": "EmeryFire",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udf2a\ufe0f",
+      "archetype": "regular",
+      "home_hex": "8928308282fffff"
+    },
+    {
+      "id": "aaaaaaaa-0012-0012-0012-000000000012",
+      "name": "FinleyWave",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc8e",
+      "archetype": "regular",
+      "home_hex": "89283082833ffff"
+    },
+    {
+      "id": "aaaaaaaa-0013-0013-0013-000000000013",
+      "name": "GrayTide",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\ude80",
+      "archetype": "regular",
+      "home_hex": "89283082837ffff"
+    },
+    {
+      "id": "aaaaaaaa-0014-0014-0014-000000000014",
+      "name": "HarperFrost",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udf1f",
+      "archetype": "regular",
+      "home_hex": "8928308283bffff"
+    },
+    {
+      "id": "aaaaaaaa-0015-0015-0015-000000000015",
+      "name": "IndigoThunder",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\u2728",
+      "archetype": "regular",
+      "home_hex": "8928308283fffff"
+    },
+    {
+      "id": "aaaaaaaa-0016-0016-0016-000000000016",
+      "name": "JamieShadow",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "regular",
+      "home_hex": "89283082843ffff"
+    },
+    {
+      "id": "aaaaaaaa-0017-0017-0017-000000000017",
+      "name": "KaiNight",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "regular",
+      "home_hex": "89283082847ffff"
+    },
+    {
+      "id": "aaaaaaaa-0018-0018-0018-000000000018",
+      "name": "LoganDawn",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "regular",
+      "home_hex": "8928308284bffff"
+    },
+    {
+      "id": "aaaaaaaa-0019-0019-0019-000000000019",
+      "name": "MasonStar",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "regular",
+      "home_hex": "8928308284fffff"
+    },
+    {
+      "id": "aaaaaaaa-0020-0020-0020-000000000020",
+      "name": "NoahMoon",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc3a",
+      "archetype": "regular",
+      "home_hex": "89283082853ffff"
+    },
+    {
+      "id": "aaaaaaaa-0021-0021-0021-000000000021",
+      "name": "OliverSun",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83e\udd85",
+      "archetype": "regular",
+      "home_hex": "89283082857ffff"
+    },
+    {
+      "id": "aaaaaaaa-0022-0022-0022-000000000022",
+      "name": "ParkerSky",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc2c",
+      "archetype": "regular",
+      "home_hex": "8928308285bffff"
+    },
+    {
+      "id": "aaaaaaaa-0023-0023-0023-000000000023",
+      "name": "ReeseCloud",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udd25",
+      "archetype": "regular",
+      "home_hex": "8928308285fffff"
+    },
+    {
+      "id": "aaaaaaaa-0024-0024-0024-000000000024",
+      "name": "SageStone",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udca8",
+      "archetype": "regular",
+      "home_hex": "89283082863ffff"
+    },
+    {
+      "id": "aaaaaaaa-0025-0025-0025-000000000025",
+      "name": "SkylerSteel",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\u26a1",
+      "archetype": "regular",
+      "home_hex": "89283082867ffff"
+    },
+    {
+      "id": "aaaaaaaa-0026-0026-0026-000000000026",
+      "name": "TatumIron",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udf0a",
+      "archetype": "regular",
+      "home_hex": "8928308286bffff"
+    },
+    {
+      "id": "aaaaaaaa-0027-0027-0027-000000000027",
+      "name": "RiverGold",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udf2a\ufe0f",
+      "archetype": "regular",
+      "home_hex": "8928308286fffff"
+    },
+    {
+      "id": "aaaaaaaa-0028-0028-0028-000000000028",
+      "name": "WinterSilver",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc8e",
+      "archetype": "regular",
+      "home_hex": "89283082873ffff"
+    },
+    {
+      "id": "aaaaaaaa-0029-0029-0029-000000000029",
+      "name": "PhoenixBronze",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\ude80",
+      "archetype": "regular",
+      "home_hex": "89283082877ffff"
+    },
+    {
+      "id": "aaaaaaaa-0030-0030-0030-000000000030",
+      "name": "StormCopper",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udf1f",
+      "archetype": "regular",
+      "home_hex": "8928308287bffff"
+    },
+    {
+      "id": "aaaaaaaa-0031-0031-0031-000000000031",
+      "name": "ArrowChrome",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\u2728",
+      "archetype": "regular",
+      "home_hex": "8928308287fffff"
+    },
+    {
+      "id": "aaaaaaaa-0032-0032-0032-000000000032",
+      "name": "BlazeRunner",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "regular",
+      "home_hex": "89283082883ffff"
+    },
+    {
+      "id": "aaaaaaaa-0033-0033-0033-000000000033",
+      "name": "CloudDash",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "regular",
+      "home_hex": "89283082887ffff"
+    },
+    {
+      "id": "aaaaaaaa-0034-0034-0034-000000000034",
+      "name": "DawnSwift",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "regular",
+      "home_hex": "8928308288bffff"
+    },
+    {
+      "id": "aaaaaaaa-0035-0035-0035-000000000035",
+      "name": "EchoFlash",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "regular",
+      "home_hex": "8928308288fffff"
+    },
+    {
+      "id": "aaaaaaaa-0036-0036-0036-000000000036",
+      "name": "FalconBolt",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc3a",
+      "archetype": "regular",
+      "home_hex": "89283082893ffff"
+    },
+    {
+      "id": "aaaaaaaa-0037-0037-0037-000000000037",
+      "name": "GalaxyStride",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83e\udd85",
+      "archetype": "regular",
+      "home_hex": "89283082897ffff"
+    },
+    {
+      "id": "aaaaaaaa-0038-0038-0038-000000000038",
+      "name": "HawkPace",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udc2c",
+      "archetype": "regular",
+      "home_hex": "8928308289bffff"
+    },
+    {
+      "id": "aaaaaaaa-0039-0039-0039-000000000039",
+      "name": "IonSprint",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83d\udd25",
+      "archetype": "regular",
+      "home_hex": "8928308289fffff"
+    },
+    {
+      "id": "aaaaaaaa-0040-0040-0040-000000000040",
+      "name": "JadeBlaze",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udca8",
+      "archetype": "regular",
+      "home_hex": "892830828a3ffff"
+    },
+    {
+      "id": "aaaaaaaa-0041-0041-0041-000000000041",
+      "name": "KnightStorm",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\u26a1",
+      "archetype": "regular",
+      "home_hex": "892830828a7ffff"
+    },
+    {
+      "id": "aaaaaaaa-0042-0042-0042-000000000042",
+      "name": "LunaWind",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf0a",
+      "archetype": "regular",
+      "home_hex": "892830828abffff"
+    },
+    {
+      "id": "aaaaaaaa-0043-0043-0043-000000000043",
+      "name": "MidnightFire",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf2a\ufe0f",
+      "archetype": "regular",
+      "home_hex": "892830828afffff"
+    },
+    {
+      "id": "aaaaaaaa-0044-0044-0044-000000000044",
+      "name": "NovaWave",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc8e",
+      "archetype": "regular",
+      "home_hex": "892830828b3ffff"
+    },
+    {
+      "id": "aaaaaaaa-0045-0045-0045-000000000045",
+      "name": "OrionTide",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\ude80",
+      "archetype": "regular",
+      "home_hex": "892830828b7ffff"
+    },
+    {
+      "id": "aaaaaaaa-0046-0046-0046-000000000046",
+      "name": "PulseFrost",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf1f",
+      "archetype": "regular",
+      "home_hex": "892830828bbffff"
+    },
+    {
+      "id": "aaaaaaaa-0047-0047-0047-000000000047",
+      "name": "QuantumThunder",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\u2728",
+      "archetype": "regular",
+      "home_hex": "892830828bfffff"
+    },
+    {
+      "id": "aaaaaaaa-0048-0048-0048-000000000048",
+      "name": "RavenShadow",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "regular",
+      "home_hex": "892830828c3ffff"
+    },
+    {
+      "id": "aaaaaaaa-0049-0049-0049-000000000049",
+      "name": "ShadowNight",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "regular",
+      "home_hex": "892830828c7ffff"
+    },
+    {
+      "id": "aaaaaaaa-0050-0050-0050-000000000050",
+      "name": "ThunderDawn",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "casual",
+      "home_hex": "892830828cbffff"
+    },
+    {
+      "id": "aaaaaaaa-0051-0051-0051-000000000051",
+      "name": "UltraStar",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "casual",
+      "home_hex": "892830828cfffff"
+    },
+    {
+      "id": "aaaaaaaa-0052-0052-0052-000000000052",
+      "name": "VegaMoon",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc3a",
+      "archetype": "casual",
+      "home_hex": "892830828d3ffff"
+    },
+    {
+      "id": "aaaaaaaa-0053-0053-0053-000000000053",
+      "name": "WolfSun",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83e\udd85",
+      "archetype": "casual",
+      "home_hex": "892830828d7ffff"
+    },
+    {
+      "id": "aaaaaaaa-0054-0054-0054-000000000054",
+      "name": "XenonSky",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc2c",
+      "archetype": "casual",
+      "home_hex": "892830828dbffff"
+    },
+    {
+      "id": "aaaaaaaa-0055-0055-0055-000000000055",
+      "name": "ZenCloud",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udd25",
+      "archetype": "casual",
+      "home_hex": "892830828dfffff"
+    },
+    {
+      "id": "aaaaaaaa-0056-0056-0056-000000000056",
+      "name": "AceStone",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udca8",
+      "archetype": "casual",
+      "home_hex": "892830828e3ffff"
+    },
+    {
+      "id": "aaaaaaaa-0057-0057-0057-000000000057",
+      "name": "BoltSteel",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\u26a1",
+      "archetype": "casual",
+      "home_hex": "892830828e7ffff"
+    },
+    {
+      "id": "aaaaaaaa-0058-0058-0058-000000000058",
+      "name": "CinderIron",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf0a",
+      "archetype": "casual",
+      "home_hex": "892830828ebffff"
+    },
+    {
+      "id": "aaaaaaaa-0059-0059-0059-000000000059",
+      "name": "DrakeGold",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf2a\ufe0f",
+      "archetype": "casual",
+      "home_hex": "892830828efffff"
+    },
+    {
+      "id": "aaaaaaaa-0060-0060-0060-000000000060",
+      "name": "EmberSilver",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc8e",
+      "archetype": "casual",
+      "home_hex": "892830828f3ffff"
+    },
+    {
+      "id": "aaaaaaaa-0061-0061-0061-000000000061",
+      "name": "FlintBronze",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\ude80",
+      "archetype": "casual",
+      "home_hex": "892830828f7ffff"
+    },
+    {
+      "id": "aaaaaaaa-0062-0062-0062-000000000062",
+      "name": "GaleCopper",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf1f",
+      "archetype": "casual",
+      "home_hex": "892830828fbffff"
+    },
+    {
+      "id": "aaaaaaaa-0063-0063-0063-000000000063",
+      "name": "HavenChrome",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\u2728",
+      "archetype": "casual",
+      "home_hex": "892830828ffffff"
+    },
+    {
+      "id": "aaaaaaaa-0064-0064-0064-000000000064",
+      "name": "IvyRunner",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "casual",
+      "home_hex": "89283082903ffff"
+    },
+    {
+      "id": "aaaaaaaa-0065-0065-0065-000000000065",
+      "name": "JinxDash",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "casual",
+      "home_hex": "89283082907ffff"
+    },
+    {
+      "id": "aaaaaaaa-0066-0066-0066-000000000066",
+      "name": "KodaSwift",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "casual",
+      "home_hex": "8928308290bffff"
+    },
+    {
+      "id": "aaaaaaaa-0067-0067-0067-000000000067",
+      "name": "LynxFlash",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "casual",
+      "home_hex": "8928308290fffff"
+    },
+    {
+      "id": "aaaaaaaa-0068-0068-0068-000000000068",
+      "name": "MistBolt",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc3a",
+      "archetype": "casual",
+      "home_hex": "89283082913ffff"
+    },
+    {
+      "id": "aaaaaaaa-0069-0069-0069-000000000069",
+      "name": "NyxStride",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83e\udd85",
+      "archetype": "casual",
+      "home_hex": "89283082917ffff"
+    },
+    {
+      "id": "aaaaaaaa-0070-0070-0070-000000000070",
+      "name": "OpalPace",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc2c",
+      "archetype": "casual",
+      "home_hex": "8928308291bffff"
+    },
+    {
+      "id": "aaaaaaaa-0071-0071-0071-000000000071",
+      "name": "PaxSprint",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udd25",
+      "archetype": "casual",
+      "home_hex": "8928308291fffff"
+    },
+    {
+      "id": "aaaaaaaa-0072-0072-0072-000000000072",
+      "name": "RainBlaze",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udca8",
+      "archetype": "casual",
+      "home_hex": "89283082923ffff"
+    },
+    {
+      "id": "aaaaaaaa-0073-0073-0073-000000000073",
+      "name": "SlateStorm",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\u26a1",
+      "archetype": "casual",
+      "home_hex": "89283082927ffff"
+    },
+    {
+      "id": "aaaaaaaa-0074-0074-0074-000000000074",
+      "name": "TrekWind",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf0a",
+      "archetype": "casual",
+      "home_hex": "8928308292bffff"
+    },
+    {
+      "id": "aaaaaaaa-0075-0075-0075-000000000075",
+      "name": "ValeFire",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf2a\ufe0f",
+      "archetype": "casual",
+      "home_hex": "8928308292fffff"
+    },
+    {
+      "id": "aaaaaaaa-0076-0076-0076-000000000076",
+      "name": "WrenWave",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\udc8e",
+      "archetype": "casual",
+      "home_hex": "89283082933ffff"
+    },
+    {
+      "id": "aaaaaaaa-0077-0077-0077-000000000077",
+      "name": "XylaTide",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83d\ude80",
+      "archetype": "casual",
+      "home_hex": "89283082937ffff"
+    },
+    {
+      "id": "aaaaaaaa-0078-0078-0078-000000000078",
+      "name": "YaraFrost",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\ud83c\udf1f",
+      "archetype": "casual",
+      "home_hex": "8928308293bffff"
+    },
+    {
+      "id": "aaaaaaaa-0079-0079-0079-000000000079",
+      "name": "ZephyrThunder",
+      "team": "blue",
+      "original_team": "blue",
+      "avatar": "\u2728",
+      "archetype": "casual",
+      "home_hex": "8928308293fffff"
+    },
+    {
+      "id": "aaaaaaaa-0080-0080-0080-000000000080",
+      "name": "AtlasShadow",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "casual",
+      "home_hex": "89283082943ffff"
+    },
+    {
+      "id": "aaaaaaaa-0081-0081-0081-000000000081",
+      "name": "BirchNight",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "casual",
+      "home_hex": "89283082947ffff"
+    },
+    {
+      "id": "aaaaaaaa-0082-0082-0082-000000000082",
+      "name": "CoralDawn",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "casual",
+      "home_hex": "8928308294bffff"
+    },
+    {
+      "id": "aaaaaaaa-0083-0083-0083-000000000083",
+      "name": "DuskStar",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "casual",
+      "home_hex": "8928308294fffff"
+    },
+    {
+      "id": "aaaaaaaa-0084-0084-0084-000000000084",
+      "name": "ElmMoon",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83d\udc3a",
+      "archetype": "casual",
+      "home_hex": "89283082953ffff"
+    },
+    {
+      "id": "aaaaaaaa-0085-0085-0085-000000000085",
+      "name": "FernSun",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83e\udd85",
+      "archetype": "ghost",
+      "home_hex": "89283082957ffff"
+    },
+    {
+      "id": "aaaaaaaa-0086-0086-0086-000000000086",
+      "name": "GroveSky",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83d\udc2c",
+      "archetype": "ghost",
+      "home_hex": "8928308295bffff"
+    },
+    {
+      "id": "aaaaaaaa-0087-0087-0087-000000000087",
+      "name": "HazeCloud",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83d\udd25",
+      "archetype": "ghost",
+      "home_hex": "8928308295fffff"
+    },
+    {
+      "id": "aaaaaaaa-0088-0088-0088-000000000088",
+      "name": "IsleStone",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83d\udca8",
+      "archetype": "ghost",
+      "home_hex": "89283082963ffff"
+    },
+    {
+      "id": "aaaaaaaa-0089-0089-0089-000000000089",
+      "name": "JetSteel",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\u26a1",
+      "archetype": "ghost",
+      "home_hex": "89283082967ffff"
+    },
+    {
+      "id": "aaaaaaaa-0090-0090-0090-000000000090",
+      "name": "KiteIron",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udf0a",
+      "archetype": "ghost",
+      "home_hex": "8928308296bffff"
+    },
+    {
+      "id": "aaaaaaaa-0091-0091-0091-000000000091",
+      "name": "LarkGold",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udf2a\ufe0f",
+      "archetype": "ghost",
+      "home_hex": "8928308296fffff"
+    },
+    {
+      "id": "aaaaaaaa-0092-0092-0092-000000000092",
+      "name": "MossSilver",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83d\udc8e",
+      "archetype": "ghost",
+      "home_hex": "89283082973ffff"
+    },
+    {
+      "id": "aaaaaaaa-0093-0093-0093-000000000093",
+      "name": "NebulaBronze",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83d\ude80",
+      "archetype": "ghost",
+      "home_hex": "89283082977ffff"
+    },
+    {
+      "id": "aaaaaaaa-0094-0094-0094-000000000094",
+      "name": "OnyxCopper",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udf1f",
+      "archetype": "ghost",
+      "home_hex": "8928308297bffff"
+    },
+    {
+      "id": "aaaaaaaa-0095-0095-0095-000000000095",
+      "name": "PineChrome",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\u2728",
+      "archetype": "ghost",
+      "home_hex": "8928308297fffff"
+    },
+    {
+      "id": "aaaaaaaa-0096-0096-0096-000000000096",
+      "name": "AlexRunner1",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "ghost",
+      "home_hex": "89283082983ffff"
+    },
+    {
+      "id": "aaaaaaaa-0097-0097-0097-000000000097",
+      "name": "JordanDash1",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
+      "archetype": "ghost",
+      "home_hex": "89283082987ffff"
+    },
+    {
+      "id": "aaaaaaaa-0098-0098-0098-000000000098",
+      "name": "CaseySwift1",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
+      "archetype": "ghost",
+      "home_hex": "8928308298bffff"
+    },
+    {
+      "id": "aaaaaaaa-0099-0099-0099-000000000099",
+      "name": "RileyFlash1",
+      "team": "purple",
+      "original_team": "purple",
+      "avatar": "\ud83e\udd8a",
+      "archetype": "ghost",
+      "home_hex": "8928308298fffff"
+    }
+  ],
+  "user_points": {
+    "aaaaaaaa-0000-0000-0000-000000000000": 18,
+    "aaaaaaaa-0001-0001-0001-000000000001": 23,
+    "aaaaaaaa-0002-0002-0002-000000000002": 11,
+    "aaaaaaaa-0003-0003-0003-000000000003": 9,
+    "aaaaaaaa-0004-0004-0004-000000000004": 4,
+    "aaaaaaaa-0006-0006-0006-000000000006": 6,
+    "aaaaaaaa-0007-0007-0007-000000000007": 6,
+    "aaaaaaaa-0008-0008-0008-000000000008": 4,
+    "aaaaaaaa-0009-0009-0009-000000000009": 4,
+    "aaaaaaaa-0010-0010-0010-000000000010": 3,
+    "aaaaaaaa-0011-0011-0011-000000000011": 3,
+    "aaaaaaaa-0012-0012-0012-000000000012": 2,
+    "aaaaaaaa-0016-0016-0016-000000000016": 1,
+    "aaaaaaaa-0018-0018-0018-000000000018": 1,
+    "aaaaaaaa-0019-0019-0019-000000000019": 4,
+    "aaaaaaaa-0020-0020-0020-000000000020": 3,
+    "aaaaaaaa-0021-0021-0021-000000000021": 0,
+    "aaaaaaaa-0022-0022-0022-000000000022": 2,
+    "aaaaaaaa-0023-0023-0023-000000000023": 1,
+    "aaaaaaaa-0024-0024-0024-000000000024": 2,
+    "aaaaaaaa-0026-0026-0026-000000000026": 4,
+    "aaaaaaaa-0029-0029-0029-000000000029": 0,
+    "aaaaaaaa-0032-0032-0032-000000000032": 1,
+    "aaaaaaaa-0033-0033-0033-000000000033": 2,
+    "aaaaaaaa-0034-0034-0034-000000000034": 2,
+    "aaaaaaaa-0035-0035-0035-000000000035": 2,
+    "aaaaaaaa-0036-0036-0036-000000000036": 2,
+    "aaaaaaaa-0037-0037-0037-000000000037": 2,
+    "aaaaaaaa-0039-0039-0039-000000000039": 1,
+    "aaaaaaaa-0041-0041-0041-000000000041": 13,
+    "aaaaaaaa-0042-0042-0042-000000000042": 11,
+    "aaaaaaaa-0043-0043-0043-000000000043": 15,
+    "aaaaaaaa-0045-0045-0045-000000000045": 9,
+    "aaaaaaaa-0047-0047-0047-000000000047": 3,
+    "aaaaaaaa-0048-0048-0048-000000000048": 4,
+    "aaaaaaaa-0054-0054-0054-000000000054": 7,
+    "aaaaaaaa-0055-0055-0055-000000000055": 2,
+    "aaaaaaaa-0061-0061-0061-000000000061": 3,
+    "aaaaaaaa-0065-0065-0065-000000000065": 2,
+    "aaaaaaaa-0067-0067-0067-000000000067": 7,
+    "aaaaaaaa-0070-0070-0070-000000000070": 2,
+    "aaaaaaaa-0072-0072-0072-000000000072": 1,
+    "aaaaaaaa-0074-0074-0074-000000000074": 3,
+    "aaaaaaaa-0083-0083-0083-000000000083": 10,
+    "aaaaaaaa-0086-0086-0086-000000000086": 6
+  },
+  "user_stats": {
+    "aaaaaaaa-0000-0000-0000-000000000000": {
+      "total_runs": 1,
+      "total_distance_km": 9.36,
+      "sum_pace": 5.47,
+      "sum_cv": 7.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0001-0001-0001-000000000001": {
+      "total_runs": 1,
+      "total_distance_km": 13.74,
+      "sum_pace": 5.49,
+      "sum_cv": 5.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0002-0002-0002-000000000002": {
+      "total_runs": 1,
+      "total_distance_km": 12.59,
+      "sum_pace": 4.54,
+      "sum_cv": 4.7,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0003-0003-0003-000000000003": {
+      "total_runs": 1,
+      "total_distance_km": 12.32,
+      "sum_pace": 4.64,
+      "sum_cv": 6.7,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0004-0004-0004-000000000004": {
+      "total_runs": 1,
+      "total_distance_km": 11.72,
+      "sum_pace": 5.49,
+      "sum_cv": 4.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0006-0006-0006-000000000006": {
+      "total_runs": 1,
+      "total_distance_km": 14.42,
+      "sum_pace": 4.69,
+      "sum_cv": 6.4,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0007-0007-0007-000000000007": {
+      "total_runs": 1,
+      "total_distance_km": 11.92,
+      "sum_pace": 5.33,
+      "sum_cv": 3.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0008-0008-0008-000000000008": {
+      "total_runs": 1,
+      "total_distance_km": 10.9,
+      "sum_pace": 5.18,
+      "sum_cv": 7.4,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0009-0009-0009-000000000009": {
+      "total_runs": 1,
+      "total_distance_km": 9.92,
+      "sum_pace": 4.72,
+      "sum_cv": 7.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0010-0010-0010-000000000010": {
+      "total_runs": 1,
+      "total_distance_km": 8.55,
+      "sum_pace": 5.6,
+      "sum_cv": 14.0,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0011-0011-0011-000000000011": {
+      "total_runs": 1,
+      "total_distance_km": 5.02,
+      "sum_pace": 5.99,
+      "sum_cv": 12.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0012-0012-0012-000000000012": {
+      "total_runs": 1,
+      "total_distance_km": 8.25,
+      "sum_pace": 5.27,
+      "sum_cv": 11.7,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0016-0016-0016-000000000016": {
+      "total_runs": 1,
+      "total_distance_km": 6.38,
+      "sum_pace": 6.29,
+      "sum_cv": 7.9,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0018-0018-0018-000000000018": {
+      "total_runs": 1,
+      "total_distance_km": 6.88,
+      "sum_pace": 5.83,
+      "sum_cv": 10.4,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0019-0019-0019-000000000019": {
+      "total_runs": 1,
+      "total_distance_km": 9.87,
+      "sum_pace": 6.27,
+      "sum_cv": 9.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0020-0020-0020-000000000020": {
+      "total_runs": 1,
+      "total_distance_km": 9.17,
+      "sum_pace": 5.04,
+      "sum_cv": 9.3,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0021-0021-0021-000000000021": {
+      "total_runs": 1,
+      "total_distance_km": 7.4,
+      "sum_pace": 6.02,
+      "sum_cv": 6.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0022-0022-0022-000000000022": {
+      "total_runs": 1,
+      "total_distance_km": 7.82,
+      "sum_pace": 5.1,
+      "sum_cv": 9.1,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0023-0023-0023-000000000023": {
+      "total_runs": 1,
+      "total_distance_km": 6.46,
+      "sum_pace": 5.11,
+      "sum_cv": 5.8,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0024-0024-0024-000000000024": {
+      "total_runs": 1,
+      "total_distance_km": 9.13,
+      "sum_pace": 5.14,
+      "sum_cv": 8.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0026-0026-0026-000000000026": {
+      "total_runs": 1,
+      "total_distance_km": 6.44,
+      "sum_pace": 6.0,
+      "sum_cv": 9.0,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0029-0029-0029-000000000029": {
+      "total_runs": 1,
+      "total_distance_km": 6.33,
+      "sum_pace": 5.53,
+      "sum_cv": 14.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0032-0032-0032-000000000032": {
+      "total_runs": 1,
+      "total_distance_km": 5.76,
+      "sum_pace": 5.81,
+      "sum_cv": 7.3,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0033-0033-0033-000000000033": {
+      "total_runs": 1,
+      "total_distance_km": 9.32,
+      "sum_pace": 5.17,
+      "sum_cv": 5.9,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0034-0034-0034-000000000034": {
+      "total_runs": 1,
+      "total_distance_km": 9.71,
+      "sum_pace": 5.5,
+      "sum_cv": 14.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0035-0035-0035-000000000035": {
+      "total_runs": 1,
+      "total_distance_km": 7.83,
+      "sum_pace": 5.91,
+      "sum_cv": 12.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0036-0036-0036-000000000036": {
+      "total_runs": 1,
+      "total_distance_km": 9.47,
+      "sum_pace": 5.53,
+      "sum_cv": 9.1,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0037-0037-0037-000000000037": {
+      "total_runs": 1,
+      "total_distance_km": 8.96,
+      "sum_pace": 5.84,
+      "sum_cv": 14.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0039-0039-0039-000000000039": {
+      "total_runs": 1,
+      "total_distance_km": 8.66,
+      "sum_pace": 6.42,
+      "sum_cv": 8.0,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0041-0041-0041-000000000041": {
+      "total_runs": 1,
+      "total_distance_km": 5.77,
+      "sum_pace": 5.44,
+      "sum_cv": 5.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0042-0042-0042-000000000042": {
+      "total_runs": 1,
+      "total_distance_km": 6.54,
+      "sum_pace": 5.27,
+      "sum_cv": 11.9,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0043-0043-0043-000000000043": {
+      "total_runs": 1,
+      "total_distance_km": 9.26,
+      "sum_pace": 5.85,
+      "sum_cv": 6.0,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0045-0045-0045-000000000045": {
+      "total_runs": 1,
+      "total_distance_km": 8.43,
+      "sum_pace": 5.82,
+      "sum_cv": 6.3,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0047-0047-0047-000000000047": {
+      "total_runs": 1,
+      "total_distance_km": 6.95,
+      "sum_pace": 5.43,
+      "sum_cv": 14.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0048-0048-0048-000000000048": {
+      "total_runs": 1,
+      "total_distance_km": 6.9,
+      "sum_pace": 6.08,
+      "sum_cv": 12.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0054-0054-0054-000000000054": {
+      "total_runs": 1,
+      "total_distance_km": 5.9,
+      "sum_pace": 6.26,
+      "sum_cv": 13.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0055-0055-0055-000000000055": {
+      "total_runs": 1,
+      "total_distance_km": 5.77,
+      "sum_pace": 6.62,
+      "sum_cv": 18.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0061-0061-0061-000000000061": {
+      "total_runs": 1,
+      "total_distance_km": 2.41,
+      "sum_pace": 6.97,
+      "sum_cv": 21.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0065-0065-0065-000000000065": {
+      "total_runs": 1,
+      "total_distance_km": 5.4,
+      "sum_pace": 6.98,
+      "sum_cv": 10.4,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0067-0067-0067-000000000067": {
+      "total_runs": 1,
+      "total_distance_km": 5.81,
+      "sum_pace": 6.5,
+      "sum_cv": 23.1,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0070-0070-0070-000000000070": {
+      "total_runs": 1,
+      "total_distance_km": 3.45,
+      "sum_pace": 7.18,
+      "sum_cv": 24.8,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0072-0072-0072-000000000072": {
+      "total_runs": 1,
+      "total_distance_km": 2.58,
+      "sum_pace": 6.44,
+      "sum_cv": 21.1,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0074-0074-0074-000000000074": {
+      "total_runs": 1,
+      "total_distance_km": 3.16,
+      "sum_pace": 6.22,
+      "sum_cv": 21.7,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0083-0083-0083-000000000083": {
+      "total_runs": 1,
+      "total_distance_km": 5.06,
+      "sum_pace": 7.37,
+      "sum_cv": 22.6,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0086-0086-0086-000000000086": {
+      "total_runs": 1,
+      "total_distance_km": 3.22,
+      "sum_pace": 7.56,
+      "sum_cv": 15.6,
+      "cv_count": 1
+    }
+  },
+  "hex_teams": {
+    "8928308281bffff": "red",
+    "89283082813ffff": "blue",
+    "89283082a5bffff": "blue",
+    "8928308282bffff": "blue",
+    "89283082a6fffff": "red",
+    "89283082a4fffff": "red",
+    "89283082977ffff": "blue",
+    "89283082817ffff": "red",
+    "892830829b3ffff": "red",
+    "89283082a6bffff": "red",
+    "8928308282fffff": "red",
+    "89283082a5fffff": "red",
+    "89283082837ffff": "blue",
+    "89283082823ffff": "red",
+    "89283082a37ffff": "red",
+    "892830828dfffff": "blue",
+    "89283082a63ffff": "red",
+    "8928308297bffff": "purple",
+    "8928308281fffff": "red",
+    "89283082973ffff": "purple",
+    "89283082a47ffff": "red",
+    "89283082807ffff": "blue",
+    "89283082a0bffff": "red",
+    "8928308280bffff": "purple",
+    "89283082a3bffff": "blue",
+    "89283082843ffff": "red",
+    "89283082a67ffff": "red",
+    "8928308287bffff": "blue",
+    "892830829d7ffff": "red",
+    "8928308288fffff": "blue",
+    "8928308283fffff": "red",
+    "89283082a33ffff": "red",
+    "8928308283bffff": "red",
+    "89283082853ffff": "red",
+    "8928308293fffff": "blue",
+    "89283082a43ffff": "red",
+    "8928308280fffff": "red",
+    "89283082a53ffff": "red",
+    "89283082833ffff": "red",
+    "89283082903ffff": "blue",
+    "89283082947ffff": "red",
+    "892830829e3ffff": "purple",
+    "89283082a57ffff": "red",
+    "89283082a4bffff": "red",
+    "892830828cfffff": "blue",
+    "89283082a0fffff": "red",
+    "892830828f7ffff": "blue",
+    "892830828d3ffff": "blue",
+    "892830828fbffff": "blue",
+    "892830829c3ffff": "blue",
+    "89283082827ffff": "red",
+    "892830829dfffff": "red",
+    "892830829cfffff": "blue",
+    "892830829abffff": "blue",
+    "892830828a3ffff": "blue",
+    "89283082847ffff": "red",
+    "892830828c7ffff": "blue",
+    "89283082a13ffff": "red",
+    "8928308286bffff": "red",
+    "89283082883ffff": "blue",
+    "89283082873ffff": "blue",
+    "89283082957ffff": "purple",
+    "8928308284bffff": "red",
+    "892830828c3ffff": "purple",
+    "8928308298bffff": "purple",
+    "892830829f7ffff": "red",
+    "89283082803ffff": "blue",
+    "89283082857ffff": "red",
+    "8928308298fffff": "red",
+    "89283082a27ffff": "red",
+    "89283082a1fffff": "red",
+    "892830828bfffff": "blue",
+    "892830828afffff": "blue",
+    "892830829a3ffff": "red",
+    "8928308284fffff": "red",
+    "8928308285bffff": "red",
+    "892830828bbffff": "blue",
+    "8928308296bffff": "red",
+    "8928308293bffff": "purple",
+    "892830828b3ffff": "blue",
+    "8928308285fffff": "blue",
+    "89283082863ffff": "red",
+    "89283082893ffff": "blue",
+    "892830828e7ffff": "blue",
+    "892830828cbffff": "blue",
+    "89283082867ffff": "red",
+    "892830829dbffff": "blue",
+    "8928308291fffff": "red",
+    "89283082a2fffff": "red",
+    "89283082953ffff": "purple",
+    "89283082907ffff": "blue",
+    "89283082887ffff": "blue",
+    "892830829cbffff": "red",
+    "8928308294bffff": "purple",
+    "8928308286fffff": "blue",
+    "8928308288bffff": "blue",
+    "892830829fbffff": "blue",
+    "892830829a7ffff": "red",
+    "8928308295fffff": "blue",
+    "89283082877ffff": "blue",
+    "8928308287fffff": "blue",
+    "89283082913ffff": "blue",
+    "8928308292fffff": "blue",
+    "8928308289bffff": "blue",
+    "8928308292bffff": "red",
+    "8928308289fffff": "blue",
+    "89283082a17ffff": "blue",
+    "892830828ebffff": "blue",
+    "89283082967ffff": "red",
+    "892830829bbffff": "blue",
+    "89283082897ffff": "blue",
+    "892830828a7ffff": "blue",
+    "892830828abffff": "blue",
+    "892830828b7ffff": "blue",
+    "892830828e3ffff": "blue",
+    "89283082917ffff": "blue",
+    "89283082997ffff": "red",
+    "8928308291bffff": "red",
+    "89283082963ffff": "purple",
+    "892830829d3ffff": "red",
+    "8928308290bffff": "blue",
+    "89283082a03ffff": "red",
+    "8928308299fffff": "blue",
+    "892830828d7ffff": "blue",
+    "892830828dbffff": "blue",
+    "892830829bfffff": "blue",
+    "8928308295bffff": "blue",
+    "8928308290fffff": "blue",
+    "89283082993ffff": "blue",
+    "89283082923ffff": "purple",
+    "892830828efffff": "blue",
+    "89283082983ffff": "purple",
+    "892830829e7ffff": "blue",
+    "892830829c7ffff": "blue",
+    "892830829b7ffff": "blue",
+    "8928308299bffff": "blue",
+    "892830828f3ffff": "blue",
+    "89283082987ffff": "blue",
+    "89283082927ffff": "purple",
+    "892830828ffffff": "blue",
+    "89283082933ffff": "blue",
+    "89283082943ffff": "blue",
+    "8928308294fffff": "blue",
+    "892830829f3ffff": "blue",
+    "89283082937ffff": "purple",
+    "89283082a23ffff": "purple"
+  },
+  "yesterday_flip_points": {
+    "aaaaaaaa-0000-0000-0000-000000000000": 18,
+    "aaaaaaaa-0001-0001-0001-000000000001": 23,
+    "aaaaaaaa-0002-0002-0002-000000000002": 11,
+    "aaaaaaaa-0003-0003-0003-000000000003": 9,
+    "aaaaaaaa-0004-0004-0004-000000000004": 4,
+    "aaaaaaaa-0006-0006-0006-000000000006": 6,
+    "aaaaaaaa-0007-0007-0007-000000000007": 6,
+    "aaaaaaaa-0008-0008-0008-000000000008": 4,
+    "aaaaaaaa-0009-0009-0009-000000000009": 4,
+    "aaaaaaaa-0010-0010-0010-000000000010": 3,
+    "aaaaaaaa-0011-0011-0011-000000000011": 3,
+    "aaaaaaaa-0012-0012-0012-000000000012": 2,
+    "aaaaaaaa-0016-0016-0016-000000000016": 1,
+    "aaaaaaaa-0018-0018-0018-000000000018": 1,
+    "aaaaaaaa-0019-0019-0019-000000000019": 4,
+    "aaaaaaaa-0020-0020-0020-000000000020": 3,
+    "aaaaaaaa-0021-0021-0021-000000000021": 0,
+    "aaaaaaaa-0022-0022-0022-000000000022": 2,
+    "aaaaaaaa-0023-0023-0023-000000000023": 1,
+    "aaaaaaaa-0024-0024-0024-000000000024": 2,
+    "aaaaaaaa-0026-0026-0026-000000000026": 4,
+    "aaaaaaaa-0029-0029-0029-000000000029": 0,
+    "aaaaaaaa-0032-0032-0032-000000000032": 1,
+    "aaaaaaaa-0033-0033-0033-000000000033": 2,
+    "aaaaaaaa-0034-0034-0034-000000000034": 2,
+    "aaaaaaaa-0035-0035-0035-000000000035": 2,
+    "aaaaaaaa-0036-0036-0036-000000000036": 2,
+    "aaaaaaaa-0037-0037-0037-000000000037": 2,
+    "aaaaaaaa-0039-0039-0039-000000000039": 1,
+    "aaaaaaaa-0041-0041-0041-000000000041": 13,
+    "aaaaaaaa-0042-0042-0042-000000000042": 11,
+    "aaaaaaaa-0043-0043-0043-000000000043": 15,
+    "aaaaaaaa-0045-0045-0045-000000000045": 9,
+    "aaaaaaaa-0047-0047-0047-000000000047": 3,
+    "aaaaaaaa-0048-0048-0048-000000000048": 4,
+    "aaaaaaaa-0054-0054-0054-000000000054": 7,
+    "aaaaaaaa-0055-0055-0055-000000000055": 2,
+    "aaaaaaaa-0061-0061-0061-000000000061": 3,
+    "aaaaaaaa-0065-0065-0065-000000000065": 2,
+    "aaaaaaaa-0067-0067-0067-000000000067": 7,
+    "aaaaaaaa-0070-0070-0070-000000000070": 2,
+    "aaaaaaaa-0072-0072-0072-000000000072": 1,
+    "aaaaaaaa-0074-0074-0074-000000000074": 3,
+    "aaaaaaaa-0083-0083-0083-000000000083": 10,
+    "aaaaaaaa-0086-0086-0086-000000000086": 6
+  }
+}

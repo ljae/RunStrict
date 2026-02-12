@@ -95,11 +95,21 @@ class RunProvider with ChangeNotifier {
   Duration get duration => _duration;
 
   /// Current speed in km/h or mph
+  ///
+  /// During active run: calculates from UI timer (_duration) and distance
+  /// After run completion: uses the stored pace from Run model
   double get currentSpeed {
-    if (!isRunning) return 0.0;
-    final paceMinPerKm = _activeRun?.avgPaceMinPerKm ?? 0;
-    if (paceMinPerKm <= 0 || paceMinPerKm.isInfinite) return 0.0;
-    final speedKmh = 60 / paceMinPerKm;
+    if (!isRunning || _activeRun == null) return 0.0;
+
+    // Calculate pace from real-time data during active run
+    final distanceKm = _activeRun!.distanceKm;
+    final durationHours = _duration.inSeconds / 3600.0;
+
+    if (distanceKm <= 0 || durationHours <= 0) return 0.0;
+
+    final speedKmh = distanceKm / durationHours; // km/h
+    if (speedKmh.isInfinite || speedKmh.isNaN || speedKmh > 50) return 0.0;
+
     return _isMetric ? speedKmh : speedKmh * 0.621371;
   }
 
@@ -133,10 +143,21 @@ class RunProvider with ChangeNotifier {
   }
 
   /// Formatted pace
+  ///
+  /// During active run: calculates from UI timer (_duration) and distance
+  /// After run completion: uses the stored durationSeconds in Run model
   String get formattedPace {
     if (_activeRun == null) return '-:--';
-    final pace = _activeRun!.avgPaceMinPerKm;
-    if (pace == 0 || pace.isInfinite || pace.isNaN) return '-:--';
+
+    // Calculate pace from real-time data during active run
+    final distanceKm = _activeRun!.distanceKm;
+    final durationMinutes = _duration.inSeconds / 60.0;
+
+    if (distanceKm <= 0 || durationMinutes <= 0) return '-:--';
+
+    final pace = durationMinutes / distanceKm; // min/km
+    if (pace.isInfinite || pace.isNaN || pace > 99) return '-:--';
+
     final m = pace.floor();
     final s = ((pace - m) * 60).round();
     return '$m:${s.toString().padLeft(2, '0')}';
@@ -310,8 +331,12 @@ class RunProvider with ChangeNotifier {
       _locationSubscription = null;
 
       if (result != null) {
-        // Set CV on the completed run (calculated at stop time)
-        final completedRun = result.session.copyWith(cv: result.cv);
+        // Set CV and duration on the completed run (calculated at stop time)
+        // Duration comes from the UI timer (_duration), which accurately tracks elapsed time
+        final completedRun = result.session.copyWith(
+          cv: result.cv,
+          durationSeconds: _duration.inSeconds,
+        );
         final capturedHexIds = result.capturedHexIds;
 
         // Calculate flip points for this run (hexes × multiplier)

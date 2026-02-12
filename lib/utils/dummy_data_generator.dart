@@ -93,13 +93,14 @@ class DummyDataGenerator {
           'dummy_${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}',
       'startTime': startTime.millisecondsSinceEpoch,
       'endTime': endTime.millisecondsSinceEpoch,
-      'distanceKm': distanceKm,
+      'distanceMeters': distanceKm * 1000, // Convert km to meters
       'durationSeconds': durationSeconds,
-      'avgPaceSecPerKm': avgPaceSecPerKm,
       'hexesColored': hexesColored,
+      'hexesPassed': hexesColored, // Same as colored for dummy data
       'teamAtRun': team.name,
-      'isPurpleRunner': 0,
+      'buffMultiplier': 1,
       'cv': cv,
+      'syncStatus': 'synced',
     };
   }
 

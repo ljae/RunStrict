@@ -1,0 +1,5 @@
+# Python dependencies for RunStrict test data simulation
+supabase>=2.0.0
+h3>=4.0.0
+faker>=22.0.0
+python-dateutil>=2.8.0

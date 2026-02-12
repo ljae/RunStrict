@@ -79,12 +79,15 @@ lib/
 │   ├── user_model.dart          # User with seasonPoints & CV aggregates
 │   ├── hex_model.dart           # Hex with lastRunnerTeam only
 │   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
-│   ├── run_session.dart         # Active run session data
-│   ├── run_summary.dart         # Completed run (with hexPath, cv)
+│   ├── run.dart                 # Unified run model (active + completed + history)
 │   ├── lap_model.dart           # Per-km lap data for CV calculation
 │   ├── daily_running_stat.dart  # Daily stats (Warm data)
 │   ├── location_point.dart      # GPS point (active run)
 │   └── route_point.dart         # Compact route point (cold storage)
+├── repositories/                # Single source of truth (Repository pattern)
+│   ├── user_repository.dart     # User data, season points
+│   ├── hex_repository.dart      # Hex cache with LRU, delta sync
+│   └── leaderboard_repository.dart # Leaderboard entries, filtering
 ├── providers/
 │   ├── app_state_provider.dart  # Global app state (team, user)
 │   ├── run_provider.dart        # Run lifecycle & hex capture
@@ -706,3 +709,113 @@ When no accelerometer data is available, GPS points are allowed:
 - iOS Simulator: No hardware accelerometer
 - Some Android devices: Sensor may not be available
 - Sensor errors: Gracefully continue with GPS-only validation
+
+---
+
+## Repository Pattern (Data Architecture)
+
+The app uses a **Repository Pattern** where repositories serve as the single source of truth for all data.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DATA FLOW                                 │
+│                                                              │
+│   Screens → Providers → Repositories (Single Source of Truth)│
+│                      ↘ Services (business logic)             │
+│                                                              │
+│   Repositories are singletons accessed via Repository()      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Repositories
+
+| Repository | Purpose | Key Methods |
+|------------|---------|-------------|
+| `UserRepository()` | User data, season points | `setUser()`, `updateSeasonPoints()`, `saveToDisk()` |
+| `HexRepository()` | Hex cache (LRU), delta sync | `getHex()`, `updateHexColor()`, `mergeFromServer()` |
+| `LeaderboardRepository()` | Leaderboard entries | `loadEntries()`, `filterByScope()`, `filterByTeam()` |
+
+### Provider Delegation Pattern
+
+Providers delegate storage to repositories while maintaining their own UI-facing API:
+
+```dart
+class LeaderboardProvider with ChangeNotifier {
+  final _repo = LeaderboardRepository();
+  
+  LeaderboardProvider() {
+    _repo.addListener(_onRepoChanged);
+  }
+  
+  void _onRepoChanged() => notifyListeners();
+  
+  // Delegate to repository
+  List<LeaderboardEntry> get entries => _repo.entries;
+  
+  Future<void> fetchLeaderboard() async {
+    final data = await _supabase.getLeaderboard();
+    _repo.loadEntries(data);  // Store in repository
+  }
+}
+```
+
+### Unified Run Model
+
+The `Run` model (`lib/models/run.dart`) replaces three legacy models:
+- `RunSession` (active runs) → `Run`
+- `RunSummary` (completed runs) → `Run`
+- `RunHistoryModel` (history display) → `Run`
+
+```dart
+class Run {
+  // Core fields
+  final String id;
+  final DateTime startTime;
+  DateTime? endTime;
+  double distanceMeters;
+  int hexesPassed;
+  int hexesColored;
+  
+  // Computed getters
+  double get distanceKm => distanceMeters / 1000;
+  double get avgPaceMinPerKm => ...;
+  int? get stabilityScore => cv != null ? (100 - cv!).round().clamp(0, 100) : null;
+  int get flipPoints => (hexesColored * buffMultiplier).round();
+  
+  // Mutable methods for active runs
+  void addPoint(LocationPoint point) { ... }
+  void updateDistance(double meters) { ... }
+  void recordFlip() { ... }
+  void complete() { ... }
+  
+  // Serialization
+  Map<String, dynamic> toMap();    // SQLite
+  Map<String, dynamic> toRow();    // Supabase
+}
+```
+
+### Delta Sync for Hexes
+
+Hex data uses delta sync to minimize downloads:
+
+```dart
+// First time: full download
+final hexes = await supabase.getHexesDelta(parentHex);
+
+// Subsequent: only changes since last sync
+final hexes = await supabase.getHexesDelta(
+  parentHex, 
+  sinceTime: HexRepository().lastPrefetchTime,
+);
+
+// Merge into cache
+HexRepository().mergeFromServer(hexes);
+```
+
+### Database Version
+
+Current SQLite version: **v10**
+- v9: Added `sync_status`, `flip_points`, `run_date` to runs table
+- v10: Dropped legacy `sync_queue` table

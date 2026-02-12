@@ -90,32 +90,52 @@ class AppConfig {
 class SeasonConfig {
   final int durationDays;
   final int serverTimezoneOffsetHours;
+  final int seasonNumber;
+
+  /// Season start date as ISO 8601 string (e.g., "2026-02-11").
+  /// Parsed to DateTime in GMT+offset at midnight.
+  final String? startDate;
 
   const SeasonConfig({
     required this.durationDays,
     required this.serverTimezoneOffsetHours,
+    this.seasonNumber = 1,
+    this.startDate,
   });
 
-  factory SeasonConfig.defaults() =>
-      const SeasonConfig(durationDays: 40, serverTimezoneOffsetHours: 2);
+  factory SeasonConfig.defaults() => const SeasonConfig(
+    durationDays: 40,
+    serverTimezoneOffsetHours: 2,
+    seasonNumber: 1,
+  );
 
   factory SeasonConfig.fromJson(Map<String, dynamic> json) => SeasonConfig(
     durationDays: (json['durationDays'] as num?)?.toInt() ?? 40,
     serverTimezoneOffsetHours:
         (json['serverTimezoneOffsetHours'] as num?)?.toInt() ?? 2,
+    seasonNumber: (json['seasonNumber'] as num?)?.toInt() ?? 1,
+    startDate: json['startDate'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
     'durationDays': durationDays,
     'serverTimezoneOffsetHours': serverTimezoneOffsetHours,
+    'seasonNumber': seasonNumber,
+    'startDate': startDate,
   };
 
-  SeasonConfig copyWith({int? durationDays, int? serverTimezoneOffsetHours}) =>
-      SeasonConfig(
-        durationDays: durationDays ?? this.durationDays,
-        serverTimezoneOffsetHours:
-            serverTimezoneOffsetHours ?? this.serverTimezoneOffsetHours,
-      );
+  SeasonConfig copyWith({
+    int? durationDays,
+    int? serverTimezoneOffsetHours,
+    int? seasonNumber,
+    String? startDate,
+  }) => SeasonConfig(
+    durationDays: durationDays ?? this.durationDays,
+    serverTimezoneOffsetHours:
+        serverTimezoneOffsetHours ?? this.serverTimezoneOffsetHours,
+    seasonNumber: seasonNumber ?? this.seasonNumber,
+    startDate: startDate ?? this.startDate,
+  );
 }
 
 /// Server-configurable buff system thresholds.

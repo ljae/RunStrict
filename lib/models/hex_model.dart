@@ -131,19 +131,28 @@ class HexModel {
   );
 
   /// Create from Supabase row (snake_case)
-  factory HexModel.fromRow(Map<String, dynamic> row) => HexModel(
-    id: row['id'] as String,
-    center: LatLng(
-      (row['latitude'] as num?)?.toDouble() ?? 0.0,
-      (row['longitude'] as num?)?.toDouble() ?? 0.0,
-    ),
-    lastRunnerTeam: row['last_runner_team'] != null
-        ? Team.values.byName(row['last_runner_team'] as String)
-        : null,
-    lastFlippedAt: row['last_flipped_at'] != null
-        ? DateTime.parse(row['last_flipped_at'] as String)
-        : null,
-  );
+  /// Handles both full hex rows (with id, latitude, longitude) and
+  /// delta sync rows (with hex_id only, no coordinates)
+  factory HexModel.fromRow(Map<String, dynamic> row) {
+    // Support both 'id' (full row) and 'hex_id' (delta sync)
+    final hexId = (row['id'] ?? row['hex_id']) as String;
+
+    // If coordinates are provided, use them; otherwise use placeholder
+    // The actual center will be calculated by HexService when needed
+    final lat = (row['latitude'] as num?)?.toDouble() ?? 0.0;
+    final lng = (row['longitude'] as num?)?.toDouble() ?? 0.0;
+
+    return HexModel(
+      id: hexId,
+      center: LatLng(lat, lng),
+      lastRunnerTeam: row['last_runner_team'] != null
+          ? Team.values.byName(row['last_runner_team'] as String)
+          : null,
+      lastFlippedAt: row['last_flipped_at'] != null
+          ? DateTime.parse(row['last_flipped_at'] as String)
+          : null,
+    );
+  }
 
   HexModel copyWith({Team? lastRunnerTeam, DateTime? lastFlippedAt}) =>
       HexModel(

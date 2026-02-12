@@ -3,10 +3,16 @@ import 'package:h3_flutter/h3_flutter.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../config/h3_config.dart';
+import '../utils/lru_cache.dart';
 
 class HexService {
   late H3 h3;
   bool _isInitialized = false;
+
+  /// LRU cache for hex boundaries to avoid repeated H3 computations.
+  /// Province scope has ~2,401 hexes - cache prevents recomputing boundaries.
+  final LruCache<String, List<LatLng>> _boundaryCache =
+      LruCache<String, List<LatLng>>(maxSize: 3000);
 
   // Singleton
   static final HexService _instance = HexService._internal();
@@ -29,13 +35,25 @@ class HexService {
     return h3Index.toRadixString(16);
   }
 
-  // Get Hex Boundary (Polygon)
+  /// Get Hex Boundary (Polygon) with LRU caching.
+  ///
+  /// Caches boundary coordinates to avoid repeated H3 computations.
+  /// Critical for Province scope (~2,401 hexes).
   List<LatLng> getHexBoundary(String hexId) {
     _checkInit();
-    // Hex ID is a hex string, convert to BigInt (H3Index)
+
+    // Check cache first
+    final cached = _boundaryCache.get(hexId);
+    if (cached != null) return cached;
+
+    // Compute boundary
     final h3Index = BigInt.parse(hexId, radix: 16);
     final boundary = h3.cellToBoundary(h3Index);
-    return boundary.map((c) => LatLng(c.lat, c.lon)).toList();
+    final result = boundary.map((c) => LatLng(c.lat, c.lon)).toList();
+
+    // Cache for future use
+    _boundaryCache.put(hexId, result);
+    return result;
   }
 
   // Get K-Ring (Neighbors)

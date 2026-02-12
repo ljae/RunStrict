@@ -86,7 +86,7 @@ INSERT INTO app_config (id, config_version, config_data) VALUES (
       "baseResolution": 9,
       "zoneResolution": 8,
       "cityResolution": 6,
-      "allResolution": 4,
+      "allResolution": 5,
       "captureCheckDistanceMeters": 20.0,
       "maxCacheSize": 4000
     },

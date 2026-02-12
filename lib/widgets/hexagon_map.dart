@@ -505,7 +505,7 @@ class _HexagonMapState extends State<HexagonMap> {
     }
   }
 
-  // Fixed resolution from remote config for consistent hex display across all screens and zoom levels
+  // Fixed resolution from remote config for consistent hex display across all scopes
   static int get _fixedResolution =>
       RemoteConfigService().config.hexConfig.baseResolution;
 
@@ -524,25 +524,42 @@ class _HexagonMapState extends State<HexagonMap> {
     }
   }
 
-  /// Builds GeoJSON FeatureCollection for hex polygons with data-driven styling
+  /// Builds GeoJSON FeatureCollection for hex polygons with data-driven styling.
+  ///
+  /// Optimized for Province scope (~2,401 hexes):
+  /// - Uses cached hex boundaries (HexService LRU cache)
+  /// - Uses cached hex data only (no simulation fallback in loop)
+  /// - Moves repeated lookups outside loop
   String _buildHexGeoJson(List<String> hexIds) {
     final features = <Map<String, dynamic>>[];
 
+    // Cache service references outside loop for performance
+    final hexService = HexService();
+    final prefetch = PrefetchService();
+    final currentScope = _currentScope;
+    final teamColor = widget.teamColor ?? AppTheme.electricBlue;
+    final currentUserHexId = _currentUserHexId;
+
+    // Pre-compute scope check (constant for all hexes in this call)
+    final bool inRange =
+        currentScope == GeographicScope.zone ||
+        !prefetch.isInitialized ||
+        prefetch.homeHex != null;
+
+    // Helper to convert Color to hex string
+    String colorToHex(Color c) =>
+        '#${c.toARGB32().toRadixString(16).substring(2)}';
+
+    // Pre-compute colors for common cases (avoid repeated object creation)
+    const grayFill = Color(0xFF333333);
+    const grayOutline = Color(0xFF444444);
+    const neutralFill = Color(0xFF2A2A2A);
+    const neutralOutline = Color(0xFF3A3A3A);
+
     for (final hexId in hexIds) {
-      final boundary = HexService().getHexBoundary(hexId);
+      // Get boundary from cache (fast after first computation)
+      final boundary = hexService.getHexBoundary(hexId);
       if (boundary.isEmpty) continue;
-
-      // Calculate hex center
-      double avgLat = 0, avgLng = 0;
-      for (final p in boundary) {
-        avgLat += p.latitude;
-        avgLng += p.longitude;
-      }
-      avgLat /= boundary.length;
-      avgLng /= boundary.length;
-
-      final hexCenter = latlong.LatLng(avgLat, avgLng);
-      final hex = _hexProvider.getHex(hexId, hexCenter);
 
       // Build coordinates (GeoJSON uses [lng, lat] order)
       final coordinates = boundary
@@ -550,45 +567,36 @@ class _HexagonMapState extends State<HexagonMap> {
           .toList();
       coordinates.add(coordinates.first); // Close the polygon
 
-      // Determine colors and opacity (same logic as before)
-      final isUserHex = hexId == _currentUserHexId;
-      final teamColor = widget.teamColor ?? AppTheme.electricBlue;
+      // Determine colors and opacity
+      final isUserHex = hexId == currentUserHexId;
 
-      // Check if hex is within home scope range (based on current zoom/scope)
-      // ZONE view: no limit (all hexes colored)
-      // CITY/ALL views: hexes are generated from home hex center, so all in-range
-      final prefetch = PrefetchService();
-      final currentScope = _currentScope;
-      // When we have a home hex, CITY/ALL hexes are generated from home center
-      // so they're all in-range by definition. Only check scope if no home hex.
-      final bool inRange =
-          currentScope == GeographicScope.zone ||
-          !prefetch.isInitialized ||
-          prefetch.homeHex != null;
-
-      // Out-of-range hexes shown as gray/disabled
-      final Color fillColor;
-      final Color outlineColor;
-      final double opacity;
+      Color fillColor;
+      Color outlineColor;
+      double opacity;
 
       if (!inRange) {
         // Gray styling for out-of-range hexes
-        fillColor = const Color(0xFF333333);
-        outlineColor = const Color(0xFF444444);
+        fillColor = grayFill;
+        outlineColor = grayOutline;
         opacity = 0.2;
       } else if (isUserHex) {
         fillColor = teamColor;
         outlineColor = teamColor;
         opacity = 0.5;
       } else {
-        fillColor = hex.hexLightColor;
-        outlineColor = hex.hexColor;
-        opacity = hex.isNeutral ? 0.15 : 0.3;
+        // Use cached hex data only (fast lookup, no simulation)
+        final hex = _hexProvider.getCachedHex(hexId);
+        if (hex != null && !hex.isNeutral) {
+          fillColor = hex.hexLightColor;
+          outlineColor = hex.hexColor;
+          opacity = 0.3;
+        } else {
+          // Neutral or uncached hex - show subtle gray
+          fillColor = neutralFill;
+          outlineColor = neutralOutline;
+          opacity = 0.15;
+        }
       }
-
-      // Convert color to hex string for GeoJSON
-      String colorToHex(Color c) =>
-          '#${c.toARGB32().toRadixString(16).substring(2)}';
 
       features.add({
         'type': 'Feature',
