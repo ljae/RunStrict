@@ -87,48 +87,45 @@ class _SeasonCountdownWidgetState extends State<SeasonCountdownWidget>
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
-        final pulseValue = _pulseController.value;
-        final borderOpacity = urgency > 0.3
-            ? 0.15 + (urgency * 0.3 * pulseValue)
-            : 0.08;
-
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceColor.withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: urgency > 0.3
-                  ? accentColor.withValues(alpha: borderOpacity)
-                  : Colors.white.withValues(alpha: 0.08),
-              width: 1.0,
-            ),
-          ),
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          // Removed drum decoration for a cleaner, minimal look
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Season label (S1)
-              Text(
-                _seasonService.seasonLabel,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textMuted,
-                  letterSpacing: 0,
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  _seasonService.seasonLabel,
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 14,
+                    color: AppTheme.textMuted.withValues(alpha: 0.7),
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              _dot(),
-              // D-day countdown
+
+              const SizedBox(width: 8),
+
+              // D-day countdown (HERO)
               _buildDDay(accentColor, urgency),
-              _dot(),
-              // Server time countdown (minutes until midnight GMT+2)
-              Text(
-                _currentTime,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: -0.3,
+
+              const SizedBox(width: 8),
+
+              // Server time
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  _currentTime,
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 14,
+                    color: AppTheme.textMuted.withValues(alpha: 0.7),
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
             ],
@@ -138,19 +135,7 @@ class _SeasonCountdownWidgetState extends State<SeasonCountdownWidget>
     );
   }
 
-  Widget _dot() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Container(
-        width: 2,
-        height: 2,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppTheme.textMuted.withValues(alpha: 0.5),
-        ),
-      ),
-    );
-  }
+  // Removed _drumTextShadows as we want a clean flat look
 
   Widget _buildDDay(Color accentColor, double urgency) {
     final remaining = _seasonService.daysRemaining;
@@ -160,11 +145,10 @@ class _SeasonCountdownWidgetState extends State<SeasonCountdownWidget>
     if (isDDay) {
       return Text(
         'D-DAY',
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
+        style: GoogleFonts.bebasNeue(
+          fontSize: 18,
           color: accentColor,
-          letterSpacing: 0.5,
+          letterSpacing: 1.0,
         ),
       );
     }
@@ -172,34 +156,34 @@ class _SeasonCountdownWidgetState extends State<SeasonCountdownWidget>
     if (isVoid) {
       return Text(
         'VOID',
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
+        style: GoogleFonts.bebasNeue(
+          fontSize: 18,
           color: accentColor,
-          letterSpacing: 0.5,
+          letterSpacing: 1.0,
         ),
       );
     }
 
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
       children: [
         Text(
           'D-',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 9,
-            fontWeight: FontWeight.w400,
-            color: AppTheme.textMuted,
-            letterSpacing: 0,
+          style: GoogleFonts.bebasNeue(
+            fontSize: 18,
+            color: urgency > 0.3
+                ? accentColor.withValues(alpha: 0.8)
+                : AppTheme.textSecondary,
           ),
         ),
         Text(
           '$remaining',
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
+          style: GoogleFonts.bebasNeue(
+            fontSize: 18,
             color: urgency > 0.3 ? accentColor : AppTheme.textPrimary,
-            letterSpacing: -0.3,
+            letterSpacing: 0.5,
           ),
         ),
       ],
