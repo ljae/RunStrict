@@ -1,3 +1,5 @@
+import 'dart:math' show max;
+
 import 'package:flutter/foundation.dart';
 import '../repositories/user_repository.dart';
 import '../storage/local_storage.dart';
@@ -56,8 +58,12 @@ class PointsService extends ChangeNotifier {
   /// Add points from a run (updates both season and local unsynced today).
   /// Called during active runs when hexes are flipped.
   void addRunPoints(int points) {
-    _userRepository.updateSeasonPoints(seasonPoints + points);
+    // Update local unsynced BEFORE updating repository, because
+    // updateSeasonPoints triggers notifyListeners synchronously via
+    // _onUserRepositoryChanged, and listeners read todayFlipPoints
+    // which depends on _localUnsyncedToday being current.
     _localUnsyncedToday += points;
+    _userRepository.updateSeasonPoints(seasonPoints + points);
     // notifyListeners() called via _onUserRepositoryChanged
   }
 
@@ -90,11 +96,8 @@ class PointsService extends ChangeNotifier {
   /// Called after a successful Final Sync.
   /// The synced run's points move from local unsynced to server baseline.
   void onRunSynced(int syncedPoints) {
-    // Points are now server-side, so they'll be in server baseline on next launch
-    // For immediate UI accuracy, we can transfer them:
-    // However, since we can't update server baseline without a server call,
-    // we keep the points in local unsynced until next app launch.
-    // The total remains correct either way.
+    _serverTodayBaseline += syncedPoints;
+    _localUnsyncedToday = max(0, _localUnsyncedToday - syncedPoints);
     notifyListeners();
   }
 

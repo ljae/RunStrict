@@ -1,7 +1,12 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../config/h3_config.dart';
+import '../repositories/hex_repository.dart';
+import '../services/buff_service.dart';
 import '../services/hex_service.dart';
-import '../services/supabase_service.dart';
+import '../services/prefetch_service.dart';
+import '../storage/local_storage.dart';
+import '../utils/gmt2_date_utils.dart';
 
 class YesterdayStats {
   final bool hasData;
@@ -294,8 +299,6 @@ class TeamBuffComparison {
 }
 
 class TeamStatsProvider with ChangeNotifier {
-  final SupabaseService _supabaseService;
-
   YesterdayStats? _yesterdayStats;
   TeamRankings? _rankings;
   HexDominance? _dominance;
@@ -304,8 +307,7 @@ class TeamStatsProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
-  TeamStatsProvider({SupabaseService? supabaseService})
-    : _supabaseService = supabaseService ?? SupabaseService();
+  TeamStatsProvider();
 
   YesterdayStats? get yesterdayStats => _yesterdayStats;
   TeamRankings? get rankings => _rankings;
@@ -316,14 +318,6 @@ class TeamStatsProvider with ChangeNotifier {
   String? get error => _error;
   bool get hasData =>
       _yesterdayStats != null || _rankings != null || _dominance != null;
-
-  /// Check if a string is a valid UUID format
-  bool _isValidUuid(String id) {
-    final uuidRegex = RegExp(
-      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-    );
-    return uuidRegex.hasMatch(id);
-  }
 
   /// Generate realistic dummy data for debug/local mode
   /// [userTeam] is the actual user's team from AppStateProvider
@@ -502,16 +496,8 @@ class TeamStatsProvider with ChangeNotifier {
     final redRunnerCountCity = 45 + random.nextInt(30); // 45-75 runners
     final eliteCutoffRank = (redRunnerCountCity * 0.2).ceil(); // Top 20%
 
-    // Calculate user's total multiplier based on their ACTUAL team
-    int userTotal;
-    if (actualTeam == 'red') {
-      userTotal = userIsElite ? redEliteMultiplier : redCommonMultiplier;
-    } else if (actualTeam == 'blue') {
-      userTotal = blueUnionMultiplier;
-    } else {
-      // Purple - participation based (calculated separately)
-      userTotal = 1;
-    }
+    // Use BuffService multiplier as authoritative source (matches header display)
+    final userTotal = BuffService().multiplier;
 
     _buffComparison = TeamBuffComparison(
       redBuff: RedTeamBuff(
@@ -556,144 +542,227 @@ class TeamStatsProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    // For local/debug mode with non-UUID user IDs, use mock data
-    if (!_isValidUuid(userId)) {
-      debugPrint(
-        'TeamStatsProvider: Using mock data for non-UUID user: $userId',
-      );
-      _loadDummyData(userTeam: userTeam);
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
-
     try {
-      final results = await Future.wait([
-        _supabaseService.getUserYesterdayStats(userId),
-        _supabaseService.getTeamRankings(userId, cityHex: cityHex),
-        _supabaseService.getHexDominance(cityHex: cityHex),
-      ]);
+      // 1. Yesterday stats from local SQLite
+      final localStats = await LocalStorage().getYesterdayRunStats();
+      if (localStats != null) {
+        final avgCv = (localStats['avg_cv'] as num?)?.toDouble();
+        _yesterdayStats = YesterdayStats(
+          hasData: true,
+          distanceKm: (localStats['distance_km'] as num?)?.toDouble(),
+          avgPaceMinPerKm: (localStats['avg_pace_min_per_km'] as num?)?.toDouble(),
+          flipCount: (localStats['flip_count'] as num?)?.toInt(),
+          flipPoints: (localStats['flip_points'] as num?)?.toInt(),
+          stabilityScore: avgCv != null ? (100 - avgCv).round().clamp(0, 100) : null,
+          runCount: (localStats['run_count'] as num?)?.toInt() ?? 0,
+          date: DateTime.tryParse(localStats['date'] as String? ?? '') ??
+              DateTime.now().subtract(const Duration(days: 1)),
+        );
+      } else {
+        _yesterdayStats = YesterdayStats.empty();
+      }
 
-      _yesterdayStats = YesterdayStats.fromJson(results[0]);
-      _rankings = TeamRankings.fromJson(results[1]);
-      _dominance = HexDominance.fromJson(results[2]);
+      // 2. Territory dominance - use yesterday's snapshot (aligned with buff)
+      final localStorage = LocalStorage();
+      final prefetch = PrefetchService();
+      final yesterdayDate = Gmt2DateUtils.todayGmt2.subtract(const Duration(days: 1));
+      final yesterdayDateStr = Gmt2DateUtils.toGmt2DateString(yesterdayDate);
+      final snapshot = await localStorage.getTerritorySnapshot(yesterdayDateStr);
 
-      // Calculate buff comparison from real data
+      if (snapshot != null) {
+        // Yesterday's snapshot exists → use it (aligned with buff calculation)
+        final all = snapshot['allRange'] as Map<String, dynamic>;
+        final city = snapshot['cityRange'] as Map<String, dynamic>?;
+
+        _dominance = HexDominance(
+          allRange: HexDominanceScope(
+            dominantTeam: (all['red'] as int) > (all['blue'] as int)
+                ? 'red'
+                : ((all['blue'] as int) > (all['red'] as int) ? 'blue' : null),
+            redHexCount: all['red'] as int,
+            blueHexCount: all['blue'] as int,
+            purpleHexCount: all['purple'] as int,
+            total: all['total'] as int,
+          ),
+          cityRange: city != null
+              ? HexDominanceScope(
+                  dominantTeam: (city['red'] as int) > (city['blue'] as int)
+                      ? 'red'
+                      : ((city['blue'] as int) > (city['red'] as int) ? 'blue' : null),
+                  redHexCount: city['red'] as int,
+                  blueHexCount: city['blue'] as int,
+                  purpleHexCount: city['purple'] as int,
+                  total: city['total'] as int,
+                )
+              : null,
+          territoryName: snapshot['territoryName'] as String?,
+          districtNumber: snapshot['districtNumber'] as int?,
+        );
+      } else {
+        // No yesterday snapshot → check if today's snapshot already exists
+        // (frozen on first load of the day, reused for subsequent calls)
+        final todayDateStr = Gmt2DateUtils.todayGmt2String;
+        final todaySnapshot = await localStorage.getTerritorySnapshot(todayDateStr);
+
+        if (todaySnapshot != null) {
+          // Today's snapshot already saved → reuse it (frozen at first load)
+          final all = todaySnapshot['allRange'] as Map<String, dynamic>;
+          final city = todaySnapshot['cityRange'] as Map<String, dynamic>?;
+
+          _dominance = HexDominance(
+            allRange: HexDominanceScope(
+              dominantTeam: (all['red'] as int) > (all['blue'] as int)
+                  ? 'red'
+                  : ((all['blue'] as int) > (all['red'] as int) ? 'blue' : null),
+              redHexCount: all['red'] as int,
+              blueHexCount: all['blue'] as int,
+              purpleHexCount: all['purple'] as int,
+              total: all['total'] as int,
+            ),
+            cityRange: city != null
+                ? HexDominanceScope(
+                    dominantTeam: (city['red'] as int) > (city['blue'] as int)
+                        ? 'red'
+                        : ((city['blue'] as int) > (city['red'] as int) ? 'blue' : null),
+                    redHexCount: city['red'] as int,
+                    blueHexCount: city['blue'] as int,
+                    purpleHexCount: city['purple'] as int,
+                    total: city['total'] as int,
+                  )
+                : null,
+            territoryName: todaySnapshot['territoryName'] as String?,
+            districtNumber: todaySnapshot['districtNumber'] as int?,
+          );
+        } else {
+          // First load of the day → compute from live cache and freeze as today's snapshot
+          final homeHexAll = prefetch.getHomeHexAtScope(GeographicScope.all);
+          final homeHexCity = prefetch.getHomeHexAtScope(GeographicScope.city);
+
+          if (homeHexAll != null) {
+            final counts = HexRepository().computeHexDominance(
+              homeHexAll: homeHexAll,
+              homeHexCity: homeHexCity,
+            );
+            final all = counts['allRange']!;
+            final city = counts['cityRange']!;
+            final hexService = HexService();
+
+            _dominance = HexDominance(
+              allRange: HexDominanceScope(
+                dominantTeam: all['red']! > all['blue']!
+                    ? 'red'
+                    : (all['blue']! > all['red']! ? 'blue' : null),
+                redHexCount: all['red']!,
+                blueHexCount: all['blue']!,
+                purpleHexCount: all['purple']!,
+                total: all['total']!,
+              ),
+              cityRange: homeHexCity != null
+                  ? HexDominanceScope(
+                      dominantTeam: city['red']! > city['blue']!
+                          ? 'red'
+                          : (city['blue']! > city['red']! ? 'blue' : null),
+                      redHexCount: city['red']!,
+                      blueHexCount: city['blue']!,
+                      purpleHexCount: city['purple']!,
+                      total: city['total']!,
+                    )
+                  : null,
+              territoryName: prefetch.homeHex != null
+                  ? hexService.getTerritoryName(prefetch.homeHex!)
+                  : null,
+              districtNumber: prefetch.homeHex != null
+                  ? hexService.getCityNumber(prefetch.homeHex!)
+                  : null,
+            );
+
+            // Save today's snapshot (frozen for all subsequent calls today)
+            await localStorage.saveTerritorySnapshot(todayDateStr, {
+              'allRange': counts['allRange'],
+              'cityRange': homeHexCity != null ? counts['cityRange'] : null,
+              'territoryName': prefetch.homeHex != null
+                  ? hexService.getTerritoryName(prefetch.homeHex!)
+                  : null,
+              'districtNumber': prefetch.homeHex != null
+                  ? hexService.getCityNumber(prefetch.homeHex!)
+                  : null,
+            });
+          } else {
+            _dominance = HexDominance.empty();
+          }
+        }
+      }
+
+      // 3. Rankings — local-only data + BuffService for elite status
+      final actualTeam = userTeam ?? 'red';
+      final buffService = BuffService();
+      _rankings = TeamRankings(
+        userTeam: actualTeam,
+        userIsElite: buffService.breakdown.isElite,
+        userYesterdayPoints: _yesterdayStats?.flipPoints ?? 0,
+        userRank: 1,
+        eliteThreshold: 0,
+        cityHex: cityHex,
+        redEliteTop3: [],
+        redCommonTop3: [],
+        blueUnionTop3: [],
+      );
+
+      // 4. Buff comparison (existing method, works from _dominance + _rankings)
       _calculateBuffComparison();
 
       _error = null;
     } catch (e) {
-      // Supabase functions may not exist yet - fallback to mock data
       debugPrint('TeamStatsProvider.loadTeamData error: $e');
-      debugPrint('TeamStatsProvider: Falling back to mock data');
       _loadDummyData(userTeam: userTeam);
-      _error = null; // Clear error since we have fallback data
+      _error = null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Calculate buff comparison from loaded real data
+  /// Calculate buff comparison using BuffService (yesterday's server-computed buff)
+  /// as the authoritative source, with territory data for informational comparison.
   ///
-  /// Buff calculation rules (from DEVELOPMENT_SPEC.md):
-  ///
-  /// RED FLAME:
-  /// | Scenario              | Elite (Top 20%) | Common |
-  /// |-----------------------|-----------------|--------|
-  /// | Normal (no wins)      | 2x              | 1x     |
-  /// | District win only     | 3x              | 1x     |
-  /// | Province win only     | 3x              | 2x     |
-  /// | District + Province   | 4x              | 2x     |
-  ///
-  /// BLUE WAVE:
-  /// | Scenario              | Union |
-  /// |-----------------------|-------|
-  /// | Normal (no wins)      | 1x    |
-  /// | District win only     | 2x    |
-  /// | Province win only     | 2x    |
-  /// | District + Province   | 3x    |
-  ///
-  /// PURPLE:
-  /// | Participation Rate | Multiplier |
-  /// |-------------------|------------|
-  /// | ≥67%              | 3x         |
-  /// | 34-66%            | 2x         |
-  /// | <34%              | 1x         |
+  /// Yesterday's territory → today's buff (computed at midnight GMT+2 by server).
+  /// BuffService.breakdown contains the actual buff values for today.
+  /// Territory from HexRepository is current state (informational approximation).
   void _calculateBuffComparison() {
     if (_rankings == null || _dominance == null) return;
 
+    final buffService = BuffService();
+    final bd = buffService.breakdown;
     final userTeam = _rankings!.userTeam;
-    final userIsElite = _rankings!.userIsElite;
+    final userIsElite = bd.isElite;
 
-    // Calculate territory dominance
-    final allRange = _dominance!.allRange;
-    final cityRange = _dominance!.cityRange;
+    // User's authoritative multiplier from server (yesterday's calculation)
+    final userTotalMultiplier = bd.multiplier;
 
-    // Determine which team is winning each territory
-    final redWinsProvince = allRange.redHexCount > allRange.blueHexCount;
-    final blueWinsProvince = allRange.blueHexCount > allRange.redHexCount;
-    final redWinsDistrict =
-        cityRange != null && cityRange.redHexCount > cityRange.blueHexCount;
-    final blueWinsDistrict =
-        cityRange != null && cityRange.blueHexCount > cityRange.redHexCount;
+    // Territory bonuses from server breakdown (yesterday's state)
+    final allRangeBonus = bd.allRangeBonus;
+    final cityLeaderBonus = bd.isCityLeader ? 1 : 0;
 
-    // Calculate multipliers based on NEW rules:
-    // RED Elite: Base 2x, +1 for district, +1 for province = max 4x
-    // RED Common: Base 1x, +0 for district, +1 for province = max 2x
-    // BLUE Union: Base 1x, +1 for district, +1 for province = max 3x
+    // Derive territory winners from BuffBreakdown (yesterday's state)
+    final userWinsProvince = bd.allRangeBonus > 0;
+    final userWinsDistrict = bd.isCityLeader;
 
-    // RED Elite multiplier (for display)
-    int redEliteMultiplier = 2; // Base
+    final redWinsProvince = userTeam == 'red' ? userWinsProvince : !userWinsProvince;
+    final blueWinsProvince = !redWinsProvince;
+    final redWinsDistrict = userTeam == 'red' ? userWinsDistrict : !userWinsDistrict;
+    final blueWinsDistrict = !redWinsDistrict;
+
+    // Calculate estimated multipliers for comparison display
+    int redEliteMultiplier = 2;
     if (redWinsDistrict) redEliteMultiplier += 1;
     if (redWinsProvince) redEliteMultiplier += 1;
 
-    // RED Common multiplier (for display)
-    int redCommonMultiplier = 1; // Base
-    // Common does NOT get district bonus
+    int redCommonMultiplier = 1;
     if (redWinsProvince) redCommonMultiplier += 1;
 
-    // BLUE Union multiplier (for display)
-    int blueUnionMultiplier = 1; // Base
+    int blueUnionMultiplier = 1;
     if (blueWinsDistrict) blueUnionMultiplier += 1;
     if (blueWinsProvince) blueUnionMultiplier += 1;
-
-    // Province bonus for user (for UI breakdown display)
-    int allRangeBonus = 0;
-    if ((userTeam == 'red' && redWinsProvince) ||
-        (userTeam == 'blue' && blueWinsProvince)) {
-      allRangeBonus = 1;
-    }
-
-    // District bonus for user (for UI breakdown display)
-    int cityLeaderBonus = 0;
-    if (userTeam == 'red' && userIsElite && redWinsDistrict) {
-      // RED Elite gets district bonus
-      cityLeaderBonus = 1;
-    } else if (userTeam == 'blue' && blueWinsDistrict) {
-      // BLUE gets district bonus
-      cityLeaderBonus = 1;
-    }
-    // Note: RED Common does NOT get district bonus
-
-    // Calculate red runner count and elite cutoff from rankings data
-    final redRunnerCountCity = (_rankings!.eliteThreshold > 0)
-        ? (_rankings!.eliteThreshold * 5).clamp(20, 200)
-        : 50;
-    final eliteCutoffRank = (redRunnerCountCity * 0.2).ceil();
-
-    // Calculate user's total multiplier
-    int userTotalMultiplier;
-    if (userTeam == 'red') {
-      userTotalMultiplier = userIsElite
-          ? redEliteMultiplier
-          : redCommonMultiplier;
-    } else if (userTeam == 'blue') {
-      userTotalMultiplier = blueUnionMultiplier;
-    } else {
-      // Purple team - participation-based (calculated separately)
-      userTotalMultiplier = 1;
-    }
 
     _buffComparison = TeamBuffComparison(
       redBuff: RedTeamBuff(
@@ -703,8 +772,8 @@ class TeamStatsProvider with ChangeNotifier {
         activeMultiplier: userTeam == 'red'
             ? (userIsElite ? redEliteMultiplier : redCommonMultiplier)
             : redEliteMultiplier,
-        redRunnerCountCity: redRunnerCountCity,
-        eliteCutoffRank: eliteCutoffRank,
+        redRunnerCountCity: 0, // Not available locally
+        eliteCutoffRank: 0,
       ),
       blueBuff: BlueTeamBuff(unionMultiplier: blueUnionMultiplier),
       allRangeBonus: allRangeBonus,
@@ -714,10 +783,11 @@ class TeamStatsProvider with ChangeNotifier {
     );
 
     // For purple team, calculate participation stats
+    final cityRange = _dominance!.cityRange;
     if (userTeam == 'purple' && cityRange != null) {
       final totalPurple = cityRange.purpleHexCount;
       _purpleParticipation = PurpleParticipation(
-        runnersRanYesterday: 0, // Would need separate RPC for actual data
+        runnersRanYesterday: 0,
         totalPurpleInCity: totalPurple,
         participationRate: 0.0,
       );

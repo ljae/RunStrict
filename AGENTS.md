@@ -20,6 +20,8 @@
 - Serverless architecture: No backend API server (Supabase RLS handles auth)
 - **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync")
 - **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier)
+- **Offline resilient**: Failed syncs retry automatically via `SyncRetryService` (on launch, OnResume, next run)
+- **Crash recovery**: `run_checkpoint` table saves state on each hex flip; recovered on next app launch
 
 **Tech Stack**: Flutter 3.10+, Dart, Provider (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
 
@@ -119,9 +121,10 @@ lib/
 │   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
 │   ├── running_score_service.dart # Pace validation for capture
 │   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
+│   ├── sync_retry_service.dart  # Retry failed Final Syncs (uses connectivity_plus)
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
-│   └── local_storage.dart       # SQLite implementation
+│   └── local_storage.dart       # SQLite v12 (runs, routes, run_checkpoint)
 ├── theme/
 │   ├── app_theme.dart           # Colors, typography, animations
 │   └── neon_theme.dart          # Neon accent colors (used by route_map)
@@ -373,6 +376,33 @@ final multiplier = BuffService().currentBuff; // Frozen at run start
 final points = flipsEarned * multiplier;
 ```
 
+### Hybrid Points System
+```dart
+// PointsService tracks points from two sources:
+// _serverTodayBaseline: synced runs (from appLaunchSync)
+// _localUnsyncedToday: unsynced runs on this device
+// Total = _serverTodayBaseline + _localUnsyncedToday
+//
+// On sync success, onRunSynced() transfers points between baselines
+// to prevent points from disappearing during the sync window.
+```
+
+### OnResume Data Refresh
+When app returns to foreground, `AppLifecycleManager` triggers:
+- Hex map data refresh (PrefetchService)
+- Leaderboard refresh
+- Retry failed syncs (SyncRetryService)
+- Buff multiplier refresh (BuffService)
+- Today's points baseline refresh (appLaunchSync + PointsService)
+
+Skipped during active runs. Throttled to max once per 30 seconds.
+
+### Hex Data Architecture
+`HexRepository` is the **single source of truth** for hex data (no duplicate caches).
+- `PrefetchService.getCachedHex()` delegates to `HexRepository().getHex()`
+- `HexDataProvider.getHex()` reads directly from `HexRepository`
+- PrefetchService downloads into HexRepository, does not maintain its own cache
+
 ### Hex Capture & Flip
 ```dart
 // Hex stores lastRunnerTeam + lastFlippedAt (for conflict resolution)
@@ -542,6 +572,7 @@ void main() {
 | `supabase_flutter` | Backend (Auth + DB + Storage) |
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |
+| `connectivity_plus` | Network connectivity check before sync |
 
 ---
 
@@ -734,7 +765,7 @@ The app uses a **Repository Pattern** where repositories serve as the single sou
 | Repository | Purpose | Key Methods |
 |------------|---------|-------------|
 | `UserRepository()` | User data, season points | `setUser()`, `updateSeasonPoints()`, `saveToDisk()` |
-| `HexRepository()` | Hex cache (LRU), delta sync | `getHex()`, `updateHexColor()`, `mergeFromServer()` |
+| `HexRepository()` | Hex cache (LRU), delta sync, single source of truth | `getHex()`, `updateHexColor()`, `mergeFromServer()` |
 | `LeaderboardRepository()` | Leaderboard entries | `loadEntries()`, `filterByScope()`, `filterByTeam()` |
 
 ### Provider Delegation Pattern
@@ -791,7 +822,7 @@ class Run {
   void complete() { ... }
   
   // Serialization
-  Map<String, dynamic> toMap();    // SQLite
+  Map<String, dynamic> toMap();    // SQLite (includes hex_path as comma-separated, buff_multiplier)
   Map<String, dynamic> toRow();    // Supabase
 }
 ```
@@ -810,12 +841,14 @@ final hexes = await supabase.getHexesDelta(
   sinceTime: HexRepository().lastPrefetchTime,
 );
 
-// Merge into cache
+// Merge into cache (with timestamp-based conflict resolution)
+// Server data older than local lastFlippedAt is skipped (newer local wins)
 HexRepository().mergeFromServer(hexes);
 ```
 
 ### Database Version
 
-Current SQLite version: **v10**
+Current SQLite version: **v12**
 - v9: Added `sync_status`, `flip_points`, `run_date` to runs table
 - v10: Dropped legacy `sync_queue` table
+- v12: Added `hex_path`, `buff_multiplier` columns to runs table (for sync retry); added `run_checkpoint` table (crash recovery)

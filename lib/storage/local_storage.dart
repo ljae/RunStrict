@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/run.dart';
@@ -22,7 +25,8 @@ class LocalStorage implements StorageService {
   LocalStorage._internal();
 
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 10; // Bumped to drop sync_queue table
+  static const int _databaseVersion =
+      13; // v13: distance_meters, drop redundant columns
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -58,15 +62,14 @@ class LocalStorage implements StorageService {
         id TEXT PRIMARY KEY,
         startTime INTEGER NOT NULL,
         endTime INTEGER NOT NULL,
-        distanceKm REAL NOT NULL,
+        distance_meters REAL NOT NULL,
         durationSeconds INTEGER NOT NULL,
-        avgPaceSecPerKm REAL NOT NULL,
         hexesColored INTEGER NOT NULL DEFAULT 0,
         teamAtRun TEXT NOT NULL,
-        isPurpleRunner INTEGER NOT NULL DEFAULT 0,
+        hex_path TEXT DEFAULT '',
+        buff_multiplier INTEGER DEFAULT 1,
         cv REAL,
         sync_status TEXT DEFAULT 'pending',
-        flip_points INTEGER DEFAULT 0,
         run_date TEXT
       )
     ''');
@@ -154,6 +157,21 @@ class LocalStorage implements StorageService {
     // Index for efficient retry queries
     await db.execute('''
       CREATE INDEX idx_sync_queue_created ON $_tableSyncQueue(created_at ASC)
+    ''');
+
+    // Run checkpoint table (crash recovery - saves state on each hex flip)
+    await db.execute('''
+      CREATE TABLE run_checkpoint (
+        id TEXT PRIMARY KEY DEFAULT 'active',
+        run_id TEXT NOT NULL,
+        team_at_run TEXT NOT NULL,
+        start_time INTEGER NOT NULL,
+        distance_meters REAL NOT NULL,
+        hexes_colored INTEGER NOT NULL DEFAULT 0,
+        captured_hex_ids TEXT NOT NULL DEFAULT '',
+        buff_multiplier INTEGER NOT NULL DEFAULT 1,
+        last_updated INTEGER NOT NULL
+      )
     ''');
   }
 
@@ -323,6 +341,84 @@ class LocalStorage implements StorageService {
         // Table may not exist
       }
     }
+    if (oldVersion < 11) {
+      // v10 → v11: avgPaceSecPerKm and isPurpleRunner are no longer written by
+      // Run.toMap(). The columns remain in the schema (SQLite cannot drop columns
+      // on older Android versions) but new rows will use the DEFAULT values.
+      // No DDL changes required — this migration is intentionally a no-op.
+    }
+    if (oldVersion < 12) {
+      // v11 → v12: Add hex_path + buff_multiplier for sync retry,
+      // and run_checkpoint table for crash recovery.
+      try {
+        await db.execute(
+          "ALTER TABLE $_tableRuns ADD COLUMN hex_path TEXT DEFAULT ''",
+        );
+      } catch (e) {
+        // Column may already exist
+      }
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN buff_multiplier INTEGER DEFAULT 1',
+        );
+      } catch (e) {
+        // Column may already exist
+      }
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS run_checkpoint (
+            id TEXT PRIMARY KEY DEFAULT 'active',
+            run_id TEXT NOT NULL,
+            team_at_run TEXT NOT NULL,
+            start_time INTEGER NOT NULL,
+            distance_meters REAL NOT NULL,
+            hexes_colored INTEGER NOT NULL DEFAULT 0,
+            captured_hex_ids TEXT NOT NULL DEFAULT '',
+            buff_multiplier INTEGER NOT NULL DEFAULT 1,
+            last_updated INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        // Table may already exist
+      }
+    }
+    if (oldVersion < 13) {
+      // v12 → v13: Normalize distance (km→m), drop redundant columns
+      // (avgPaceSecPerKm, isPurpleRunner, flip_points).
+      // SQLite cannot DROP COLUMN on older Android, so we recreate the table.
+      try {
+        await db.execute('ALTER TABLE $_tableRuns RENAME TO runs_old');
+        await db.execute('''
+          CREATE TABLE $_tableRuns (
+            id TEXT PRIMARY KEY,
+            startTime INTEGER NOT NULL,
+            endTime INTEGER NOT NULL,
+            distance_meters REAL NOT NULL,
+            durationSeconds INTEGER NOT NULL,
+            hexesColored INTEGER NOT NULL DEFAULT 0,
+            teamAtRun TEXT NOT NULL,
+            hex_path TEXT DEFAULT '',
+            buff_multiplier INTEGER DEFAULT 1,
+            cv REAL,
+            sync_status TEXT DEFAULT 'pending',
+            run_date TEXT
+          )
+        ''');
+        await db.execute('''
+          INSERT INTO $_tableRuns (id, startTime, endTime, distance_meters, durationSeconds, hexesColored, teamAtRun, hex_path, buff_multiplier, cv, sync_status, run_date)
+          SELECT id, startTime, endTime, distanceKm * 1000, durationSeconds, hexesColored, teamAtRun, COALESCE(hex_path, ''), COALESCE(buff_multiplier, 1), cv, COALESCE(sync_status, 'pending'), run_date
+          FROM runs_old
+        ''');
+        await db.execute('DROP TABLE runs_old');
+        // Recreate index for sync date queries
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_runs_sync_date 
+          ON $_tableRuns(sync_status, run_date)
+        ''');
+      } catch (e) {
+        debugPrint('LocalStorage: v13 migration failed: $e');
+      }
+    }
   }
 
   @override
@@ -445,11 +541,20 @@ class LocalStorage implements StorageService {
       orderBy: 'startTime DESC',
     );
 
-    // Return as Run
+    // Return as Run — skip corrupt rows instead of failing the entire load.
     // Routes are NOT loaded here (lazy loading)
-    return runMaps.map((map) {
-      return Run.fromMap(map);
-    }).toList();
+    final runs = <Run>[];
+    for (final map in runMaps) {
+      try {
+        runs.add(Run.fromMap(map));
+      } catch (e, stackTrace) {
+        debugPrint(
+          'LocalStorage.getAllRuns: Skipping corrupt row '
+          'id=${map['id']} - $e\n$stackTrace',
+        );
+      }
+    }
+    return runs;
   }
 
   Future<Run?> getRunSummaryById(String id) async {
@@ -511,7 +616,7 @@ class LocalStorage implements StorageService {
     final result = await _database!.rawQuery('''
       SELECT
         COUNT(*) as totalRuns,
-        COALESCE(SUM(distanceKm), 0) as totalDistanceKm,
+        COALESCE(SUM(distance_meters), 0) as totalDistanceMeters,
         COALESCE(SUM(hexesColored), 0) as totalHexes
       FROM $_tableRuns
     ''');
@@ -522,8 +627,7 @@ class LocalStorage implements StorageService {
 
     return {
       'totalRuns': result.first['totalRuns'] as int,
-      'totalDistance':
-          (result.first['totalDistanceKm'] as num).toDouble() * 1000,
+      'totalDistance': (result.first['totalDistanceMeters'] as num).toDouble(),
       'totalHexes': result.first['totalHexes'] as int,
     };
   }
@@ -559,7 +663,7 @@ class LocalStorage implements StorageService {
       '''
       SELECT
         COUNT(*) as totalRuns,
-        COALESCE(SUM(distanceKm), 0) as totalDistanceKm,
+        COALESCE(SUM(distance_meters), 0) as totalDistanceMeters,
         COALESCE(SUM(hexesColored), 0) as totalHexes,
         COALESCE(SUM(durationSeconds), 0) as totalDuration
       FROM $_tableRuns
@@ -571,7 +675,7 @@ class LocalStorage implements StorageService {
     if (result.isEmpty) {
       return {
         'totalRuns': 0,
-        'totalDistanceKm': 0.0,
+        'totalDistanceMeters': 0.0,
         'totalHexes': 0,
         'totalDuration': 0,
       };
@@ -579,7 +683,8 @@ class LocalStorage implements StorageService {
 
     return {
       'totalRuns': result.first['totalRuns'] as int,
-      'totalDistanceKm': (result.first['totalDistanceKm'] as num).toDouble(),
+      'totalDistanceMeters': (result.first['totalDistanceMeters'] as num)
+          .toDouble(),
       'totalHexes': result.first['totalHexes'] as int,
       'totalDuration': result.first['totalDuration'] as int,
     };
@@ -752,7 +857,6 @@ class LocalStorage implements StorageService {
     final runMap = run.toMap();
     runMap['cv'] = cv;
     runMap['sync_status'] = 'pending';
-    runMap['flip_points'] = flipPoints;
     runMap['run_date'] = runDate;
 
     await _database!.transaction((txn) async {
@@ -793,7 +897,7 @@ class LocalStorage implements StorageService {
     final today = Gmt2DateUtils.todayGmt2String;
     final result = await _database!.rawQuery(
       '''
-      SELECT COALESCE(SUM(flip_points), 0) as total
+      SELECT COALESCE(SUM(hexesColored * buff_multiplier), 0) as total
       FROM $_tableRuns
       WHERE sync_status = 'pending'
         AND run_date = ?
@@ -833,6 +937,147 @@ class LocalStorage implements StorageService {
       whereArgs: ['pending'],
       orderBy: 'endTime ASC',
     );
+  }
+
+  // ============ RUN CHECKPOINT (CRASH RECOVERY) ============
+
+  /// Save a run checkpoint for crash recovery.
+  /// Called on each hex flip to persist minimal run state.
+  Future<void> saveRunCheckpoint(Map<String, dynamic> checkpoint) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    checkpoint['id'] = 'active';
+    checkpoint['last_updated'] = DateTime.now().millisecondsSinceEpoch;
+
+    await _database!.insert(
+      'run_checkpoint',
+      checkpoint,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get the active run checkpoint (if any).
+  /// Returns null if no checkpoint exists.
+  Future<Map<String, dynamic>?> getRunCheckpoint() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final results = await _database!.query(
+      'run_checkpoint',
+      where: 'id = ?',
+      whereArgs: ['active'],
+      limit: 1,
+    );
+
+    if (results.isEmpty) return null;
+    return results.first;
+  }
+
+  /// Clear the active run checkpoint.
+  /// Called after a run is successfully saved and synced.
+  Future<void> clearRunCheckpoint() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.delete(
+      'run_checkpoint',
+      where: 'id = ?',
+      whereArgs: ['active'],
+    );
+  }
+
+  /// Get aggregated stats for yesterday's runs (GMT+2 date).
+  Future<Map<String, dynamic>?> getYesterdayRunStats() async {
+    final db = _database;
+    if (db == null) return null;
+
+    final yesterday = Gmt2DateUtils.todayGmt2.subtract(const Duration(days: 1));
+    final yesterdayStr = Gmt2DateUtils.toGmt2DateString(yesterday);
+
+    // Note: avgPaceSecPerKm column is always 0 (deprecated since v11).
+    // Compute pace from distance and duration instead.
+    final results = await db.rawQuery(
+      '''
+      SELECT
+        COUNT(*) as run_count,
+        SUM(distance_meters) as total_distance_meters,
+        SUM(durationSeconds) as total_duration_seconds,
+        SUM(hexesColored) as total_flips,
+        SUM(hexesColored * buff_multiplier) as total_flip_points,
+        AVG(cv) as avg_cv
+      FROM $_tableRuns
+      WHERE run_date = ?
+    ''',
+      [yesterdayStr],
+    );
+
+    if (results.isEmpty) return null;
+    final row = results.first;
+    final runCount = (row['run_count'] as num?)?.toInt() ?? 0;
+    if (runCount == 0) return null;
+
+    final totalDistKm =
+        ((row['total_distance_meters'] as num?)?.toDouble() ?? 0) / 1000;
+    final totalDurSec =
+        (row['total_duration_seconds'] as num?)?.toDouble() ?? 0;
+    // Compute average pace (min/km) from aggregate distance and duration
+    final avgPaceMinPerKm = (totalDistKm > 0 && totalDurSec > 0)
+        ? (totalDurSec / 60.0) / totalDistKm
+        : null;
+
+    return {
+      'run_count': runCount,
+      'distance_km': totalDistKm,
+      'flip_count': (row['total_flips'] as num?)?.toInt() ?? 0,
+      'flip_points': (row['total_flip_points'] as num?)?.toInt() ?? 0,
+      'avg_pace_min_per_km': avgPaceMinPerKm,
+      'avg_cv': (row['avg_cv'] as num?)?.toDouble(),
+      'date': yesterdayStr,
+    };
+  }
+
+  // ============ TERRITORY SNAPSHOT ============
+
+  /// Save territory dominance snapshot for a given date (GMT+2 date string).
+  /// Stored in prefetch_meta as JSON for tomorrow's TeamScreen display.
+  Future<void> saveTerritorySnapshot(
+    String dateStr,
+    Map<String, dynamic> data,
+  ) async {
+    final json = jsonEncode(data);
+    await savePrefetchMeta('territory_$dateStr', json);
+  }
+
+  /// Get territory dominance snapshot for a given date (GMT+2 date string).
+  /// Returns null if no snapshot exists for that date.
+  Future<Map<String, dynamic>?> getTerritorySnapshot(String dateStr) async {
+    final json = await getPrefetchMeta('territory_$dateStr');
+    if (json == null) return null;
+    try {
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('LocalStorage: Failed to decode territory snapshot: $e');
+      return null;
+    }
+  }
+
+  /// Sum all flip_points from all local runs (for season points fallback).
+  ///
+  /// Used when appLaunchSync fails and we need to derive season points
+  /// from local data instead of server.
+  Future<int> sumAllFlipPoints() async {
+    if (_database == null) return 0;
+
+    final result = await _database!.rawQuery('''
+      SELECT COALESCE(SUM(hexesColored * buff_multiplier), 0) as total
+      FROM $_tableRuns
+    ''');
+
+    return (result.first['total'] as num?)?.toInt() ?? 0;
   }
 
   /// Mark all runs from today as synced (after server confirms baseline).

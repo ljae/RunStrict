@@ -241,7 +241,7 @@ void main() {
 
     group('toMap/fromMap Serialization (SQLite Format)', () {
       // Note: toMap/fromMap are for SQLite local storage.
-      // SQLite schema stores: distanceKm (not meters), sync_status (not syncStatus)
+      // SQLite schema stores: distance_meters, sync_status (not syncStatus)
       // Transient fields (hexPath, route, hexesPassed, currentHexId, etc.) are NOT stored.
       test('roundtrip preserves stored fields', () {
         final original = Run(
@@ -284,9 +284,11 @@ void main() {
         expect(restored.cv, equals(original.cv));
         expect(restored.syncStatus, equals(original.syncStatus));
 
-        // NOT stored fields get defaults after restore
-        expect(restored.hexPath, equals(const [])); // Not stored
-        expect(restored.buffMultiplier, equals(1)); // Not stored, defaults to 1
+        // Now stored in SQLite (DB v12+)
+        expect(restored.hexPath, equals(const ['hex1', 'hex2', 'hex3']));
+        expect(restored.buffMultiplier, equals(2));
+
+        // Transient fields get defaults after restore
         expect(restored.route, equals(const [])); // Transient
         expect(restored.hexesPassed, equals(const [])); // Transient
         expect(restored.currentHexId, isNull); // Transient
@@ -320,18 +322,26 @@ void main() {
         expect(map.containsKey('id'), isTrue);
         expect(map.containsKey('startTime'), isTrue);
         expect(map.containsKey('endTime'), isTrue);
-        expect(map.containsKey('distanceKm'), isTrue); // NOT distanceMeters
+        expect(map.containsKey('distance_meters'), isTrue);
         expect(map.containsKey('durationSeconds'), isTrue);
-        expect(map.containsKey('avgPaceSecPerKm'), isTrue);
         expect(map.containsKey('hexesColored'), isTrue);
         expect(map.containsKey('teamAtRun'), isTrue);
         expect(map.containsKey('cv'), isTrue);
         expect(map.containsKey('sync_status'), isTrue); // NOT syncStatus
-        expect(map.containsKey('flip_points'), isTrue);
+
+        // Removed in v13
+        expect(map.containsKey('flip_points'), isFalse);
+        expect(map.containsKey('avgPaceSecPerKm'), isFalse);
+        expect(map.containsKey('distanceKm'), isFalse);
+
+        // Legacy fields removed from toMap()
+        expect(map.containsKey('isPurpleRunner'), isFalse);
+
+        // Now stored in SQLite (DB v12+ for sync retry)
+        expect(map.containsKey('hex_path'), isTrue);
+        expect(map.containsKey('buff_multiplier'), isTrue);
 
         // NOT stored in SQLite
-        expect(map.containsKey('hexPath'), isFalse);
-        expect(map.containsKey('buffMultiplier'), isFalse);
         expect(map.containsKey('distanceMeters'), isFalse);
         expect(map.containsKey('syncStatus'), isFalse);
       });

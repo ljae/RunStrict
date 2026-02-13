@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
+import '../config/h3_config.dart';
 import '../models/hex_model.dart';
 import '../models/team.dart';
 import '../services/hex_service.dart';
@@ -180,7 +181,16 @@ class HexRepository extends ChangeNotifier {
 
       final existing = _hexCache.get(hexId);
       if (existing != null) {
-        _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: team));
+        // Only update if server data is newer (conflict resolution)
+        if (flippedAt != null &&
+            existing.lastFlippedAt != null &&
+            flippedAt.isBefore(existing.lastFlippedAt!)) {
+          continue; // Keep local (newer)
+        }
+        _hexCache.put(
+          hexId,
+          existing.copyWith(lastRunnerTeam: team, lastFlippedAt: flippedAt),
+        );
       } else {
         try {
           final hexCenter = HexService().getHexCenter(hexId);
@@ -235,6 +245,49 @@ class HexRepository extends ChangeNotifier {
     _lastPrefetchTime = null;
     debugPrint('HexRepository: Cleared all state');
     notifyListeners();
+  }
+
+  /// Compute hex dominance from cached data for given scope parents.
+  /// Returns {'allRange': {red, blue, purple, total}, 'cityRange': {...}}
+  Map<String, Map<String, int>> computeHexDominance({
+    required String homeHexAll,
+    String? homeHexCity,
+  }) {
+    int allRed = 0, allBlue = 0, allPurple = 0, allTotal = 0;
+    int cityRed = 0, cityBlue = 0, cityPurple = 0, cityTotal = 0;
+
+    final hexService = HexService();
+
+    _hexCache.forEach((hexId, hex) {
+      final parentAll = hexService.getParentHexId(hexId, H3Config.allResolution);
+      if (parentAll == homeHexAll) {
+        allTotal++;
+        switch (hex.lastRunnerTeam) {
+          case Team.red: allRed++;
+          case Team.blue: allBlue++;
+          case Team.purple: allPurple++;
+          case null: break;
+        }
+
+        if (homeHexCity != null) {
+          final parentCity = hexService.getParentHexId(hexId, H3Config.cityResolution);
+          if (parentCity == homeHexCity) {
+            cityTotal++;
+            switch (hex.lastRunnerTeam) {
+              case Team.red: cityRed++;
+              case Team.blue: cityBlue++;
+              case Team.purple: cityPurple++;
+              case null: break;
+            }
+          }
+        }
+      }
+    });
+
+    return {
+      'allRange': {'red': allRed, 'blue': allBlue, 'purple': allPurple, 'total': allTotal},
+      'cityRange': {'red': cityRed, 'blue': cityBlue, 'purple': cityPurple, 'total': cityTotal},
+    };
   }
 
   /// Get cache statistics for debugging/monitoring

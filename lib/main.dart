@@ -20,6 +20,8 @@ import 'services/supabase_service.dart';
 import 'services/remote_config_service.dart';
 import 'services/prefetch_service.dart';
 import 'services/app_lifecycle_manager.dart';
+import 'services/buff_service.dart';
+import 'services/sync_retry_service.dart';
 import 'storage/local_storage.dart';
 import 'utils/dummy_data_generator.dart';
 
@@ -185,6 +187,11 @@ class _AppInitializerState extends State<_AppInitializer> {
       );
     } catch (e) {
       debugPrint('AppInitializer: Failed to load today flip points - $e');
+      // Derive season points from local runs when server is unavailable
+      final localSeasonPoints = await _localStorage.sumAllFlipPoints();
+      if (localSeasonPoints > 0) {
+        pointsService.setSeasonPoints(localSeasonPoints);
+      }
       // Still try to load local unsynced points even if server fails
       await pointsService.refreshLocalUnsyncedPoints();
     }
@@ -240,6 +247,8 @@ class _AppInitializerState extends State<_AppInitializer> {
   void _initializeLifecycleManager() {
     final runProvider = context.read<RunProvider>();
     final leaderboardProvider = context.read<LeaderboardProvider>();
+    final appState = context.read<AppStateProvider>();
+    final pointsService = context.read<PointsService>();
 
     AppLifecycleManager().initialize(
       isRunning: () => runProvider.isRunning,
@@ -248,6 +257,31 @@ class _AppInitializerState extends State<_AppInitializer> {
         await PrefetchService().refresh();
         // Also refresh leaderboard provider
         await leaderboardProvider.refreshLeaderboard();
+
+        final userId = appState.currentUser?.id;
+        if (userId != null) {
+          // Retry failed syncs
+          final syncedPoints =
+              await SyncRetryService().retryUnsyncedRuns();
+          if (syncedPoints > 0) {
+            pointsService.onRunSynced(syncedPoints);
+          }
+
+          // Refresh buff multiplier (may have changed at midnight)
+          await BuffService().refresh(userId);
+
+          // Refresh today's points baseline
+          try {
+            final supabase = SupabaseService();
+            final result = await supabase.appLaunchSync(userId);
+            final baseline =
+                (result['today_flip_points'] as num?)?.toInt() ?? 0;
+            pointsService.setServerTodayBaseline(baseline);
+            await pointsService.refreshLocalUnsyncedPoints();
+          } catch (e) {
+            debugPrint('OnResume: Failed to refresh points - $e');
+          }
+        }
       },
     );
   }

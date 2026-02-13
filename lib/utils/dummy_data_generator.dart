@@ -88,19 +88,26 @@ class DummyDataGenerator {
     );
     final endTime = startTime.add(Duration(seconds: durationSeconds));
 
+    // run_date in GMT+2 format (YYYY-MM-DD)
+    final runDate =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    // Column names must match the SQLite schema exactly
     return {
       'id':
           'dummy_${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}',
       'startTime': startTime.millisecondsSinceEpoch,
       'endTime': endTime.millisecondsSinceEpoch,
-      'distanceMeters': distanceKm * 1000, // Convert km to meters
+      'distanceKm': distanceKm,
       'durationSeconds': durationSeconds,
       'hexesColored': hexesColored,
-      'hexesPassed': hexesColored, // Same as colored for dummy data
       'teamAtRun': team.name,
-      'buffMultiplier': 1,
+      'hex_path': '',
+      'buff_multiplier': 1,
       'cv': cv,
-      'syncStatus': 'synced',
+      'sync_status': 'synced',
+      'flip_points': hexesColored,
+      'run_date': runDate,
     };
   }
 

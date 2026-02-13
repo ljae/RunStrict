@@ -61,6 +61,34 @@ class LeaderboardEntry {
     );
   }
 
+  /// Serialize to cache map format (for SQLite leaderboard_cache table)
+  Map<String, dynamic> toCacheMap() => {
+    'user_id': id,
+    'name': name,
+    'avatar': avatar,
+    'team': team.name,
+    'flip_points': seasonPoints,
+    'total_distance_km': totalDistanceKm,
+    'stability_score': stabilityScore,
+    'home_hex': homeHex,
+  };
+
+  /// Deserialize from cache map format (SQLite leaderboard_cache table)
+  factory LeaderboardEntry.fromCacheMap(Map<String, dynamic> map) {
+    final stabilityScore = (map['stability_score'] as num?)?.toInt();
+    return LeaderboardEntry(
+      id: map['user_id'] as String,
+      name: map['name'] as String,
+      team: Team.values.byName(map['team'] as String),
+      avatar: map['avatar'] as String? ?? '🏃',
+      seasonPoints: (map['flip_points'] as num?)?.toInt() ?? 0,
+      rank: 0,
+      totalDistanceKm: (map['total_distance_km'] as num?)?.toDouble() ?? 0,
+      avgCv: stabilityScore != null ? (100 - stabilityScore).toDouble() : null,
+      homeHex: map['home_hex'] as String?,
+    );
+  }
+
   /// Check if this entry is in the same scope as a reference home hex
   bool isInScope(String? referenceHomeHex, GeographicScope scope) {
     if (homeHex == null || referenceHomeHex == null) return false;

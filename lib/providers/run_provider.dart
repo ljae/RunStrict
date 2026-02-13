@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
@@ -14,6 +15,7 @@ import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
 import '../storage/local_storage.dart';
+import '../utils/gmt2_date_utils.dart';
 
 enum RunEvent { pointEarned }
 
@@ -177,6 +179,7 @@ class RunProvider with ChangeNotifier {
     _setLoading(true);
     try {
       await _storageService.initialize();
+      await _recoverFromCheckpoint();
       await loadRunHistory();
       await loadTotalStats();
       _setError(null);
@@ -184,6 +187,73 @@ class RunProvider with ChangeNotifier {
       _setError('Failed to initialize: $e');
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// Recover a partial run from checkpoint (crash recovery).
+  ///
+  /// If the app crashed during a run, the checkpoint contains enough
+  /// data to save the run locally and attempt sync.
+  Future<void> _recoverFromCheckpoint() async {
+    final storage = _storageService;
+    if (storage is! LocalStorage) return;
+
+    final localStorage = storage;
+    final checkpoint = await localStorage.getRunCheckpoint();
+    if (checkpoint == null) return;
+
+    debugPrint('RunProvider: Recovering run from checkpoint');
+
+    try {
+      final runId = checkpoint['run_id'] as String;
+      final teamName = checkpoint['team_at_run'] as String;
+      final startTimeMs = checkpoint['start_time'] as int;
+      final distanceMeters = (checkpoint['distance_meters'] as num).toDouble();
+      final hexesColored = (checkpoint['hexes_colored'] as num).toInt();
+      final capturedStr = checkpoint['captured_hex_ids'] as String;
+      final buffMult = (checkpoint['buff_multiplier'] as num?)?.toInt() ?? 1;
+
+      final hexPath = capturedStr.isNotEmpty
+          ? capturedStr.split(',')
+          : <String>[];
+
+      final startTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
+      final endTime = DateTime.fromMillisecondsSinceEpoch(
+        checkpoint['last_updated'] as int,
+      );
+      final durationSeconds = endTime.difference(startTime).inSeconds;
+
+      final recoveredRun = Run(
+        id: runId,
+        startTime: startTime,
+        endTime: endTime,
+        distanceMeters: distanceMeters,
+        durationSeconds: durationSeconds,
+        hexesColored: hexesColored,
+        teamAtRun: Team.values.byName(teamName),
+        hexPath: hexPath,
+        buffMultiplier: buffMult,
+        syncStatus: 'pending',
+      );
+
+      final flipPoints = hexesColored * buffMult;
+
+      await localStorage.saveRunWithSyncTracking(
+        recoveredRun,
+        flipPoints: flipPoints,
+      );
+
+      debugPrint(
+        'RunProvider: Recovered run $runId '
+        '(${hexPath.length} hexes, ${distanceMeters.toStringAsFixed(0)}m)',
+      );
+
+      // Clear checkpoint after successful save
+      await localStorage.clearRunCheckpoint();
+    } catch (e) {
+      debugPrint('RunProvider: Failed to recover from checkpoint - $e');
+      // Clear corrupt checkpoint
+      await localStorage.clearRunCheckpoint();
     }
   }
 
@@ -220,11 +290,19 @@ class RunProvider with ChangeNotifier {
       HexDataProvider().clearCapturedHexes();
 
       // Set callbacks BEFORE starting the run
+      final localDb = _storageService is LocalStorage ? _storageService : null;
       _runTracker.setCallbacks(
         onHexCapture: _handleHexCapture,
         onTierChange: (oldTier, newTier) {
           notifyListeners();
         },
+        onCheckpoint: localDb != null
+            ? (checkpoint) {
+                checkpoint['buff_multiplier'] = _buffService
+                    .getEffectiveMultiplier();
+                localDb.saveRunCheckpoint(checkpoint);
+              }
+            : null,
       );
 
       _runTracker.startNewRun(
@@ -322,7 +400,6 @@ class RunProvider with ChangeNotifier {
 
     try {
       _stopTimer();
-      _buffService.unfreezeAfterRun();
       final result = _runTracker.stopRun();
       await _locationService.stopTracking();
 
@@ -330,17 +407,26 @@ class RunProvider with ChangeNotifier {
       await _locationSubscription?.cancel();
       _locationSubscription = null;
 
+      // Read frozen multiplier BEFORE unfreezing (must match run's buff)
+      final effectiveMultiplier = _buffService.getEffectiveMultiplier();
+      _buffService.unfreezeAfterRun();
+
       if (result != null) {
-        // Set CV and duration on the completed run (calculated at stop time)
+        final capturedHexIds = result.capturedHexIds;
+
+        // Set CV, duration, hexPath, and buffMultiplier on the completed run
         // Duration comes from the UI timer (_duration), which accurately tracks elapsed time
+        // hexPath must be set here because RunTracker stores captures in capturedHexIds,
+        // not in Run.hexPath. buffMultiplier must be set for correct local flipPoints.
         final completedRun = result.session.copyWith(
           cv: result.cv,
           durationSeconds: _duration.inSeconds,
+          hexPath: capturedHexIds,
+          buffMultiplier: effectiveMultiplier,
+          runDate: Gmt2DateUtils.toGmt2DateString(DateTime.now()),
         );
-        final capturedHexIds = result.capturedHexIds;
 
         // Calculate flip points for this run (hexes × multiplier)
-        final effectiveMultiplier = _buffService.getEffectiveMultiplier();
         final flipPoints = completedRun.hexesColored * effectiveMultiplier;
 
         debugPrint(
@@ -356,26 +442,46 @@ class RunProvider with ChangeNotifier {
         // Uses saveRunWithSyncTracking if storage is LocalStorage
         final storageService = _storageService;
         if (storageService is LocalStorage) {
-          await storageService.saveRunWithSyncTracking(
-            completedRun,
-            flipPoints: flipPoints,
-            cv: result.cv,
-          );
+          try {
+            await storageService.saveRunWithSyncTracking(
+              completedRun,
+              flipPoints: flipPoints,
+              cv: result.cv,
+            );
+          } catch (e) {
+            debugPrint(
+              'RunProvider: saveRunWithSyncTracking failed ($e), '
+              'attempting fallback saveRun',
+            );
+            try {
+              await _storageService.saveRun(completedRun);
+            } catch (e2) {
+              debugPrint('RunProvider: Fallback saveRun also failed: $e2');
+            }
+          }
         } else {
-          // Fallback for other storage implementations
           await _storageService.saveRun(completedRun);
         }
+
+        // Refresh history IMMEDIATELY after save, before the slow network sync.
+        // This ensures _runHistory has the new run if the user switches to
+        // RunHistoryScreen while the Final Sync is still in progress.
+        await loadRunHistory();
+        await loadTotalStats();
 
         // === THE FINAL SYNC ===
         // Upload run with hex captures to server
         bool syncSucceeded = false;
-        if (capturedHexIds.isNotEmpty) {
+
+        // Check network connectivity before attempting sync
+        final connectivityResults = await Connectivity().checkConnectivity();
+        final hasNetwork = !connectivityResults.contains(
+          ConnectivityResult.none,
+        );
+
+        if (hasNetwork && capturedHexIds.isNotEmpty) {
           try {
-            // Update run with buff multiplier for sync
-            final runForSync = completedRun.copyWith(
-              buffMultiplier: effectiveMultiplier,
-            );
-            final syncResult = await _supabaseService.finalizeRun(runForSync);
+            final syncResult = await _supabaseService.finalizeRun(completedRun);
             debugPrint(
               'RunProvider: Final Sync completed - '
               'flips=${syncResult['flips']}, '
@@ -388,6 +494,12 @@ class RunProvider with ChangeNotifier {
             debugPrint('RunProvider: Final Sync failed - $e');
             // Run remains 'pending' in local DB for retry on next app launch
           }
+        } else if (!hasNetwork && capturedHexIds.isNotEmpty) {
+          // No network - skip sync, will be retried by SyncRetryService
+          debugPrint(
+            'RunProvider: No network - skipping Final Sync '
+            '(${capturedHexIds.length} hexes pending)',
+          );
         } else {
           // No hex captures = nothing to sync, mark as synced
           syncSucceeded = true;
@@ -400,9 +512,10 @@ class RunProvider with ChangeNotifier {
           _pointsService?.onRunSynced(flipPoints);
         }
 
-        // Refresh history and stats
-        await loadRunHistory();
-        await loadTotalStats();
+        // Clear checkpoint after successful save (crash recovery no longer needed)
+        if (storageService is LocalStorage) {
+          await storageService.clearRunCheckpoint();
+        }
 
         // Clear shared location when run ends
         HexDataProvider().clearUserLocation();
@@ -426,6 +539,10 @@ class RunProvider with ChangeNotifier {
       _setError('Failed to stop run: $e');
       return [];
     } finally {
+      // Always refresh history and stats, even if errors occurred during save/sync.
+      // This ensures the run history screen shows the latest data.
+      await loadRunHistory();
+      await loadTotalStats();
       _setLoading(false);
     }
   }
@@ -434,8 +551,15 @@ class RunProvider with ChangeNotifier {
   Future<void> loadRunHistory() async {
     try {
       _runHistory = await _storageService.getAllRuns();
+      debugPrint(
+        'RunProvider.loadRunHistory: Loaded ${_runHistory.length} runs'
+        '${_runHistory.isNotEmpty ? " (latest: ${_runHistory.first.id.substring(0, 8)}..., "
+                  "${_runHistory.first.distanceKm.toStringAsFixed(2)}km, "
+                  "${_runHistory.first.hexesColored} flips)" : ""}',
+      );
       notifyListeners();
     } catch (e) {
+      debugPrint('RunProvider.loadRunHistory FAILED: $e');
       _setError('Failed to load run history: $e');
     }
   }

@@ -154,10 +154,12 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
 
   void _onPointsChanged() {
     final newPoints = widget.pointsService.todayFlipPoints;
-    if (newPoints != _displayedPoints && !_isAnimating) {
-      _animateToPoints(newPoints);
+    if (newPoints != _displayedPoints) {
+      _targetPoints = newPoints;
+      if (!_isAnimating) {
+        _animateToPoints(newPoints);
+      }
     }
-    // If animating, do nothing — animation completion will re-check
   }
 
   void _animateToPoints(int newPoints) {
@@ -204,12 +206,13 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
           _isAnimating = false;
         });
 
-        // Re-check: catch any points that arrived during animation
+        // Check if more points arrived during animation (via _onPointsChanged updating _targetPoints)
         final latestPoints = widget.pointsService.todayFlipPoints;
         if (latestPoints != _displayedPoints) {
+          _targetPoints = latestPoints;
           Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted && !_isAnimating) {
-              _animateToPoints(latestPoints);
+              _animateToPoints(_targetPoints);
             }
           });
         }
@@ -237,8 +240,12 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
 
     // Ensure both have same length for animation
     final maxLen = math.max(displayDigits.length, targetDigits.length);
-    while (displayDigits.length < maxLen) displayDigits.insert(0, 0);
-    while (targetDigits.length < maxLen) targetDigits.insert(0, 0);
+    while (displayDigits.length < maxLen) {
+      displayDigits.insert(0, 0);
+    }
+    while (targetDigits.length < maxLen) {
+      targetDigits.insert(0, 0);
+    }
 
     return AnimatedBuilder(
       animation: Listenable.merge([_glowAnimation, _scaleAnimation]),

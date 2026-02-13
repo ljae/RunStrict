@@ -19,6 +19,9 @@ typedef HexCaptureCallback = bool Function(String hexId, Team runnerTeam);
 typedef TierChangeCallback =
     void Function(ImpactTier oldTier, ImpactTier newTier);
 
+/// Callback for run checkpoint (crash recovery)
+typedef RunCheckpointCallback = void Function(Map<String, dynamic> checkpoint);
+
 /// Result of stopping a run, including data for "The Final Sync"
 class RunStopResult {
   final Run session;
@@ -63,6 +66,7 @@ class RunTracker {
   final HexService _hexService = HexService();
   HexCaptureCallback? _onHexCapture;
   TierChangeCallback? _onTierChange;
+  RunCheckpointCallback? _onCheckpoint;
   Team? _runnerTeam;
   ImpactTier _currentTier = ImpactTier.starter;
   int _maxImpactTierIndex = 0;
@@ -109,9 +113,11 @@ class RunTracker {
   void setCallbacks({
     HexCaptureCallback? onHexCapture,
     TierChangeCallback? onTierChange,
+    RunCheckpointCallback? onCheckpoint,
   }) {
     _onHexCapture = onHexCapture;
     _onTierChange = onTierChange;
+    _onCheckpoint = onCheckpoint;
   }
 
   /// Set runner context for scoring
@@ -268,6 +274,7 @@ class RunTracker {
               'Total flips: ${_currentRun!.hexesColored}, '
               'Batch size: ${_capturedHexIds.length}',
             );
+            _emitCheckpoint();
           }
         }
       }
@@ -293,6 +300,7 @@ class RunTracker {
               'Total flips: ${_currentRun!.hexesColored}, '
               'Batch size: ${_capturedHexIds.length}',
             );
+            _emitCheckpoint();
           }
 
           // Reset distance to avoid spamming capture calls
@@ -337,6 +345,20 @@ class RunTracker {
 
   double _degreesToRadians(double degrees) {
     return degrees * pi / 180;
+  }
+
+  /// Emit a checkpoint with current run state (for crash recovery)
+  void _emitCheckpoint() {
+    if (_currentRun == null || _onCheckpoint == null) return;
+
+    _onCheckpoint!({
+      'run_id': _currentRun!.id,
+      'team_at_run': _runnerTeam?.name ?? _currentRun!.teamAtRun.name,
+      'start_time': _currentRun!.startTime.millisecondsSinceEpoch,
+      'distance_meters': _currentRun!.distanceMeters,
+      'hexes_colored': _currentRun!.hexesColored,
+      'captured_hex_ids': _capturedHexIds.join(','),
+    });
   }
 
   /// Check if a lap (1km) has been completed and record it
@@ -425,6 +447,7 @@ class RunTracker {
     _completedLaps.clear();
     _currentLapStartDistance = 0;
     _currentLapStartTimestampMs = null;
+    _onCheckpoint = null;
 
     // Stop accelerometer
     _accelerometerService.stopListening();

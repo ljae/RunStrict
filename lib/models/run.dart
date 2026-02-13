@@ -25,6 +25,7 @@ class Run {
   final int buffMultiplier;
   final double? cv; // Coefficient of Variation (null for runs < 1km)
   final String syncStatus; // 'pending', 'synced', 'failed'
+  final String? runDate; // GMT+2 date string (e.g., '2026-02-13')
 
   // TRANSIENT FIELDS (active run only, not stored)
   final List<LocationPoint> route;
@@ -45,6 +46,7 @@ class Run {
     this.buffMultiplier = 1,
     this.cv,
     this.syncStatus = 'pending',
+    this.runDate,
     List<LocationPoint>? route,
     List<String>? hexesPassed,
     this.currentHexId,
@@ -113,22 +115,22 @@ class Run {
   // SERIALIZATION
 
   /// For local SQLite storage (milliseconds epoch)
-  /// Note: Database stores distanceKm (not meters) for backward compatibility
+  /// Note: Database stores distance_meters
   /// SQLite only supports: num, String, Uint8List (NOT List, bool, Map)
   Map<String, dynamic> toMap() => {
     'id': id,
     'startTime': startTime.millisecondsSinceEpoch,
     'endTime':
         endTime?.millisecondsSinceEpoch ?? startTime.millisecondsSinceEpoch,
-    'distanceKm': distanceMeters / 1000, // Convert meters to km for DB
+    'distance_meters': distanceMeters,
     'durationSeconds': durationSeconds,
-    'avgPaceSecPerKm': avgPaceMinPerKm * 60, // Convert min/km to sec/km for DB
     'hexesColored': hexesColored,
     'teamAtRun': teamAtRun.name,
-    'isPurpleRunner': teamAtRun == Team.purple ? 1 : 0, // Legacy field
+    'hex_path': hexPath.join(','), // Comma-separated for SQLite
+    'buff_multiplier': buffMultiplier,
     'cv': cv,
     'sync_status': syncStatus,
-    'flip_points': flipPoints,
+    'run_date': runDate,
   };
 
   /// From local SQLite storage
@@ -136,10 +138,10 @@ class Run {
   factory Run.fromMap(Map<String, dynamic> map) {
     // Handle both distanceKm (old DB) and distanceMeters (new format)
     double distanceMeters;
-    if (map['distanceKm'] != null) {
+    if (map['distance_meters'] != null) {
+      distanceMeters = (map['distance_meters'] as num).toDouble();
+    } else if (map['distanceKm'] != null) {
       distanceMeters = (map['distanceKm'] as num).toDouble() * 1000; // km to m
-    } else if (map['distanceMeters'] != null) {
-      distanceMeters = (map['distanceMeters'] as num).toDouble();
     } else {
       distanceMeters = 0;
     }
@@ -162,6 +164,12 @@ class Run {
       durationSeconds = 0;
     }
 
+    // Parse hex_path from comma-separated string (SQLite storage format)
+    final hexPathStr = map['hex_path'] as String?;
+    final hexPath = (hexPathStr != null && hexPathStr.isNotEmpty)
+        ? hexPathStr.split(',')
+        : <String>[];
+
     return Run(
       id: map['id'] as String,
       startTime: startTime,
@@ -170,12 +178,17 @@ class Run {
       durationSeconds: durationSeconds,
       hexesColored: (map['hexesColored'] as num?)?.toInt() ?? 0,
       teamAtRun: Team.values.byName(map['teamAtRun'] as String),
-      buffMultiplier: (map['buffMultiplier'] as num?)?.toInt() ?? 1,
+      hexPath: hexPath,
+      buffMultiplier:
+          (map['buff_multiplier'] as num?)?.toInt() ??
+          (map['buffMultiplier'] as num?)?.toInt() ??
+          1,
       cv: (map['cv'] as num?)?.toDouble(),
       syncStatus:
           map['sync_status'] as String? ??
           map['syncStatus'] as String? ??
           'pending',
+      runDate: map['run_date'] as String?,
     );
   }
 
@@ -241,6 +254,7 @@ class Run {
     int? buffMultiplier,
     Object? cv = const _Unspecified(),
     String? syncStatus,
+    String? runDate,
     List<LocationPoint>? route,
     List<String>? hexesPassed,
     String? currentHexId,
@@ -259,6 +273,7 @@ class Run {
       buffMultiplier: buffMultiplier ?? this.buffMultiplier,
       cv: cv is _Unspecified ? this.cv : cv as double?,
       syncStatus: syncStatus ?? this.syncStatus,
+      runDate: runDate ?? this.runDate,
       route: route ?? this.route,
       hexesPassed: hexesPassed ?? this.hexesPassed,
       currentHexId: currentHexId ?? this.currentHexId,

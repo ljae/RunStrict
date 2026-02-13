@@ -199,7 +199,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             );
             final overallPoints = allRuns.fold(
               0,
-              (sum, run) => sum + run.hexesColored,
+              (sum, run) => sum + run.flipPoints,
             );
             final overallRunCount = allRuns.length;
             double overallPace = 0.0;
@@ -220,7 +220,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             );
             final totalPoints = statsRuns.fold(
               0,
-              (sum, run) => sum + run.hexesColored,
+              (sum, run) => sum + run.flipPoints,
             );
             final runCount = statsRuns.length;
 
@@ -1684,7 +1684,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '+${run.hexesColored}',
+                    '+${run.flipPoints}',
                     style: GoogleFonts.sora(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,

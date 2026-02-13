@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/hex_model.dart';
 import '../models/team.dart';
 import '../repositories/hex_repository.dart';
-import '../services/prefetch_service.dart';
 
 export '../repositories/hex_repository.dart' show HexUpdateResult;
 
@@ -69,32 +67,16 @@ class HexDataProvider with ChangeNotifier {
   /// Get or create hex model for an ID
   ///
   /// Lookup order:
-  /// 1. HexRepository cache
-  /// 2. PrefetchService (server/dummy data)
-  /// 3. Fallback simulation based on hex ID hash
+  /// 1. HexRepository cache (single source of truth, includes prefetched data)
+  /// 2. Fallback simulation based on hex ID hash
   HexModel getHex(String hexId, dynamic center) {
     // center is expected to be LatLng from latlong2
 
-    // 1. Check HexRepository cache first
+    // 1. Check HexRepository cache (single source of truth, includes prefetched data)
     final cached = _hexRepository.getHex(hexId);
     if (cached != null) return cached;
 
-    // 2. Check PrefetchService for server/dummy data
-    final prefetched = PrefetchService().getCachedHex(hexId);
-    if (prefetched != null) {
-      final hex = HexModel(
-        id: hexId,
-        center: center,
-        lastRunnerTeam: prefetched.lastRunnerTeam,
-      );
-      // Store in HexRepository for future lookups
-      _hexRepository.bulkLoadFromServer([
-        {'hex_id': hexId, 'last_runner_team': prefetched.lastRunnerTeam?.name},
-      ]);
-      return hex;
-    }
-
-    // 3. Fallback: Create hex with simulated last runner based on hash
+    // 2. Fallback: Create hex with simulated last runner based on hash
     final hash = hexId.hashCode;
     final random = Random(hash);
 

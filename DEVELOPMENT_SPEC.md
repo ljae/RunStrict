@@ -1408,13 +1408,19 @@ COMMIT;
 | `run_history` | Local cache of run history | Pull from Supabase |
 | `daily_stats` | Local cache of daily stats | Pull from Supabase |
 | `hex_cache` | Nearby hex data for offline | Cache visible + surrounding hexes |
+| `run_checkpoint` | Crash recovery checkpoint | Local only, cleared after run save |
 
-**Schema v6 (CV Support):**
+**Schema v12 (Current):**
 ```sql
--- runs table now includes:
-cv REAL  -- Coefficient of Variation (null for runs < 1km)
+-- runs table includes sync retry fields:
+hex_path TEXT DEFAULT ''         -- Comma-separated hex IDs (for sync retry)
+buff_multiplier INTEGER DEFAULT 1 -- Buff at run time (for sync retry)
+cv REAL                          -- Coefficient of Variation (null for runs < 1km)
+sync_status TEXT DEFAULT 'pending' -- 'pending', 'synced', 'failed'
+flip_points INTEGER DEFAULT 0    -- Points earned (hexes × multiplier)
+run_date TEXT                    -- GMT+2 date string for today's points
 
--- New laps table:
+-- Laps table (per-km data for CV):
 CREATE TABLE laps (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   runId TEXT NOT NULL,
@@ -1426,6 +1432,19 @@ CREATE TABLE laps (
   FOREIGN KEY (runId) REFERENCES runs (id) ON DELETE CASCADE
 );
 CREATE INDEX idx_laps_runId ON laps(runId);
+
+-- Run checkpoint table (crash recovery):
+CREATE TABLE run_checkpoint (
+  id TEXT PRIMARY KEY DEFAULT 'active',
+  run_id TEXT NOT NULL,
+  team_at_run TEXT NOT NULL,
+  start_time INTEGER NOT NULL,
+  distance_meters REAL NOT NULL,
+  hexes_colored INTEGER NOT NULL DEFAULT 0,
+  captured_hex_ids TEXT NOT NULL DEFAULT '',
+  buff_multiplier INTEGER NOT NULL DEFAULT 1,
+  last_updated INTEGER NOT NULL
+);
 ```
 
 ---
@@ -1508,6 +1527,9 @@ path_provider: ^2.1.4
 # Sensors (Anti-spoofing)
 sensors_plus: ^latest          # Accelerometer validation
 
+# Network
+connectivity_plus: ^6.1.0      # Network connectivity check before sync
+
 # UI
 google_fonts: ^6.2.1
 animated_text_kit: ^4.2.2
@@ -1567,6 +1589,7 @@ lib/
 │   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
 │   ├── running_score_service.dart      # Pace validation for capture
 │   ├── app_lifecycle_manager.dart      # App foreground/background handling (uses RemoteConfigService)
+│   ├── sync_retry_service.dart        # Retry failed Final Syncs (uses connectivity_plus)
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite implementation
@@ -2023,15 +2046,19 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 
 **Offline Resilience**:
 - If app launch fails: Use cached data from last session
-- If finalize_run fails: Queue in SQLite `sync_queue` table
-- Retry on next app launch or network restoration
+- If finalize_run fails: Run stays `'pending'` in SQLite `runs` table (with hex_path + buff_multiplier stored for retry)
+- `SyncRetryService` checks connectivity via `connectivity_plus` before retrying
+- Retry triggers: app launch, OnResume, after next run completion
 - Never lose user's run data
+- **Crash Recovery**: `run_checkpoint` table saves state on each hex flip; recovered on next app launch
 
 **OnResume Data Refresh (Foreground Trigger)**:
 - When app returns to foreground from background (iOS `applicationWillEnterForeground`, Android `onResume`):
-  - Refresh hex map data for visible area
-  - Update buff multiplier (in case midnight passed)
-  - Refresh ranking snapshot
+  - Refresh hex map data for visible area (PrefetchService.refresh)
+  - Refresh leaderboard data
+  - Retry failed syncs (SyncRetryService.retryUnsyncedRuns)
+  - Refresh buff multiplier via BuffService.refresh (in case midnight passed)
+  - Refresh today's points baseline via appLaunchSync + PointsService
 - **Throttling**: Skip refresh if last refresh was < 30 seconds ago
 - **During Active Run**: Skip refresh (avoid interrupting tracking)
 - This ensures map data stays current even after extended background periods

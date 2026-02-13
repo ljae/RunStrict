@@ -3,7 +3,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../config/h3_config.dart';
+import '../models/hex_model.dart';
 import '../models/team.dart';
+import '../providers/leaderboard_provider.dart';
 import '../repositories/hex_repository.dart';
 import '../storage/local_storage.dart';
 import 'hex_service.dart';
@@ -23,77 +25,6 @@ enum PrefetchStatus {
 
   /// Prefetch failed (will retry on next app launch)
   failed,
-}
-
-/// Cached hex data for local storage
-class CachedHex {
-  final String hexId;
-  final Team? lastRunnerTeam;
-  final DateTime? lastUpdated;
-
-  const CachedHex({required this.hexId, this.lastRunnerTeam, this.lastUpdated});
-
-  Map<String, dynamic> toMap() => {
-    'hex_id': hexId,
-    'last_runner_team': lastRunnerTeam?.name,
-    'last_updated': lastUpdated?.millisecondsSinceEpoch,
-  };
-
-  factory CachedHex.fromMap(Map<String, dynamic> map) => CachedHex(
-    hexId: map['hex_id'] as String,
-    lastRunnerTeam: map['last_runner_team'] != null
-        ? Team.values.byName(map['last_runner_team'] as String)
-        : null,
-    lastUpdated: map['last_updated'] != null
-        ? DateTime.fromMillisecondsSinceEpoch(map['last_updated'] as int)
-        : null,
-  );
-}
-
-/// Cached leaderboard entry
-class CachedLeaderboardEntry {
-  final String oderId;
-  final String name;
-  final String avatar;
-  final Team team;
-  final int flipPoints;
-  final double totalDistanceKm;
-  final int? stabilityScore;
-  final String? homeHex;
-
-  const CachedLeaderboardEntry({
-    required this.oderId,
-    required this.name,
-    required this.avatar,
-    required this.team,
-    required this.flipPoints,
-    required this.totalDistanceKm,
-    this.stabilityScore,
-    this.homeHex,
-  });
-
-  Map<String, dynamic> toMap() => {
-    'user_id': oderId,
-    'name': name,
-    'avatar': avatar,
-    'team': team.name,
-    'flip_points': flipPoints,
-    'total_distance_km': totalDistanceKm,
-    'stability_score': stabilityScore,
-    'home_hex': homeHex,
-  };
-
-  factory CachedLeaderboardEntry.fromMap(Map<String, dynamic> map) =>
-      CachedLeaderboardEntry(
-        oderId: map['user_id'] as String,
-        name: map['name'] as String,
-        avatar: map['avatar'] as String? ?? '🏃',
-        team: Team.values.byName(map['team'] as String),
-        flipPoints: (map['flip_points'] as num?)?.toInt() ?? 0,
-        totalDistanceKm: (map['total_distance_km'] as num?)?.toDouble() ?? 0,
-        stabilityScore: (map['stability_score'] as num?)?.toInt(),
-        homeHex: map['home_hex'] as String?,
-      );
 }
 
 /// PrefetchService - Manages initial data download and home hex anchoring
@@ -140,8 +71,7 @@ class PrefetchService {
   String? _errorMessage;
 
   // Cached data
-  final Map<String, CachedHex> _hexCache = {};
-  final List<CachedLeaderboardEntry> _leaderboardCache = [];
+  final List<LeaderboardEntry> _leaderboardCache = [];
 
   // Pre-computed parent hexes for each scope (location-based homeHex)
   String? _homeHexZone; // Res 8 parent
@@ -175,14 +105,11 @@ class PrefetchService {
     };
   }
 
-  /// Get cached hex data
-  CachedHex? getCachedHex(String hexId) => _hexCache[hexId];
-
-  /// Get all cached hexes
-  Map<String, CachedHex> get cachedHexes => Map.unmodifiable(_hexCache);
+  /// Get cached hex data (delegates to HexRepository)
+  HexModel? getCachedHex(String hexId) => HexRepository().getHex(hexId);
 
   /// Get cached leaderboard
-  List<CachedLeaderboardEntry> get cachedLeaderboard =>
+  List<LeaderboardEntry> get cachedLeaderboard =>
       List.unmodifiable(_leaderboardCache);
 
   // ---------------------------------------------------------------------------
@@ -240,7 +167,7 @@ class PrefetchService {
       debugPrint('  City parent: $_homeHexCity');
       debugPrint('  All parent: $_homeHexAll');
       debugPrint('  Season All parent: $_seasonHomeHexAll');
-      debugPrint('  Cached hexes: ${_hexCache.length}');
+      debugPrint('  Cached hexes: ${HexRepository().cacheStats['size']}');
       debugPrint('  Cached leaderboard entries: ${_leaderboardCache.length}');
     } catch (e) {
       _status = PrefetchStatus.failed;
@@ -347,7 +274,7 @@ class PrefetchService {
 
     final repo = HexRepository();
     final lastTime = await _loadLastPrefetchTime();
-    final isDelta = lastTime != null && _hexCache.isNotEmpty;
+    final isDelta = lastTime != null && repo.cacheStats['size']! > 0;
 
     try {
       final hexes = await _supabase.getHexesDelta(
@@ -357,35 +284,14 @@ class PrefetchService {
 
       if (isDelta) {
         repo.mergeFromServer(hexes);
-        for (final hex in hexes) {
-          _hexCache[hex['hex_id'] as String] = CachedHex(
-            hexId: hex['hex_id'] as String,
-            lastRunnerTeam: hex['last_runner_team'] != null
-                ? Team.values.byName(hex['last_runner_team'] as String)
-                : null,
-            lastUpdated: hex['last_flipped_at'] != null
-                ? DateTime.parse(hex['last_flipped_at'] as String)
-                : null,
-          );
-        }
         debugPrint(
           'PrefetchService: Delta sync - ${hexes.length} hexes updated',
         );
       } else {
-        _hexCache.clear();
         repo.bulkLoadFromServer(hexes);
-        for (final hex in hexes) {
-          _hexCache[hex['hex_id'] as String] = CachedHex(
-            hexId: hex['hex_id'] as String,
-            lastRunnerTeam: hex['last_runner_team'] != null
-                ? Team.values.byName(hex['last_runner_team'] as String)
-                : null,
-            lastUpdated: hex['last_flipped_at'] != null
-                ? DateTime.parse(hex['last_flipped_at'] as String)
-                : null,
-          );
-        }
-        debugPrint('PrefetchService: Full sync - ${_hexCache.length} hexes');
+        debugPrint(
+          'PrefetchService: Full sync - ${repo.cacheStats['size']} hexes',
+        );
       }
 
       _lastPrefetchTime = DateTime.now();
@@ -406,23 +312,11 @@ class PrefetchService {
     final repo = HexRepository();
     try {
       final hexes = await _supabase.getHexesDelta(_homeHexAll!);
-      _hexCache.clear();
       repo.bulkLoadFromServer(hexes);
-      for (final hex in hexes) {
-        _hexCache[hex['hex_id'] as String] = CachedHex(
-          hexId: hex['hex_id'] as String,
-          lastRunnerTeam: hex['last_runner_team'] != null
-              ? Team.values.byName(hex['last_runner_team'] as String)
-              : null,
-          lastUpdated: hex['last_flipped_at'] != null
-              ? DateTime.parse(hex['last_flipped_at'] as String)
-              : null,
-        );
-      }
       _lastPrefetchTime = DateTime.now();
       await _saveLastPrefetchTime(_lastPrefetchTime!);
       debugPrint(
-        'PrefetchService: Fallback full sync - ${_hexCache.length} hexes',
+        'PrefetchService: Fallback full sync - ${repo.cacheStats['size']} hexes',
       );
     } catch (e) {
       debugPrint('PrefetchService: Fallback full sync failed - $e');
@@ -451,7 +345,7 @@ class PrefetchService {
 
       for (final entry in entries) {
         _leaderboardCache.add(
-          CachedLeaderboardEntry.fromMap(
+          LeaderboardEntry.fromCacheMap(
             Map<String, dynamic>.from(entry as Map),
           ),
         );
@@ -488,7 +382,7 @@ class PrefetchService {
   ///
   /// Filters cached leaderboard to only include users whose home hex
   /// is in the same scope as the current user's home hex.
-  List<CachedLeaderboardEntry> getLeaderboardForScope(GeographicScope scope) {
+  List<LeaderboardEntry> getLeaderboardForScope(GeographicScope scope) {
     if (_homeHex == null) return _leaderboardCache;
 
     final homeParent = getHomeHexAtScope(scope);
@@ -547,11 +441,13 @@ class PrefetchService {
 
   /// Update a single hex in the cache (after a run)
   void updateCachedHex(String hexId, Team team) {
-    _hexCache[hexId] = CachedHex(
-      hexId: hexId,
-      lastRunnerTeam: team,
-      lastUpdated: DateTime.now(),
-    );
+    HexRepository().bulkLoadFromServer([
+      {
+        'hex_id': hexId,
+        'last_runner_team': team.name,
+        'last_flipped_at': DateTime.now().toIso8601String(),
+      },
+    ]);
   }
 
   /// Load dummy hex data directly into memory cache.
@@ -559,22 +455,12 @@ class PrefetchService {
   /// Used for testing/demo purposes. Replaces any existing hex cache.
   /// [hexData] - List of maps with 'hex_id', 'last_runner_team', 'last_updated'
   void loadDummyHexData(List<Map<String, dynamic>> hexData) {
-    _hexCache.clear();
-    for (final hex in hexData) {
-      final teamName = hex['last_runner_team'] as String?;
-      _hexCache[hex['hex_id'] as String] = CachedHex(
-        hexId: hex['hex_id'] as String,
-        lastRunnerTeam: teamName != null ? Team.values.byName(teamName) : null,
-        lastUpdated: hex['last_updated'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(hex['last_updated'] as int)
-            : null,
-      );
-    }
-
-    // Also load into HexRepository for HexagonMap to access via HexDataProvider
+    // Load into HexRepository (single source of truth)
     HexRepository().bulkLoadFromServer(hexData);
 
-    debugPrint('PrefetchService: Loaded ${_hexCache.length} dummy hexes');
+    debugPrint(
+      'PrefetchService: Loaded ${HexRepository().cacheStats['size']} dummy hexes',
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -688,7 +574,6 @@ class PrefetchService {
     _homeHexAll = null;
     _lastPrefetchTime = null;
     _errorMessage = null;
-    _hexCache.clear();
     _leaderboardCache.clear();
   }
 

@@ -19,6 +19,8 @@
 - Serverless: No backend API server (Supabase RLS + Edge Functions)
 - **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync")
 - **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier)
+- **Offline resilient**: Failed syncs retry automatically via `SyncRetryService` (on launch, OnResume, next run)
+- **Crash recovery**: `run_checkpoint` table saves state on each hex flip; recovered on next app launch
 
 ### Core Philosophy
 | Surface Layer | Hidden Layer |
@@ -116,9 +118,10 @@ lib/
 │   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
 │   ├── running_score_service.dart # Pace validation for capture
 │   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
+│   ├── sync_retry_service.dart  # Retry failed Final Syncs (uses connectivity_plus)
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
-│   └── local_storage.dart       # SQLite implementation (runs, routes)
+│   └── local_storage.dart       # SQLite v12 (runs, routes, run_checkpoint)
 ├── theme/
 │   ├── app_theme.dart           # Colors, typography, animations
 │   └── neon_theme.dart          # Neon accent colors (used by route_map)
@@ -191,6 +194,7 @@ class HexModel {
 }
 ```
 **Important**: Minimal timestamp for fairness (last_flipped_at), no runner IDs - privacy optimized.
+**Delta Sync Conflict Resolution**: `HexRepository.mergeFromServer()` skips server data older than local `lastFlippedAt` (newer local wins).
 
 ### DailyRunningStat (Supabase: daily_stats table)
 ```dart
@@ -235,6 +239,7 @@ class RunSummary {
   int? get stabilityScore => cv == null ? null : (100 - cv!).round().clamp(0, 100);
 }
 ```
+**SQLite Storage**: `Run.toMap()` includes `hex_path` (comma-separated) and `buff_multiplier` for offline sync retry.
 
 ---
 
@@ -310,6 +315,7 @@ flip_points = 1 × buff_multiplier
 Multiplier fetched on app launch via RPC: `get_user_buff()`
 
 **Server Validation**: Points ≤ hex_count × multiplier (anti-cheat)
+**Hybrid Points**: `PointsService` tracks `_serverTodayBaseline` + `_localUnsyncedToday`. On sync, `onRunSynced()` transfers points between baselines to prevent disappearing points.
 
 ---
 
@@ -421,6 +427,7 @@ daily_buff_stats -- user_id, date, buff_multiplier, is_elite, is_district_leader
 | `supabase_flutter` | Backend (Auth + DB + Storage) |
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |
+| `connectivity_plus` | Network connectivity check before sync |
 
 ---
 
@@ -520,6 +527,28 @@ RemoteConfigService().unfreezeAfterRun(); // In stopRun()
 | **Scoring** | `maxCapturePaceMinPerKm`, `minMovingAvgWindowSec` |
 | **Hex** | `baseResolution`, `maxCacheSize` |
 | **Timing** | `refreshThrottleSeconds`, `accelerometerSamplingPeriodMs` |
+
+---
+
+## OnResume Data Refresh
+
+When app returns to foreground, `AppLifecycleManager` triggers:
+- Hex map data refresh (PrefetchService)
+- Leaderboard refresh
+- Retry failed syncs (SyncRetryService)
+- Buff multiplier refresh (BuffService)
+- Today's points baseline refresh (appLaunchSync + PointsService)
+
+Skipped during active runs. Throttled to max once per 30 seconds.
+
+---
+
+## Hex Data Architecture
+
+**Single Source of Truth**: `HexRepository` (LRU cache) is the sole hex data store.
+- `PrefetchService.getCachedHex()` delegates to `HexRepository().getHex()`
+- `HexDataProvider.getHex()` reads directly from `HexRepository`
+- No duplicate caches — PrefetchService downloads into HexRepository, does not maintain its own cache
 
 ---
 
