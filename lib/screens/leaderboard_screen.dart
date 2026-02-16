@@ -2,10 +2,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../config/h3_config.dart';
 import '../theme/app_theme.dart';
 import '../models/team.dart';
 import '../providers/leaderboard_provider.dart';
 import '../providers/app_state_provider.dart';
+import '../services/prefetch_service.dart';
 import '../services/season_service.dart';
 import 'profile_screen.dart';
 
@@ -46,7 +48,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     )..forward();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<LeaderboardProvider>().fetchLeaderboard();
+      context.read<LeaderboardProvider>().fetchLeaderboard(limit: _scopeLimit);
     });
   }
 
@@ -66,38 +68,53 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     }
   }
 
+  int get _scopeLimit =>
+      _selectedScope == LeagueScope.myLeague ? 50 : 100;
+
   void _fetchForSeason() {
     final provider = context.read<LeaderboardProvider>();
     if (_isViewingCurrentSeason) {
       provider.clearHistorical();
-      provider.fetchLeaderboard(forceRefresh: true);
+      provider.fetchLeaderboard(limit: _scopeLimit, forceRefresh: true);
     } else {
-      provider.fetchSeasonLeaderboard(_currentSeason);
+      provider.fetchScopedSeasonLeaderboard(
+        _currentSeason,
+        limit: _scopeLimit,
+      );
     }
+    // Replay entrance animation on season switch
+    _entranceController.forward(from: 0);
   }
 
   String _formatSeasonDisplay() {
-    return 'SEASON $_currentSeason';
+    if (_isViewingCurrentSeason) return 'SEASON $_currentSeason';
+    return 'SEASON $_currentSeason  ❄️';
   }
 
-  List<LeaderboardRunner> _getFilteredRunners(BuildContext context) {
-    final leaderboardProvider = context.watch<LeaderboardProvider>();
-    final entries = leaderboardProvider.entries;
-
-    return entries
-        .map(
-          (e) => LeaderboardRunner(
-            id: e.id,
-            name: e.name,
-            team: e.team,
-            flipPoints: e.seasonPoints,
-            totalDistanceKm: e.totalDistanceKm,
-            manifesto: e.manifesto,
-            avgPaceMinPerKm: e.avgPaceMinPerKm,
-            stabilityScore: e.stabilityScore,
-          ),
-        )
-        .toList();
+  List<LeaderboardEntry> _getFilteredRunners(BuildContext context) {
+    final limit = _scopeLimit;
+    final provider = context.watch<LeaderboardProvider>();
+    List<LeaderboardEntry> results;
+    if (_isViewingCurrentSeason) {
+      if (_selectedScope == LeagueScope.myLeague) {
+        // Province-scoped leaderboard from PrefetchService
+        results = PrefetchService().getLeaderboardForScope(GeographicScope.all);
+      } else {
+        results = provider.entries;
+      }
+    } else {
+      // Historical: snapshot data, filtered client-side for MY LEAGUE
+      if (_selectedScope == LeagueScope.myLeague) {
+        results = provider.filterByScope(GeographicScope.all);
+      } else {
+        results = provider.entries;
+      }
+    }
+    // Cap to scope limit: 50 for province, 100 for global
+    if (results.length > limit) {
+      return results.sublist(0, limit);
+    }
+    return results;
   }
 
   String? _getCurrentUserId(BuildContext context) {
@@ -106,7 +123,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   bool _isCurrentUserVisible(
     BuildContext context,
-    List<LeaderboardRunner> runners,
+    List<LeaderboardEntry> runners,
   ) {
     final userId = _getCurrentUserId(context);
     if (userId == null) return false;
@@ -115,7 +132,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
   int _getCurrentUserRank(
     BuildContext context,
-    List<LeaderboardRunner> runners,
+    List<LeaderboardEntry> runners,
   ) {
     final userId = _getCurrentUserId(context);
     if (userId == null) return -1;
@@ -123,41 +140,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     return index >= 0 ? index + 1 : -1;
   }
 
-  LeaderboardRunner? _getCurrentUserData(BuildContext context) {
+  LeaderboardEntry? _getCurrentUserData(BuildContext context) {
     final appState = context.read<AppStateProvider>();
     final currentUser = appState.currentUser;
     if (currentUser == null) return null;
 
-    final leaderboardProvider = context.read<LeaderboardProvider>();
-    final entries = leaderboardProvider.entries;
-
-    if (entries.isNotEmpty) {
-      final entry = leaderboardProvider.getUser(currentUser.id);
-      if (entry != null) {
-        return LeaderboardRunner(
-          id: entry.id,
-          name: entry.name,
-          team: entry.team,
-          flipPoints: entry.seasonPoints,
-          totalDistanceKm: entry.totalDistanceKm,
-          manifesto: entry.manifesto,
-          avgPaceMinPerKm: entry.avgPaceMinPerKm,
-          stabilityScore: entry.stabilityScore,
-        );
-      }
-    }
-
-    // Fallback: create from AppStateProvider's currentUser
-    return LeaderboardRunner(
-      id: currentUser.id,
-      name: currentUser.name,
-      team: currentUser.team,
-      flipPoints: currentUser.seasonPoints,
-      totalDistanceKm: currentUser.totalDistanceKm,
-      manifesto: currentUser.manifesto,
-      avgPaceMinPerKm: currentUser.avgPaceMinPerKm,
-      stabilityScore: currentUser.stabilityScore,
-    );
+    // Always create from AppStateProvider's currentUser (current season live data)
+    // Rank is computed from the currently displayed list in the footer
+    return LeaderboardEntry(user: currentUser, rank: 0);
   }
 
   @override
@@ -188,10 +178,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 16),
-                  // Season stats panel (user's season record)
                   _buildSeasonStatsSection(context),
                   const SizedBox(height: 12),
-                  // League toggle: My League | Global TOP 100
                   _buildLeagueToggle(),
                   const SizedBox(height: 8),
                   // Season navigation
@@ -283,7 +271,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       return const SizedBox.shrink();
     }
 
-    final rank = _getCurrentUserRank(context, _getFilteredRunners(context));
+    // Always show current season rank (from PrefetchService province data)
+    final currentSeasonRunners =
+        PrefetchService().getLeaderboardForScope(GeographicScope.all);
+    final rank = _getCurrentUserRank(context, currentSeasonRunners);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -424,7 +415,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             return Expanded(
               child: GestureDetector(
                 onTap: () {
+                  if (_selectedScope == scope) return;
                   setState(() => _selectedScope = scope);
+                  // Re-fetch with scope-appropriate limit (50 province / 100 global)
+                  _fetchForSeason();
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -543,7 +537,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // PODIUM (Top 3)
   // ---------------------------------------------------------------------------
 
-  Widget _buildPodium(List<LeaderboardRunner> runners, bool isLandscape) {
+  Widget _buildPodium(List<LeaderboardEntry> runners, bool isLandscape) {
     return SizedBox(
       height: isLandscape ? 200 : 280,
       child: Stack(
@@ -576,7 +570,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   Widget _buildPodiumCard(
-    LeaderboardRunner runner,
+    LeaderboardEntry runner,
     int rank,
     bool isLandscape,
   ) {
@@ -652,18 +646,32 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
                   const SizedBox(height: 4),
 
-                  // Name
+                  // Name + Flag
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
-                      runner.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.sora(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (runner.nationalityFlag != null) ...[
+                          Text(
+                            runner.nationalityFlag!,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            runner.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.sora(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -686,7 +694,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
                   // Points
                   Text(
-                    '${runner.flipPoints}',
+                    '${runner.seasonPoints}',
                     style: GoogleFonts.sora(
                       fontSize: isFirst ? 28 : 20,
                       fontWeight: FontWeight.w700,
@@ -746,16 +754,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // ---------------------------------------------------------------------------
 
   Widget _buildRankTile(
-    LeaderboardRunner runner,
+    LeaderboardEntry runner,
     int rank,
     int index,
     String? currentUserId,
   ) {
     final isCurrentUser = runner.id == currentUserId;
     final teamColor = runner.team.color;
-    final isPurple = runner.team == Team.purple;
-    // Always show purple glow since all teams are displayed (no team filter)
-    final showPurpleGlow = isPurple;
 
     // Staggered entrance
     final startInterval = 0.4 + (index * 0.05).clamp(0.0, 0.4);
@@ -781,7 +786,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         child: AnimatedBuilder(
           animation: _pulseController,
           builder: (context, child) {
-            final glowOpacity = showPurpleGlow
+            final glowOpacity = true
                 ? 0.1 + (_pulseController.value * 0.15)
                 : 0.0;
 
@@ -793,7 +798,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     ? teamColor.withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
-                border: showPurpleGlow
+                border: true
                     ? Border.all(
                         color: teamColor.withValues(alpha: 0.4),
                         width: 1,
@@ -804,7 +809,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                         width: 1,
                       )
                     : null,
-                boxShadow: showPurpleGlow
+                boxShadow: true
                     ? [
                         BoxShadow(
                           color: teamColor.withValues(alpha: glowOpacity),
@@ -839,15 +844,28 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          runner.name,
-                          style: GoogleFonts.sora(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            if (runner.nationalityFlag != null) ...[
+                              Text(
+                                runner.nationalityFlag!,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Flexible(
+                              child: Text(
+                                runner.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.sora(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         if (runner.manifesto != null &&
                             runner.manifesto!.isNotEmpty)
@@ -902,7 +920,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
                   // Points
                   Text(
-                    '${runner.flipPoints}',
+                    '${runner.seasonPoints}',
                     style: GoogleFonts.sora(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -941,7 +959,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // ---------------------------------------------------------------------------
 
   Widget _buildMyRankFooter(
-    LeaderboardRunner user,
+    LeaderboardEntry user,
     int rank, {
     bool showStats = true,
   }) {
@@ -1014,7 +1032,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   ),
                   const SizedBox(width: 24),
                   Text(
-                    '${user.flipPoints}',
+                    '${user.seasonPoints}',
                     style: GoogleFonts.sora(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -1145,51 +1163,3 @@ class _ElectricManifestoState extends State<_ElectricManifesto>
   }
 }
 
-// ---------------------------------------------------------------------------
-// DATA MODEL
-// ---------------------------------------------------------------------------
-
-class LeaderboardRunner {
-  final String id;
-  final String name;
-  final Team team;
-  final int flipPoints;
-  final double totalDistanceKm;
-  final String? manifesto;
-  final String? lastHexId;
-  final String? zoneHexId;
-  final String? cityHexId;
-
-  /// Average pace in min/km (null if no runs)
-  final double? avgPaceMinPerKm;
-
-  /// Stability score (0-100, higher = more consistent pace)
-  final int? stabilityScore;
-
-  const LeaderboardRunner({
-    required this.id,
-    required this.name,
-    required this.team,
-    required this.flipPoints,
-    required this.totalDistanceKm,
-    this.manifesto,
-    this.lastHexId,
-    this.zoneHexId,
-    this.cityHexId,
-    this.avgPaceMinPerKm,
-    this.stabilityScore,
-  });
-
-  /// Format pace as "X'XX" (e.g., "5'30")
-  String get formattedPace {
-    if (avgPaceMinPerKm == null ||
-        avgPaceMinPerKm!.isInfinite ||
-        avgPaceMinPerKm!.isNaN ||
-        avgPaceMinPerKm == 0) {
-      return "-'--";
-    }
-    final min = avgPaceMinPerKm!.floor();
-    final sec = ((avgPaceMinPerKm! - min) * 60).round();
-    return "$min'${sec.toString().padLeft(2, '0')}";
-  }
-}

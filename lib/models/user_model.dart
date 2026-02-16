@@ -57,6 +57,37 @@ class UserModel {
     return (100 - avgCv!).round().clamp(0, 100);
   }
 
+  /// Merge current user with server stats from `appLaunchSync`.
+  ///
+  /// Cannot use `copyWith` because null in `stats` means "no data through
+  /// yesterday" (must clear), whereas `copyWith` null means "keep old".
+  factory UserModel.mergeWithServerStats(
+    UserModel existing,
+    Map<String, dynamic> stats,
+    int seasonPoints,
+  ) {
+    return UserModel(
+      id: existing.id,
+      name: existing.name,
+      team: existing.team,
+      avatar: existing.avatar,
+      seasonPoints: seasonPoints,
+      manifesto: existing.manifesto,
+      sex: existing.sex,
+      birthday: existing.birthday,
+      nationality: existing.nationality,
+      homeHex: stats['home_hex'] as String?,
+      homeHexEnd: stats['home_hex_end'] as String?,
+      seasonHomeHex: stats['season_home_hex'] as String?,
+      totalDistanceKm:
+          (stats['total_distance_km'] as num?)?.toDouble() ?? 0,
+      avgPaceMinPerKm:
+          (stats['avg_pace_min_per_km'] as num?)?.toDouble(),
+      avgCv: (stats['avg_cv'] as num?)?.toDouble(),
+      totalRuns: (stats['total_runs'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   /// Copy with optional field updates.
   ///
   /// Use [clearSeasonHomeHex: true] to explicitly set seasonHomeHex to null.

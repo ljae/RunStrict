@@ -51,6 +51,15 @@ class LocalStorage implements StorageService {
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+
+    // Enable WAL mode after open for better concurrent read/write performance.
+    // Done post-open because sqflite Darwin driver doesn't support PRAGMAs in onConfigure.
+    try {
+      await _database!.execute('PRAGMA journal_mode=WAL');
+      await _database!.execute('PRAGMA synchronous=NORMAL');
+    } catch (e) {
+      debugPrint('LocalStorage: WAL mode not available, using default journal mode');
+    }
   }
 
   /// Create database tables
@@ -444,15 +453,17 @@ class LocalStorage implements StorageService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      // Insert route points (cold storage)
+      // Batch insert route points (cold storage)
+      final batch = txn.batch();
       for (final point in run.route) {
-        await txn.insert(_tableRoutes, {
+        batch.insert(_tableRoutes, {
           'runId': run.id,
           'lat': point.latitude,
           'lng': point.longitude,
           'timestampMs': point.timestamp.millisecondsSinceEpoch,
         });
       }
+      await batch.commit(noResult: true);
     });
   }
 
@@ -481,20 +492,20 @@ class LocalStorage implements StorageService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      // Insert route points (cold storage)
+      // Batch insert route points and laps
+      final batch = txn.batch();
       for (final point in run.route) {
-        await txn.insert(_tableRoutes, {
+        batch.insert(_tableRoutes, {
           'runId': run.id,
           'lat': point.latitude,
           'lng': point.longitude,
           'timestampMs': point.timestamp.millisecondsSinceEpoch,
         });
       }
-
-      // Insert lap data
       for (final lap in laps) {
-        await txn.insert(_tableLaps, {'runId': run.id, ...lap.toMap()});
+        batch.insert(_tableLaps, {'runId': run.id, ...lap.toMap()});
       }
+      await batch.commit(noResult: true);
     });
   }
 
@@ -708,17 +719,17 @@ class LocalStorage implements StorageService {
     }
 
     await _database!.transaction((txn) async {
-      // Clear existing cache
       await txn.delete(_tableHexCache);
 
-      // Insert new hexes
+      final batch = txn.batch();
       for (final hex in hexes) {
-        await txn.insert(
+        batch.insert(
           _tableHexCache,
           hex,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      await batch.commit(noResult: true);
     });
   }
 
@@ -760,17 +771,17 @@ class LocalStorage implements StorageService {
     }
 
     await _database!.transaction((txn) async {
-      // Clear existing cache
       await txn.delete(_tableLeaderboardCache);
 
-      // Insert new entries
+      final batch = txn.batch();
       for (final entry in entries) {
-        await txn.insert(
+        batch.insert(
           _tableLeaderboardCache,
           entry,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      await batch.commit(noResult: true);
     });
   }
 
@@ -876,22 +887,22 @@ class LocalStorage implements StorageService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      // Insert route points (cold storage)
+      // Batch insert route points and laps
+      final batch = txn.batch();
       for (final point in run.route) {
-        await txn.insert(_tableRoutes, {
+        batch.insert(_tableRoutes, {
           'runId': run.id,
           'lat': point.latitude,
           'lng': point.longitude,
           'timestampMs': point.timestamp.millisecondsSinceEpoch,
         });
       }
-
-      // Insert lap data if provided
       if (laps != null) {
         for (final lap in laps) {
-          await txn.insert(_tableLaps, {'runId': run.id, ...lap.toMap()});
+          batch.insert(_tableLaps, {'runId': run.id, ...lap.toMap()});
         }
       }
+      await batch.commit(noResult: true);
     });
   }
 

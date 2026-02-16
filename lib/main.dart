@@ -144,8 +144,10 @@ class _AppInitializerState extends State<_AppInitializer> {
     await appState.initialize();
 
     if (appState.hasUser && mounted) {
-      await _initializePrefetch();
-      await _loadTodayFlipPoints();
+      await Future.wait([
+        _initializePrefetch(),
+        _loadTodayFlipPoints(),
+      ]);
     } else if (mounted) {
       // No user — no prefetch needed, allow login screen to render
       setState(() {
@@ -175,30 +177,11 @@ class _AppInitializerState extends State<_AppInitializer> {
       pointsService.setSeasonPoints(seasonPoints);
 
       if (userStats != null && appState.currentUser != null) {
-        final cur = appState.currentUser!;
-        // Construct fresh UserModel with server display aggregates.
-        // Cannot use copyWith because null means "keep old" in copyWith,
-        // but server null means "no data through yesterday" (must clear).
         appState.setUser(
-          UserModel(
-            id: cur.id,
-            name: cur.name,
-            team: cur.team,
-            avatar: cur.avatar,
-            seasonPoints: seasonPoints,
-            manifesto: cur.manifesto,
-            sex: cur.sex,
-            birthday: cur.birthday,
-            nationality: cur.nationality,
-            homeHex: userStats['home_hex'] as String?,
-            homeHexEnd: userStats['home_hex_end'] as String?,
-            seasonHomeHex: userStats['season_home_hex'] as String?,
-            totalDistanceKm:
-                (userStats['total_distance_km'] as num?)?.toDouble() ?? 0,
-            avgPaceMinPerKm: (userStats['avg_pace_min_per_km'] as num?)
-                ?.toDouble(),
-            avgCv: (userStats['avg_cv'] as num?)?.toDouble(),
-            totalRuns: (userStats['total_runs'] as num?)?.toInt() ?? 0,
+          UserModel.mergeWithServerStats(
+            appState.currentUser!,
+            userStats,
+            seasonPoints,
           ),
         );
       }
@@ -255,73 +238,58 @@ class _AppInitializerState extends State<_AppInitializer> {
 
   void _initializeLifecycleManager() {
     final runProvider = context.read<RunProvider>();
+
+    AppLifecycleManager().initialize(
+      isRunning: () => runProvider.isRunning,
+      onRefresh: _onAppResume,
+    );
+  }
+
+  Future<void> _onAppResume() async {
     final leaderboardProvider = context.read<LeaderboardProvider>();
     final appState = context.read<AppStateProvider>();
     final pointsService = context.read<PointsService>();
 
-    AppLifecycleManager().initialize(
-      isRunning: () => runProvider.isRunning,
-      onRefresh: () async {
-        // Refresh prefetched data (hex colors, leaderboard)
-        await PrefetchService().refresh();
-        // Also refresh leaderboard provider
-        await leaderboardProvider.refreshLeaderboard();
+    // Refresh prefetched data (hex colors, leaderboard)
+    await PrefetchService().refresh();
+    await leaderboardProvider.refreshLeaderboard();
 
-        final userId = appState.currentUser?.id;
-        if (userId != null) {
-          // Retry failed syncs
-          final syncedPoints = await SyncRetryService().retryUnsyncedRuns();
-          if (syncedPoints > 0) {
-            pointsService.onRunSynced(syncedPoints);
-          }
+    final userId = appState.currentUser?.id;
+    if (userId == null) return;
 
-          // Refresh buff multiplier (may have changed at midnight)
-          await BuffService().refresh(userId);
+    // Retry failed syncs
+    final syncedPoints = await SyncRetryService().retryUnsyncedRuns();
+    if (syncedPoints > 0) {
+      pointsService.onRunSynced(syncedPoints);
+    }
 
-          // Refresh season points from server + today's points from local
-          try {
-            final supabase = SupabaseService();
-            final result = await supabase.appLaunchSync(userId);
-            final userStats = result['user_stats'] as Map<String, dynamic>?;
-            final seasonPoints =
-                (userStats?['season_points'] as num?)?.toInt() ?? 0;
-            pointsService.setSeasonPoints(seasonPoints);
+    // Refresh buff multiplier (may have changed at midnight)
+    await BuffService().refresh(userId);
 
-            if (userStats != null && appState.currentUser != null) {
-              final cur = appState.currentUser!;
-              appState.setUser(
-                UserModel(
-                  id: cur.id,
-                  name: cur.name,
-                  team: cur.team,
-                  avatar: cur.avatar,
-                  seasonPoints: seasonPoints,
-                  manifesto: cur.manifesto,
-                  sex: cur.sex,
-                  birthday: cur.birthday,
-                  nationality: cur.nationality,
-                  homeHex: userStats['home_hex'] as String?,
-                  homeHexEnd: userStats['home_hex_end'] as String?,
-                  seasonHomeHex: userStats['season_home_hex'] as String?,
-                  totalDistanceKm:
-                      (userStats['total_distance_km'] as num?)?.toDouble() ?? 0,
-                  avgPaceMinPerKm: (userStats['avg_pace_min_per_km'] as num?)
-                      ?.toDouble(),
-                  avgCv: (userStats['avg_cv'] as num?)?.toDouble(),
-                  totalRuns: (userStats['total_runs'] as num?)?.toInt() ?? 0,
-                ),
-              );
-            }
+    // Refresh season points from server + today's points from local
+    try {
+      final supabase = SupabaseService();
+      final result = await supabase.appLaunchSync(userId);
+      final userStats = result['user_stats'] as Map<String, dynamic>?;
+      final seasonPoints =
+          (userStats?['season_points'] as num?)?.toInt() ?? 0;
+      pointsService.setSeasonPoints(seasonPoints);
 
-            await pointsService.refreshFromLocalTotal();
-          } catch (e) {
-            debugPrint('OnResume: Failed to refresh points - $e');
-            // Still refresh local today's points even if server fails
-            await pointsService.refreshFromLocalTotal();
-          }
-        }
-      },
-    );
+      if (userStats != null && appState.currentUser != null) {
+        appState.setUser(
+          UserModel.mergeWithServerStats(
+            appState.currentUser!,
+            userStats,
+            seasonPoints,
+          ),
+        );
+      }
+
+      await pointsService.refreshFromLocalTotal();
+    } catch (e) {
+      debugPrint('OnResume: Failed to refresh points - $e');
+      await pointsService.refreshFromLocalTotal();
+    }
   }
 
   @override

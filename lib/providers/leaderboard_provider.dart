@@ -63,6 +63,31 @@ class LeaderboardEntry {
   String? get homeHex => user.homeHex;
   int? get stabilityScore => user.stabilityScore;
   String? get manifesto => user.manifesto;
+  String? get nationality => user.nationality;
+
+  /// Country code to flag emoji (e.g., 'KR' → '🇰🇷')
+  String? get nationalityFlag {
+    final code = nationality;
+    if (code == null || code.length != 2) return null;
+    final upper = code.toUpperCase();
+    final flag = String.fromCharCodes(
+      upper.codeUnits.map((c) => 0x1F1E6 - 0x41 + c),
+    );
+    return flag;
+  }
+
+  /// Format pace as "X'XX" (e.g., "5'30")
+  String get formattedPace {
+    if (avgPaceMinPerKm == null ||
+        avgPaceMinPerKm!.isInfinite ||
+        avgPaceMinPerKm!.isNaN ||
+        avgPaceMinPerKm == 0) {
+      return "-'--";
+    }
+    final min = avgPaceMinPerKm!.floor();
+    final sec = ((avgPaceMinPerKm! - min) * 60).round();
+    return "$min'${sec.toString().padLeft(2, '0')}";
+  }
 
   factory LeaderboardEntry.fromJson(Map<String, dynamic> json, int rank) {
     return LeaderboardEntry(user: UserModel.fromRow(json), rank: rank);
@@ -76,9 +101,11 @@ class LeaderboardEntry {
     'team': team.name,
     'flip_points': seasonPoints,
     'total_distance_km': totalDistanceKm,
+    'avg_pace_min_per_km': avgPaceMinPerKm,
     'stability_score': stabilityScore,
     'home_hex': homeHex,
     'manifesto': manifesto,
+    'nationality': nationality,
   };
 
   /// Deserialize from cache map format (SQLite leaderboard_cache table)
@@ -94,11 +121,13 @@ class LeaderboardEntry {
         birthday: DateTime(2000, 1, 1),
         seasonPoints: (map['flip_points'] as num?)?.toInt() ?? 0,
         totalDistanceKm: (map['total_distance_km'] as num?)?.toDouble() ?? 0,
+        avgPaceMinPerKm: (map['avg_pace_min_per_km'] as num?)?.toDouble(),
         avgCv: stabilityScore != null
             ? (100 - stabilityScore).toDouble()
             : null,
         homeHex: map['home_hex'] as String?,
         manifesto: map['manifesto'] as String?,
+        nationality: map['nationality'] as String?,
       ),
       rank: 0,
     );
@@ -292,5 +321,45 @@ class LeaderboardProvider with ChangeNotifier {
   void clearHistorical() {
     _viewingSeason = null;
     notifyListeners();
+  }
+
+  /// Fetch scoped season leaderboard from snapshot.
+  ///
+  /// Uses client-side province filtering via [filterByScope] after fetching
+  /// the full snapshot. The snapshot is small (≤200 entries) so this is efficient.
+  Future<void> fetchScopedSeasonLeaderboard(
+    int seasonNumber, {
+    String? parentHex,
+    int limit = 50,
+  }) async {
+    if (_isLoading) return;
+
+    _isLoading = true;
+    _error = null;
+    _viewingSeason = seasonNumber;
+    notifyListeners();
+
+    try {
+      // Use existing get_season_leaderboard RPC (fetches full snapshot).
+      // Province filtering is done client-side via filterByScope().
+      final result = await _supabaseService.getSeasonLeaderboard(
+        seasonNumber,
+        limit: limit,
+      );
+
+      final newEntries = result.map((json) {
+        final rank = (json['rank'] as num?)?.toInt() ?? 0;
+        return LeaderboardEntry.fromJson(json, rank);
+      }).toList();
+
+      _leaderboardRepository.loadEntries(newEntries);
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('LeaderboardProvider.fetchScopedSeasonLeaderboard error: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

@@ -35,6 +35,26 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(result as List);
   }
 
+  /// Get scoped season leaderboard from snapshot.
+  ///
+  /// When [parentHex] is provided, filters to users in that province.
+  /// Otherwise returns global top [limit].
+  Future<List<Map<String, dynamic>>> getScopedSeasonLeaderboard(
+    int seasonNumber, {
+    String? parentHex,
+    int limit = 50,
+  }) async {
+    final result = await client.rpc(
+      'get_season_scoped_leaderboard',
+      params: {
+        'p_season_number': seasonNumber,
+        'p_parent_hex': parentHex,
+        'p_limit': limit,
+      },
+    );
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
   Future<Map<String, dynamic>> finalizeRun(Run run) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) {

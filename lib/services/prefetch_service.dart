@@ -340,23 +340,20 @@ class PrefetchService {
     debugPrint('PrefetchService: Downloading leaderboard data...');
 
     try {
-      // Call Supabase RPC to get leaderboard filtered by scope
+      // Use get_leaderboard RPC (works with remote schema)
       final result = await _supabase.client.rpc(
-        'get_scoped_leaderboard',
-        params: {
-          'p_parent_hex': _homeHexAll,
-          'p_scope_resolution': GeographicScope.all.resolution,
-          'p_limit': 100,
-        },
+        'get_leaderboard',
+        params: {'p_limit': 100},
       );
 
       final entries = result as List<dynamic>? ?? [];
       _leaderboardCache.clear();
 
-      for (final entry in entries) {
+      for (int i = 0; i < entries.length; i++) {
         _leaderboardCache.add(
-          LeaderboardEntry.fromCacheMap(
-            Map<String, dynamic>.from(entry as Map),
+          LeaderboardEntry.fromJson(
+            Map<String, dynamic>.from(entries[i] as Map),
+            i + 1,
           ),
         );
       }
