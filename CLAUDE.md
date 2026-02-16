@@ -82,8 +82,7 @@ lib/
 │   ├── user_model.dart          # User data model (with CV aggregates)
 │   ├── hex_model.dart           # Hex tile model (lastRunnerTeam only)
 │   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
-│   ├── run_session.dart         # Active run session data
-│   ├── run_summary.dart         # Completed run (with hexPath, cv)
+│   ├── run.dart                 # Unified run model (active + completed + history)
 │   ├── lap_model.dart           # Per-km lap data for CV calculation
 │   ├── daily_running_stat.dart  # Daily stats (Warm data)
 │   ├── location_point.dart      # GPS point model (active run)
@@ -99,7 +98,7 @@ lib/
 │   ├── running_screen.dart      # Pre-run & active run tracking
 │   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, avatar, stats
+│   └── profile_screen.dart      # Manifesto, sex, birthday, nationality, stats (no avatar)
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
 │   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
@@ -130,7 +129,7 @@ lib/
 │   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
 │   └── lru_cache.dart           # LRU cache for hex data
 └── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer pattern)
+    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer + boundary layers)
     ├── route_map.dart           # Route display + navigation mode
     ├── smooth_camera_controller.dart # 60fps camera interpolation
     ├── glowing_location_marker.dart  # Team-colored pulsing marker
@@ -167,11 +166,15 @@ class UserModel {
   String id;
   String name;
   Team team;               // 'red' | 'blue' | 'purple'
-  String avatar;           // Emoji avatar
+  String avatar;           // Emoji avatar (legacy, not displayed)
   int seasonPoints;        // Preserved when defecting to Purple
-  String? manifesto;       // 12-char declaration
-  String? homeHexStart;    // H3 index of run start location (self only)
+  String? manifesto;       // 30-char declaration
+  String sex;              // 'male' | 'female' | 'other'
+  DateTime birthday;       // User birthday
+  String? nationality;     // ISO country code (e.g., 'KR', 'US')
+  String? homeHex;         // H3 index of run start location (self only)
   String? homeHexEnd;      // H3 index of run end location (visible to others)
+  String? seasonHomeHex;   // Home hex for current season
   double totalDistanceKm;  // Running season aggregate
   double? avgPaceMinPerKm; // Weighted average pace
   double? avgCv;           // Average CV (from runs ≥ 1km)
@@ -182,7 +185,8 @@ class UserModel {
 }
 ```
 **Note**: Aggregate fields updated incrementally via `finalize_run()` RPC.
-**Home Hex**: Asymmetric visibility - `homeHexStart` for self, `homeHexEnd` for others.
+**Home Hex**: Asymmetric visibility - `homeHex` for self, `homeHexEnd` for others.
+**Profile**: No avatar display. Profile shows manifesto (30 chars), sex, birthday, nationality (server-persisted).
 
 ### Hex Model (Supabase: hexes table)
 ```dart
@@ -264,7 +268,7 @@ Buff multipliers are calculated daily at midnight GMT+2 via Edge Function:
 | Province win only | 2x |
 | District + Province | 3x |
 
-**PURPLE:** Participation Rate = 1x (<34%), 2x (34-66%), 3x (≥67%)
+**PURPLE:** Participation Rate = 1x (<30%), 2x (30-59%), 3x (≥60%)
 
 - **New users** = 1x (default until yesterday's data exists)
 - Buff is **frozen** when run starts — no changes mid-run
@@ -308,13 +312,21 @@ if (laps.length == 1) return 0.0;  // No variance with single lap
 **Lap Recording**: Automatic during runs, stored in local SQLite `laps` table.
 **User Aggregate**: Average CV calculated incrementally via `finalize_run()` RPC.
 
-### Flip Points Calculation
+### Flip Points Calculation (Snapshot-Based)
 ```
-flip_points = 1 × buff_multiplier
+flip_points = flips_against_snapshot × buff_multiplier
 ```
 Multiplier fetched on app launch via RPC: `get_user_buff()`
 
-**Server Validation**: Points ≤ hex_count × multiplier (anti-cheat)
+**Snapshot Model**: All users run against yesterday's midnight hex snapshot. Client counts flips against this snapshot + own local overlay (today's own runs). Server cap-validates only: `flip_points ≤ len(hex_path) × buff_multiplier`.
+
+**Key Rules**:
+- All users start each day with the same snapshot (deterministic)
+- Other users' today activity is invisible until tomorrow's snapshot
+- Cross-run same-day: user's own flips persist via local overlay (prevents double-counting)
+- Different users can independently flip the same hex (both earn points from snapshot)
+- Midnight-crossing runs: `end_time` determines which day's snapshot they affect
+
 **Hybrid Points**: `PointsService` tracks `_serverTodayBaseline` + `_localUnsyncedToday`. On sync, `onRunSynced()` transfers points between baselines to prevent disappearing points.
 
 ---
@@ -398,9 +410,12 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 
 ```sql
 users            -- id, name, team, avatar, season_points, manifesto,
-                 -- home_hex_start, home_hex_end, total_distance_km, avg_pace_min_per_km,
+                 -- sex, birthday, nationality,
+                 -- home_hex, home_hex_end, season_home_hex,
+                 -- total_distance_km, avg_pace_min_per_km,
                  -- avg_cv, total_runs, cv_run_count
-hexes            -- id (H3 index), last_runner_team, last_flipped_at (conflict resolution)
+hexes            -- id (H3 index), last_runner_team, last_flipped_at (live state for buff/dominance only)
+hex_snapshot     -- hex_id, last_runner_team, snapshot_date, parent_hex (frozen daily snapshot for flip counting)
 runs             -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
 run_history      -- id, user_id, run_date, distance_km, duration_seconds, cv (preserved across seasons)
 daily_stats      -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
@@ -408,9 +423,11 @@ daily_buff_stats -- user_id, date, buff_multiplier, is_elite, is_district_leader
 ```
 
 **Key RPC Functions:**
-- `finalize_run(...)` → batch sync on run completion, accepts `p_cv`, updates user aggregates
+- `finalize_run(...)` → accept client flip_points with cap validation, update live hexes for buff/dominance
 - `get_user_buff(user_id)` → get user's current buff multiplier
-- `calculate_daily_buffs()` → daily Edge Function to compute all buffs at midnight
+- `calculate_daily_buffs()` → daily cron to compute all buffs at midnight GMT+2
+- `build_daily_hex_snapshot()` → daily cron to build tomorrow's hex snapshot at midnight GMT+2
+- `get_hex_snapshot(parent_hex, snapshot_date)` → download hex snapshot for prefetch
 - `get_leaderboard(limit)` → ranked users by season_points with CV aggregates
 - `app_launch_sync(...)` → pre-patch data on launch with CV fields
 
@@ -492,6 +509,36 @@ await mapboxMap.style.setStyleLayerProperty(
 - Data-driven: Per-feature colors read from GeoJSON properties
 - Performance: GPU-accelerated fill rendering
 
+### Scope Boundary Layers (Province + District)
+
+The `hexagon_map.dart` widget renders geographic scope boundaries using two additional GeoJSON sources:
+
+**Province Boundary** (`scope-boundary-source` / `scope-boundary-line`):
+- **ALL scope**: Merged outer boundary of all ~7 district (Res 6) hexes — irregular polygon, NOT a single hexagon
+- **CITY scope**: Single district hex boundary
+- **ZONE scope**: Hidden (no boundary)
+- Styling: white, 8px width, 15% opacity, 4px blur, solid
+
+**District Boundaries** (`district-boundary-source` / `district-boundary-line`):
+- **ALL scope**: Individual dashed outlines for each ~7 district hex
+- **CITY/ZONE scope**: Hidden
+- Styling: white, 3px width, 12% opacity, 2px blur, dashed [4,3]
+
+**Merged Outer Boundary Algorithm** (`_computeMergedOuterBoundary`):
+- Collects all directed edges from all district hex boundaries
+- Removes shared internal edges (edges appearing in opposite directions cancel out)
+- Chains remaining outer edges into a closed polygon loop
+- Uses 7-decimal coordinate precision for edge matching (~1cm accuracy)
+
+### Leaderboard Electric Manifesto
+
+The `_ElectricManifesto` widget in `leaderboard_screen.dart` shows user manifestos with a flowing electric sign effect:
+- `ShaderMask` + animated `LinearGradient` flowing left-to-right
+- 3-second animation cycle, loops continuously
+- Gradient between `Colors.white54` (dim) and team color (bright neon)
+- Team-colored shadow glow effect
+- Font: `GoogleFonts.sora()`, italic
+
 ---
 
 ## Remote Configuration System
@@ -543,12 +590,19 @@ Skipped during active runs. Throttled to max once per 30 seconds.
 
 ---
 
-## Hex Data Architecture
+## Hex Data Architecture (Snapshot + Local Overlay)
 
 **Single Source of Truth**: `HexRepository` (LRU cache) is the sole hex data store.
 - `PrefetchService.getCachedHex()` delegates to `HexRepository().getHex()`
 - `HexDataProvider.getHex()` reads directly from `HexRepository`
 - No duplicate caches — PrefetchService downloads into HexRepository, does not maintain its own cache
+
+**Snapshot Model**:
+- **Base layer**: `hex_snapshot` table (frozen daily at midnight GMT+2). Downloaded on app launch/OnResume.
+- **Local overlay**: User's own today's flips (stored in local SQLite, applied on top of snapshot)
+- **Map display**: Snapshot + own local flips. Other users' today activity invisible until tomorrow.
+- **Live `hexes` table**: Still updated by `finalize_run()` for buff/dominance calculations only. NOT used for flip counting.
+- **Prefetch**: Downloads from `hex_snapshot` (not `hexes`). Delta sync uses `snapshot_date`.
 
 ---
 

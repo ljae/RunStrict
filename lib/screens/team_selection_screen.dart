@@ -246,7 +246,7 @@ class _TeamSelectionScreenState extends State<TeamSelectionScreen>
     final appState = context.read<AppStateProvider>();
 
     try {
-      await appState.selectTeam(team, 'Runner');
+      await appState.selectTeam(team);
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/home');
       }

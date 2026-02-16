@@ -53,6 +53,8 @@ void main() {
         id: 'user123',
         name: 'Test Runner',
         team: Team.red,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
         seasonPoints: 100,
       );
 
@@ -75,6 +77,8 @@ void main() {
         id: 'user123',
         name: 'Test Runner',
         team: Team.red,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
         seasonPoints: 100,
       );
       await repository.setUser(user);
@@ -98,6 +102,8 @@ void main() {
           id: 'user123',
           name: 'Test Runner',
           team: Team.red,
+          sex: 'other',
+          birthday: DateTime(2000, 1, 1),
           seasonPoints: 250,
         );
         await repository.setUser(user);
@@ -121,6 +127,8 @@ void main() {
         id: 'user123',
         name: 'Test Runner',
         team: Team.blue,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
         seasonPoints: 500,
         avatar: '🏃',
         totalDistanceKm: 42.5,
@@ -148,6 +156,8 @@ void main() {
         id: 'user456',
         name: 'Loaded Runner',
         team: Team.purple,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
         seasonPoints: 300,
         avatar: '🏃',
       );
@@ -175,6 +185,8 @@ void main() {
         id: 'user789',
         name: 'Roundtrip Runner',
         team: Team.red,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
         seasonPoints: 750,
         avatar: '🏃',
         totalDistanceKm: 100.0,
@@ -206,6 +218,8 @@ void main() {
         id: 'user123',
         name: 'Test Runner',
         team: Team.red,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
       );
       await repository.setUser(user);
       expect(repository.hasUser, isTrue);
@@ -238,6 +252,8 @@ void main() {
         id: 'user123',
         name: 'Test Runner',
         team: Team.red,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
       );
       await repository.setUser(user);
 

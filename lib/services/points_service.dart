@@ -55,16 +55,15 @@ class PointsService extends ChangeNotifier {
   @Deprecated('Use todayFlipPoints for header display, seasonPoints for totals')
   int get currentPoints => todayFlipPoints;
 
-  /// Add points from a run (updates both season and local unsynced today).
+  /// Add points from a run (updates local unsynced today only).
   /// Called during active runs when hexes are flipped.
+  ///
+  /// NOTE: Does NOT update seasonPoints. Season points remain the server
+  /// snapshot (through yesterday) until next app launch sync. Today's
+  /// points are tracked separately in _localUnsyncedToday for header display.
   void addRunPoints(int points) {
-    // Update local unsynced BEFORE updating repository, because
-    // updateSeasonPoints triggers notifyListeners synchronously via
-    // _onUserRepositoryChanged, and listeners read todayFlipPoints
-    // which depends on _localUnsyncedToday being current.
     _localUnsyncedToday += points;
-    _userRepository.updateSeasonPoints(seasonPoints + points);
-    // notifyListeners() called via _onUserRepositoryChanged
+    notifyListeners();
   }
 
   void setSeasonPoints(int points) {
@@ -90,6 +89,22 @@ class PointsService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('PointsService: Failed to refresh local unsynced points - $e');
+    }
+  }
+
+  /// Refresh today's points from local SQLite (all runs, synced + unsynced).
+  ///
+  /// This ensures the header matches the run history screen totals.
+  /// The server may report fewer flips due to conflict resolution,
+  /// but the user expects consistency between header and history.
+  Future<void> refreshFromLocalTotal() async {
+    try {
+      final localTotal = await _localStorage.sumAllTodayPoints();
+      _serverTodayBaseline = localTotal;
+      _localUnsyncedToday = 0;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('PointsService: Failed to refresh from local total - $e');
     }
   }
 

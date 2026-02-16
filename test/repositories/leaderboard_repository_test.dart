@@ -27,7 +27,7 @@ void main() {
 
     test('loadEntries stores entries', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -36,7 +36,7 @@ void main() {
           rank: 1,
           homeHex: '891234567abcdef',
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '2',
           name: 'Bob',
           team: Team.blue,
@@ -57,7 +57,7 @@ void main() {
 
     test('filterByTeam returns correct subset', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -65,7 +65,7 @@ void main() {
           seasonPoints: 100,
           rank: 1,
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '2',
           name: 'Bob',
           team: Team.blue,
@@ -73,7 +73,7 @@ void main() {
           seasonPoints: 90,
           rank: 2,
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '3',
           name: 'Charlie',
           team: Team.red,
@@ -97,7 +97,7 @@ void main() {
 
     test('filterByTeam with null returns all entries', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -105,7 +105,7 @@ void main() {
           seasonPoints: 100,
           rank: 1,
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '2',
           name: 'Bob',
           team: Team.blue,
@@ -123,7 +123,7 @@ void main() {
 
     test('filterByScope returns all entries for GeographicScope.all', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -132,7 +132,7 @@ void main() {
           rank: 1,
           homeHex: '891234567abcdef',
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '2',
           name: 'Bob',
           team: Team.blue,
@@ -151,7 +151,7 @@ void main() {
 
     test('filterByScope returns empty list when homeHex is null', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -173,7 +173,7 @@ void main() {
       // The actual filtering logic is tested via LeaderboardEntry.isInScope which uses HexService
       // This test verifies the repository correctly delegates to isInScope
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -182,7 +182,7 @@ void main() {
           rank: 1,
           homeHex: '891234567abcdef',
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '2',
           name: 'Bob',
           team: Team.blue,
@@ -225,7 +225,7 @@ void main() {
 
     test('getUserRankInScope returns correct rank', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -234,7 +234,7 @@ void main() {
           rank: 1,
           homeHex: '891234567abcdef',
         ),
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '2',
           name: 'Bob',
           team: Team.blue,
@@ -257,7 +257,7 @@ void main() {
 
     test('getUserRankInScope returns null for unknown user', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -279,7 +279,7 @@ void main() {
 
     test('clear resets all data', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -300,7 +300,7 @@ void main() {
 
     test('entries returns unmodifiable list', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -315,7 +315,7 @@ void main() {
       final returned = repository.entries;
       expect(
         () => returned.add(
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '2',
             name: 'Bob',
             team: Team.blue,
@@ -330,7 +330,7 @@ void main() {
 
     test('filterByTeam returns unmodifiable list', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -345,7 +345,7 @@ void main() {
       final filtered = repository.filterByTeam(Team.red);
       expect(
         () => filtered.add(
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '2',
             name: 'Bob',
             team: Team.blue,
@@ -360,7 +360,7 @@ void main() {
 
     test('filterByScope returns unmodifiable list', () {
       final entries = [
-        LeaderboardEntry(
+        LeaderboardEntry.create(
           id: '1',
           name: 'Alice',
           team: Team.red,
@@ -376,7 +376,7 @@ void main() {
       final filtered = repository.filterByScope(GeographicScope.all, null);
       expect(
         () => filtered.add(
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '2',
             name: 'Bob',
             team: Team.blue,

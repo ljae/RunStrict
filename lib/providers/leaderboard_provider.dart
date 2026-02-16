@@ -1,64 +1,71 @@
 import 'package:flutter/foundation.dart';
 import '../config/h3_config.dart';
 import '../models/team.dart';
+import '../models/user_model.dart';
 import '../repositories/leaderboard_repository.dart';
 import '../services/hex_service.dart';
 import '../services/prefetch_service.dart';
 import '../services/supabase_service.dart';
 
+/// Leaderboard entry wrapping a [UserModel] with a rank position.
+///
+/// Delegates all user fields to the underlying [UserModel], eliminating
+/// 9 duplicated fields. Only adds `rank` (leaderboard-specific).
 class LeaderboardEntry {
-  final String id;
-  final String name;
-  final Team team;
-  final String avatar;
-  final int seasonPoints;
+  final UserModel user;
   final int rank;
 
-  /// Total distance run in season (km)
-  final double totalDistanceKm;
+  const LeaderboardEntry({required this.user, required this.rank});
 
-  /// Average pace across all runs (min/km)
-  final double? avgPaceMinPerKm;
-
-  /// Average CV (Coefficient of Variation) - measures pace consistency
-  final double? avgCv;
-
-  /// User's home hex (Res 9) for scope filtering
-  final String? homeHex;
-
-  const LeaderboardEntry({
-    required this.id,
-    required this.name,
-    required this.team,
-    required this.avatar,
-    required this.seasonPoints,
-    required this.rank,
-    this.totalDistanceKm = 0,
-    this.avgPaceMinPerKm,
-    this.avgCv,
-    this.homeHex,
-  });
-
-  /// Stability score from average CV (higher = better)
-  /// Returns clamped 0-100 value, null if no CV data
-  int? get stabilityScore {
-    if (avgCv == null) return null;
-    return (100 - avgCv!).round().clamp(0, 100);
+  /// Convenience constructor for creating entries directly (tests, fallbacks).
+  /// Internally wraps fields in a [UserModel].
+  factory LeaderboardEntry.create({
+    required String id,
+    required String name,
+    required Team team,
+    String avatar = '🏃',
+    int seasonPoints = 0,
+    required int rank,
+    double totalDistanceKm = 0,
+    double? avgPaceMinPerKm,
+    double? avgCv,
+    String? homeHex,
+    String? manifesto,
+  }) {
+    return LeaderboardEntry(
+      user: UserModel(
+        id: id,
+        name: name,
+        team: team,
+        avatar: avatar,
+        seasonPoints: seasonPoints,
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
+        totalDistanceKm: totalDistanceKm,
+        avgPaceMinPerKm: avgPaceMinPerKm,
+        avgCv: avgCv,
+        homeHex: homeHex,
+        manifesto: manifesto,
+      ),
+      rank: rank,
+    );
   }
 
+  // Delegate getters to UserModel
+  String get id => user.id;
+  String get name => user.name;
+  Team get team => user.team;
+  String get avatar => user.avatar;
+  int get seasonPoints => user.seasonPoints;
+  double get totalDistanceKm => user.totalDistanceKm;
+  double? get avgPaceMinPerKm => user.avgPaceMinPerKm;
+  double? get avgCv => user.avgCv;
+  String? get homeHex => user.homeHex;
+  int? get stabilityScore => user.stabilityScore;
+  String? get manifesto => user.manifesto;
+
   factory LeaderboardEntry.fromJson(Map<String, dynamic> json, int rank) {
-    return LeaderboardEntry(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      team: Team.values.byName(json['team'] as String),
-      avatar: json['avatar'] as String? ?? '🏃',
-      seasonPoints: (json['season_points'] as num?)?.toInt() ?? 0,
-      rank: rank,
-      totalDistanceKm: (json['total_distance_km'] as num?)?.toDouble() ?? 0,
-      avgPaceMinPerKm: (json['avg_pace_min_per_km'] as num?)?.toDouble(),
-      avgCv: (json['avg_cv'] as num?)?.toDouble(),
-      homeHex: json['home_hex'] as String?,
-    );
+    return LeaderboardEntry(user: UserModel.fromRow(json), rank: rank);
   }
 
   /// Serialize to cache map format (for SQLite leaderboard_cache table)
@@ -71,21 +78,29 @@ class LeaderboardEntry {
     'total_distance_km': totalDistanceKm,
     'stability_score': stabilityScore,
     'home_hex': homeHex,
+    'manifesto': manifesto,
   };
 
   /// Deserialize from cache map format (SQLite leaderboard_cache table)
   factory LeaderboardEntry.fromCacheMap(Map<String, dynamic> map) {
     final stabilityScore = (map['stability_score'] as num?)?.toInt();
     return LeaderboardEntry(
-      id: map['user_id'] as String,
-      name: map['name'] as String,
-      team: Team.values.byName(map['team'] as String),
-      avatar: map['avatar'] as String? ?? '🏃',
-      seasonPoints: (map['flip_points'] as num?)?.toInt() ?? 0,
+      user: UserModel(
+        id: map['user_id'] as String,
+        name: map['name'] as String,
+        team: Team.values.byName(map['team'] as String),
+        avatar: map['avatar'] as String? ?? '🏃',
+        sex: 'other',
+        birthday: DateTime(2000, 1, 1),
+        seasonPoints: (map['flip_points'] as num?)?.toInt() ?? 0,
+        totalDistanceKm: (map['total_distance_km'] as num?)?.toDouble() ?? 0,
+        avgCv: stabilityScore != null
+            ? (100 - stabilityScore).toDouble()
+            : null,
+        homeHex: map['home_hex'] as String?,
+        manifesto: map['manifesto'] as String?,
+      ),
       rank: 0,
-      totalDistanceKm: (map['total_distance_km'] as num?)?.toDouble() ?? 0,
-      avgCv: stabilityScore != null ? (100 - stabilityScore).toDouble() : null,
-      homeHex: map['home_hex'] as String?,
     );
   }
 
@@ -110,6 +125,9 @@ class LeaderboardProvider with ChangeNotifier {
 
   bool _isLoading = false;
   String? _error;
+  int? _viewingSeason;
+  bool get isViewingHistorical => _viewingSeason != null;
+  int? get viewingSeason => _viewingSeason;
 
   LeaderboardProvider({
     SupabaseService? supabaseService,
@@ -240,10 +258,39 @@ class LeaderboardProvider with ChangeNotifier {
     // notifyListeners() called via _onRepositoryChanged
   }
 
-  /// Refresh leaderboard data (force fetch, bypasses cache).
-  ///
-  /// Called on app resume to ensure fresh data.
   Future<void> refreshLeaderboard() async {
     await fetchLeaderboard(forceRefresh: true);
+  }
+
+  Future<void> fetchSeasonLeaderboard(int seasonNumber) async {
+    if (_isLoading) return;
+
+    _isLoading = true;
+    _error = null;
+    _viewingSeason = seasonNumber;
+    notifyListeners();
+
+    try {
+      final result = await _supabaseService.getSeasonLeaderboard(seasonNumber);
+
+      final newEntries = result.map((json) {
+        final rank = (json['rank'] as num?)?.toInt() ?? 0;
+        return LeaderboardEntry.fromJson(json, rank);
+      }).toList();
+
+      _leaderboardRepository.loadEntries(newEntries);
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('LeaderboardProvider.fetchSeasonLeaderboard error: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void clearHistorical() {
+    _viewingSeason = null;
+    notifyListeners();
   }
 }

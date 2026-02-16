@@ -170,6 +170,91 @@ class HexRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Load hex data from the daily snapshot (frozen at midnight GMT+2).
+  ///
+  /// Clears the existing cache and replaces with snapshot data.
+  /// The snapshot contains {hex_id, last_runner_team, last_run_end_time}.
+  /// After calling this, use [applyLocalOverlay] to add the user's own
+  /// today's flips on top.
+  void bulkLoadFromSnapshot(List<Map<String, dynamic>> hexes) {
+    _hexCache.clear();
+    final hexService = HexService();
+    for (final hexData in hexes) {
+      try {
+        final hexId = hexData['hex_id'] as String;
+        final teamName = hexData['last_runner_team'] as String?;
+        final team = teamName != null ? Team.values.byName(teamName) : null;
+        final flippedAt = hexData['last_run_end_time'] != null
+            ? DateTime.parse(hexData['last_run_end_time'] as String)
+            : null;
+
+        LatLng hexCenter;
+        try {
+          hexCenter = hexService.getHexCenter(hexId);
+        } catch (_) {
+          hexCenter = const LatLng(0, 0);
+        }
+
+        _hexCache.put(
+          hexId,
+          HexModel(
+            id: hexId,
+            center: hexCenter,
+            lastRunnerTeam: team,
+            lastFlippedAt: flippedAt,
+          ),
+        );
+      } catch (e) {
+        debugPrint('HexRepository: Failed to load snapshot hex: $e');
+      }
+    }
+    _lastPrefetchTime = DateTime.now();
+    debugPrint('HexRepository: Loaded ${_hexCache.size} hexes from snapshot');
+    notifyListeners();
+  }
+
+  /// Apply local overlay: user's own today's flips on top of snapshot.
+  ///
+  /// [todayFlips] - List of {hex_id, team} maps from LocalStorage.
+  /// This ensures the map shows the user's personal progress for today,
+  /// even though the snapshot only reflects yesterday's state.
+  void applyLocalOverlay(List<Map<String, dynamic>> todayFlips) {
+    final hexService = HexService();
+    for (final flipData in todayFlips) {
+      try {
+        final hexId = flipData['hex_id'] as String;
+        final teamName = flipData['team'] as String;
+        final team = Team.values.byName(teamName);
+
+        final existing = _hexCache.get(hexId);
+        if (existing != null) {
+          // Update existing hex with user's flip
+          _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: team));
+        } else {
+          // New hex not in snapshot — create it
+          LatLng hexCenter;
+          try {
+            hexCenter = hexService.getHexCenter(hexId);
+          } catch (_) {
+            hexCenter = const LatLng(0, 0);
+          }
+          _hexCache.put(
+            hexId,
+            HexModel(id: hexId, center: hexCenter, lastRunnerTeam: team),
+          );
+        }
+      } catch (e) {
+        debugPrint('HexRepository: Failed to apply overlay hex: $e');
+      }
+    }
+    if (todayFlips.isNotEmpty) {
+      debugPrint(
+        'HexRepository: Applied ${todayFlips.length} local overlay hexes',
+      );
+      notifyListeners();
+    }
+  }
+
   void mergeFromServer(List<Map<String, dynamic>> hexes) {
     for (final hexData in hexes) {
       final hexId = hexData['hex_id'] as String;
@@ -259,25 +344,39 @@ class HexRepository extends ChangeNotifier {
     final hexService = HexService();
 
     _hexCache.forEach((hexId, hex) {
-      final parentAll = hexService.getParentHexId(hexId, H3Config.allResolution);
+      final parentAll = hexService.getParentHexId(
+        hexId,
+        H3Config.allResolution,
+      );
       if (parentAll == homeHexAll) {
         allTotal++;
         switch (hex.lastRunnerTeam) {
-          case Team.red: allRed++;
-          case Team.blue: allBlue++;
-          case Team.purple: allPurple++;
-          case null: break;
+          case Team.red:
+            allRed++;
+          case Team.blue:
+            allBlue++;
+          case Team.purple:
+            allPurple++;
+          case null:
+            break;
         }
 
         if (homeHexCity != null) {
-          final parentCity = hexService.getParentHexId(hexId, H3Config.cityResolution);
+          final parentCity = hexService.getParentHexId(
+            hexId,
+            H3Config.cityResolution,
+          );
           if (parentCity == homeHexCity) {
             cityTotal++;
             switch (hex.lastRunnerTeam) {
-              case Team.red: cityRed++;
-              case Team.blue: cityBlue++;
-              case Team.purple: cityPurple++;
-              case null: break;
+              case Team.red:
+                cityRed++;
+              case Team.blue:
+                cityBlue++;
+              case Team.purple:
+                cityPurple++;
+              case null:
+                break;
             }
           }
         }
@@ -285,8 +384,18 @@ class HexRepository extends ChangeNotifier {
     });
 
     return {
-      'allRange': {'red': allRed, 'blue': allBlue, 'purple': allPurple, 'total': allTotal},
-      'cityRange': {'red': cityRed, 'blue': cityBlue, 'purple': cityPurple, 'total': cityTotal},
+      'allRange': {
+        'red': allRed,
+        'blue': allBlue,
+        'purple': allPurple,
+        'total': allTotal,
+      },
+      'cityRange': {
+        'red': cityRed,
+        'blue': cityBlue,
+        'purple': cityPurple,
+        'total': cityTotal,
+      },
     };
   }
 

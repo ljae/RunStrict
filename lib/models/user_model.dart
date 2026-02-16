@@ -8,12 +8,12 @@ class UserModel {
   final int seasonPoints;
   final String? manifesto;
 
-  /// Home hex (Res 9) - set once on first GPS fix, used for scope filtering
-  /// Parent cells derived on-demand via HexService.getScopeHexId()
-  final String? homeHex;
+  final String sex;
+  final DateTime birthday;
+  final String? nationality;
 
-  /// Season home hex (Res 9) - set once on first app launch of season
-  /// Used for leaderboard MY LEAGUE filtering and multiplier region
+  final String? homeHex;
+  final String? homeHexEnd;
   final String? seasonHomeHex;
 
   /// Total distance run in season (km)
@@ -36,7 +36,11 @@ class UserModel {
     this.avatar = '🏃',
     this.seasonPoints = 0,
     this.manifesto,
+    required this.sex,
+    required this.birthday,
+    this.nationality,
     this.homeHex,
+    this.homeHexEnd,
     this.seasonHomeHex,
     this.totalDistanceKm = 0,
     this.avgPaceMinPerKm,
@@ -62,7 +66,11 @@ class UserModel {
     String? avatar,
     int? seasonPoints,
     String? manifesto,
+    String? sex,
+    DateTime? birthday,
+    String? nationality,
     String? homeHex,
+    String? homeHexEnd,
     String? seasonHomeHex,
     bool clearSeasonHomeHex = false,
     double? totalDistanceKm,
@@ -77,7 +85,11 @@ class UserModel {
       avatar: avatar ?? this.avatar,
       seasonPoints: seasonPoints ?? this.seasonPoints,
       manifesto: manifesto ?? this.manifesto,
+      sex: sex ?? this.sex,
+      birthday: birthday ?? this.birthday,
+      nationality: nationality ?? this.nationality,
       homeHex: homeHex ?? this.homeHex,
+      homeHexEnd: homeHexEnd ?? this.homeHexEnd,
       seasonHomeHex: clearSeasonHomeHex
           ? null
           : (seasonHomeHex ?? this.seasonHomeHex),
@@ -96,9 +108,13 @@ class UserModel {
       name: name,
       team: Team.purple,
       avatar: avatar,
-      seasonPoints: seasonPoints, // Points PRESERVED
+      seasonPoints: seasonPoints,
       manifesto: manifesto,
+      sex: sex,
+      birthday: birthday,
+      nationality: nationality,
       homeHex: homeHex,
+      homeHexEnd: homeHexEnd,
       seasonHomeHex: seasonHomeHex,
       totalDistanceKm: totalDistanceKm,
       avgPaceMinPerKm: avgPaceMinPerKm,
@@ -110,11 +126,19 @@ class UserModel {
   factory UserModel.fromRow(Map<String, dynamic> row) => UserModel(
     id: row['id'] as String,
     name: row['name'] as String,
-    team: Team.values.byName(row['team'] as String),
+    team: row['team'] != null
+        ? Team.values.byName(row['team'] as String)
+        : Team.red,
     avatar: row['avatar'] as String? ?? '🏃',
     seasonPoints: (row['season_points'] as num?)?.toInt() ?? 0,
     manifesto: row['manifesto'] as String?,
+    sex: row['sex'] as String? ?? 'other',
+    birthday: row['birthday'] != null
+        ? DateTime.parse(row['birthday'] as String)
+        : DateTime(2000, 1, 1),
+    nationality: row['nationality'] as String?,
     homeHex: row['home_hex'] as String?,
+    homeHexEnd: row['home_hex_end'] as String?,
     seasonHomeHex: row['season_home_hex'] as String?,
     totalDistanceKm: (row['total_distance_km'] as num?)?.toDouble() ?? 0,
     avgPaceMinPerKm: (row['avg_pace_min_per_km'] as num?)?.toDouble(),
@@ -128,7 +152,11 @@ class UserModel {
     'avatar': avatar,
     'season_points': seasonPoints,
     'manifesto': manifesto,
+    'sex': sex,
+    'birthday': birthday.toIso8601String().substring(0, 10),
+    'nationality': nationality,
     'home_hex': homeHex,
+    'home_hex_end': homeHexEnd,
     'season_home_hex': seasonHomeHex,
     'total_distance_km': totalDistanceKm,
     'avg_pace_min_per_km': avgPaceMinPerKm,
@@ -143,7 +171,11 @@ class UserModel {
     'avatar': avatar,
     'seasonPoints': seasonPoints,
     'manifesto': manifesto,
+    'sex': sex,
+    'birthday': birthday.toIso8601String(),
+    'nationality': nationality,
     'homeHex': homeHex,
+    'homeHexEnd': homeHexEnd,
     'seasonHomeHex': seasonHomeHex,
     'totalDistanceKm': totalDistanceKm,
     'avgPaceMinPerKm': avgPaceMinPerKm,
@@ -154,11 +186,19 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
     id: json['id'] as String,
     name: json['name'] as String,
-    team: Team.values.byName(json['team'] as String),
+    team: json['team'] != null
+        ? Team.values.byName(json['team'] as String)
+        : Team.red,
     avatar: json['avatar'] as String? ?? '🏃',
     seasonPoints: (json['seasonPoints'] as num?)?.toInt() ?? 0,
     manifesto: json['manifesto'] as String?,
+    sex: json['sex'] as String? ?? 'other',
+    birthday: json['birthday'] != null
+        ? DateTime.parse(json['birthday'] as String)
+        : DateTime(2000, 1, 1),
+    nationality: json['nationality'] as String?,
     homeHex: json['homeHex'] as String?,
+    homeHexEnd: json['homeHexEnd'] as String?,
     seasonHomeHex: json['seasonHomeHex'] as String?,
     totalDistanceKm: (json['totalDistanceKm'] as num?)?.toDouble() ?? 0,
     avgPaceMinPerKm: (json['avgPaceMinPerKm'] as num?)?.toDouble(),

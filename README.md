@@ -38,7 +38,7 @@ A location-based running game that gamifies territory control through hexagonal 
 | RED Elite | Normal / District / Province / Both | 2x / 3x / 3x / 4x |
 | RED Common | Normal / District / Province / Both | 1x / 1x / 2x / 2x |
 | BLUE | Normal / District / Province / Both | 1x / 2x / 2x / 3x |
-| PURPLE | Participation Rate (<34% / 34-66% / ≥67%) | 1x / 2x / 3x |
+| PURPLE | Participation Rate (<30% / 30-59% / ≥60%) | 1x / 2x / 3x |
 
 ### Scoring
 - **Flip Points** = hexes flipped × buff multiplier

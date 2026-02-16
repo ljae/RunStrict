@@ -11,6 +11,7 @@ import '../services/hex_service.dart';
 import '../services/running_score_service.dart';
 import '../services/accelerometer_service.dart';
 import '../services/lap_service.dart';
+import '../config/h3_config.dart';
 import 'remote_config_service.dart';
 
 typedef HexCaptureCallback = bool Function(String hexId, Team runnerTeam);
@@ -26,6 +27,7 @@ typedef RunCheckpointCallback = void Function(Map<String, dynamic> checkpoint);
 class RunStopResult {
   final Run session;
   final List<String> capturedHexIds;
+  final List<String> capturedHexParents;
   final double? cv;
   final int? stabilityScore;
   final List<LapModel> laps;
@@ -33,6 +35,7 @@ class RunStopResult {
   const RunStopResult({
     required this.session,
     required this.capturedHexIds,
+    required this.capturedHexParents,
     this.cv,
     this.stabilityScore,
     required this.laps,
@@ -71,8 +74,8 @@ class RunTracker {
   ImpactTier _currentTier = ImpactTier.starter;
   int _maxImpactTierIndex = 0;
 
-  /// List of hex IDs captured during this run (for batch upload at "The Final Sync")
   final List<String> _capturedHexIds = [];
+  final List<String> _capturedHexParents = [];
 
   /// List of completed laps (1km each) for CV calculation
   final List<LapModel> _completedLaps = [];
@@ -89,8 +92,8 @@ class RunTracker {
   /// Get current impact tier
   ImpactTier get currentTier => _currentTier;
 
-  /// Get the list of captured hex IDs (for batch upload)
   List<String> get capturedHexIds => List.unmodifiable(_capturedHexIds);
+  List<String> get capturedHexParents => List.unmodifiable(_capturedHexParents);
 
   /// Get list of completed laps (immutable)
   List<LapModel> get completedLaps => List.unmodifiable(_completedLaps);
@@ -106,7 +109,7 @@ class RunTracker {
     totalDistanceKm: (_currentRun?.distanceMeters ?? 0) / 1000,
     currentPaceMinPerKm: _currentRun?.avgPaceMinPerKm ?? 7.0,
     currentHexId: _currentRun?.currentHexId,
-    flipCount: _currentRun?.hexesColored ?? 0,
+    flipPoints: _currentRun?.hexesColored ?? 0,
   );
 
   /// Set callbacks for hex scoring events
@@ -142,6 +145,7 @@ class RunTracker {
     _maxImpactTierIndex = 0;
     _gpsValidator.reset();
     _capturedHexIds.clear();
+    _capturedHexParents.clear();
     _completedLaps.clear();
     _currentLapStartDistance = 0;
     _currentLapStartTimestampMs = null;
@@ -268,7 +272,10 @@ class RunTracker {
 
           if (flipped) {
             _currentRun!.recordFlip(currentHexId);
-            _capturedHexIds.add(currentHexId); // Batch for The Final Sync
+            _capturedHexIds.add(currentHexId);
+            _capturedHexParents.add(
+              _hexService.getParentHexId(currentHexId, H3Config.allResolution),
+            );
             debugPrint(
               'HEX FLIPPED ON ENTRY! '
               'Total flips: ${_currentRun!.hexesColored}, '
@@ -294,7 +301,10 @@ class RunTracker {
 
           if (flipped) {
             _currentRun!.recordFlip(currentHexId);
-            _capturedHexIds.add(currentHexId); // Batch for The Final Sync
+            _capturedHexIds.add(currentHexId);
+            _capturedHexParents.add(
+              _hexService.getParentHexId(currentHexId, H3Config.allResolution),
+            );
             debugPrint(
               'HEX FLIPPED ON STAY! '
               'Total flips: ${_currentRun!.hexesColored}, '
@@ -418,6 +428,7 @@ class RunTracker {
 
     final completedRun = _currentRun!;
     final hexIds = List<String>.from(_capturedHexIds);
+    final hexParents = List<String>.from(_capturedHexParents);
 
     // Calculate CV from completed laps
     final laps = List<LapModel>.from(_completedLaps);
@@ -444,6 +455,7 @@ class RunTracker {
     _maxImpactTierIndex = 0;
     _gpsValidator.reset();
     _capturedHexIds.clear();
+    _capturedHexParents.clear();
     _completedLaps.clear();
     _currentLapStartDistance = 0;
     _currentLapStartTimestampMs = null;
@@ -455,6 +467,7 @@ class RunTracker {
     return RunStopResult(
       session: completedRun,
       capturedHexIds: hexIds,
+      capturedHexParents: hexParents,
       cv: cv,
       stabilityScore: stabilityScore,
       laps: laps,

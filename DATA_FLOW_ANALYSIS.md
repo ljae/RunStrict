@@ -26,16 +26,15 @@
 
 | Class | Defined In | Fields | Purpose |
 |-------|-----------|:---:|---------|
-| `LeaderboardEntry` | `leaderboard_provider.dart` | 10 | Season leaderboard row (overlaps `UserModel`: 9 shared fields) |
-| `YesterdayStats` | `team_stats_provider.dart` | 8 | Yesterday's personal performance |
-| `RankingEntry` | `team_stats_provider.dart` | 4 | Mini leaderboard entry (yesterday's points) |
-| `TeamRankings` | `team_stats_provider.dart` | 9 | Red elite/common + Blue rankings |
-| `HexDominanceScope` | `team_stats_provider.dart` | 5 | Hex counts per team in a scope |
-| `HexDominance` | `team_stats_provider.dart` | 4 | Wraps allRange + cityRange scopes |
-| `RedTeamBuff` | `team_stats_provider.dart` | 6 | Red buff status with elite tier |
-| `BlueTeamBuff` | `team_stats_provider.dart` | 1 | Blue union multiplier |
-| `PurpleParticipation` | `team_stats_provider.dart` | 3 | Purple participation rate + count |
-| `TeamBuffComparison` | `team_stats_provider.dart` | 6 | Wraps team buffs + user multiplier |
+| `LeaderboardEntry` | `leaderboard_provider.dart` | 2 (wraps `UserModel` + `rank`) | Season leaderboard row (delegates to `UserModel`) |
+| `YesterdayStats` | `models/team_stats.dart` | 8 | Yesterday's personal performance |
+| `RankingEntry` | `models/team_stats.dart` | 4 | Mini leaderboard entry (yesterday's points) |
+| `TeamRankings` | `models/team_stats.dart` | 9 | Red elite/common + Blue rankings |
+| `HexDominanceScope` | `models/team_stats.dart` | 3 + 2 computed | Hex counts per team in a scope |
+| `HexDominance` | `models/team_stats.dart` | 4 | Wraps allRange + cityRange scopes |
+| `RedTeamBuff` | `models/team_stats.dart` | 6 | Red buff status with elite tier |
+| `PurpleParticipation` | `models/team_stats.dart` | 3 | Purple participation rate + count |
+| `TeamBuffComparison` | `models/team_stats.dart` | 3 + delegates to `BuffBreakdown` | Wraps team buffs + user multiplier |
 | `BuffBreakdown` | `buff_service.dart` | 8 | Buff calculation details from RPC |
 | `HexAggregatedStats` | `hex_data_provider.dart` | 4 | View-only hex color counts |
 | `RunStopResult` | `run_tracker.dart` | 5 | Run completion data bundle |
@@ -45,7 +44,7 @@
 | `PermissionResult` | `location_service.dart` | 3 | GPS permission request outcome |
 | `LocationPermissionException` | `location_service.dart` | 2 | Permission error with settings flag |
 
-**Total inline classes: 18** (with ~92 additional fields)
+**Total inline/extracted classes: 17** (`BlueTeamBuff` eliminated, 8 classes moved to `models/team_stats.dart`)
 
 ### 1.3 Enums Defined Outside models/
 
@@ -205,7 +204,7 @@
 | `DailyRunningStat.avgPaceMinPerKm` | Supabase `daily_stats` | Can compute from distance/duration |
 | `LeaderboardEntry.avgPaceMinPerKm` | Supabase leaderboard RPC | Copy of UserModel field |
 
-**Optimization**: `DailyRunningStat.avgPaceMinPerKm` can be computed from `totalDistanceKm` and `totalDurationSeconds`. Remove the stored field.
+**Resolved**: `DailyRunningStat.avgPaceMinPerKm` is now a computed getter from `totalDistanceKm` and `totalDurationSeconds`. Stored field removed.
 
 ### 3.3 `hexesColored` vs `hexPath.length` vs `flipCount`
 
@@ -253,7 +252,7 @@
 | totalRuns | x | - | NO |
 | seasonHomeHex | x | - | NO |
 
-**9 of 12 UserModel fields duplicated in LeaderboardEntry.**
+**Resolved**: `LeaderboardEntry` now wraps `UserModel` + `rank` via delegation pattern. 9 duplicated fields eliminated.
 
 ### 3.6 `BuffBreakdown` vs `TeamBuffComparison` overlap
 
@@ -270,7 +269,7 @@
 | redBuff | - | x | NO |
 | blueBuff | - | x | NO |
 
-**5 fields overlap between BuffBreakdown and TeamBuffComparison.**
+**Resolved**: `TeamBuffComparison` now holds a `BuffBreakdown` reference and delegates overlapping fields. 5 duplicated fields eliminated.
 
 ---
 
@@ -294,11 +293,10 @@
 
 ---
 
-### 4.4 REMOVE: Stored `avgPaceMinPerKm` from `DailyRunningStat`
+### 4.4 ~~REMOVE: Stored `avgPaceMinPerKm` from `DailyRunningStat`~~ DONE
 
-**Current**: Stored alongside `totalDistanceKm` and `totalDurationSeconds`.
+**Status**: Completed. `avgPaceMinPerKm` is now a computed getter derived from `totalDistanceKm` and `totalDurationSeconds`. Removed from constructor, `fromRow`, `fromJson`, `toRow`, `toJson`, `copyWith`. `addRun()` simplified — no longer takes `paceMinPerKm` parameter.
 
-**Proposed**: Compute on demand:
 ```dart
 double get avgPaceMinPerKm {
   if (totalDistanceKm <= 0 || totalDurationSeconds <= 0) return 0;
@@ -316,26 +314,9 @@ double get avgPaceMinPerKm {
 
 ---
 
-### 4.6 DERIVE: `LeaderboardEntry` from `UserModel`
+### 4.6 ~~DERIVE: `LeaderboardEntry` from `UserModel`~~ DONE
 
-**Current**: `LeaderboardEntry` duplicates 9 fields from `UserModel` and adds `rank`.
-
-**Proposed**: Make `LeaderboardEntry` wrap `UserModel` + `rank`:
-
-```dart
-class LeaderboardEntry {
-  final UserModel user;
-  final int rank;
-
-  // Delegate getters
-  String get id => user.id;
-  String get name => user.name;
-  Team get team => user.team;
-  int get seasonPoints => user.seasonPoints;
-  int? get stabilityScore => user.stabilityScore;
-  // ...
-}
-```
+**Status**: Completed. `LeaderboardEntry` now wraps `UserModel user` + `int rank` instead of duplicating 9 fields. Delegate getters (`id`, `name`, `team`, `avatar`, `seasonPoints`, `totalDistanceKm`, `avgPaceMinPerKm`, `avgCv`, `homeHex`, `stabilityScore`) forward to `user`. Added `LeaderboardEntry.create()` convenience factory. `fromJson` constructs via `UserModel.fromRow(json)`. `fromCacheMap` constructs a `UserModel` directly.
 
 **Fields eliminated**: 9 (replaced by delegation)
 
@@ -347,103 +328,30 @@ class LeaderboardEntry {
 
 ---
 
-### 4.8 CONSOLIDATE: TeamStats inline models
+### 4.8 ~~CONSOLIDATE: TeamStats inline models~~ DONE
 
-`team_stats_provider.dart` defines 9 inline classes with ~46 fields. Many are UI-specific display models.
+**Status**: Completed. Extracted 8 model classes from `team_stats_provider.dart` into `lib/models/team_stats.dart`. Key changes:
+- `HexDominanceScope.dominantTeam` → computed getter (derived from max hex count)
+- `HexDominanceScope.total` → computed getter (sum of red + blue + purple)
+- `BlueTeamBuff` eliminated — `unionMultiplier` folded into `TeamBuffComparison.blueUnionMultiplier`
+- All ~6 `HexDominanceScope` constructor sites updated to remove stored `dominantTeam:` and `total:` params
+- `team_screen.dart` updated: `comparison.blueBuff.unionMultiplier` → `comparison.blueUnionMultiplier`
 
-**Current structure**:
-```
-YesterdayStats (8 fields)
-RankingEntry (4 fields)
-TeamRankings (9 fields)
-HexDominanceScope (5 fields)
-HexDominance (4 fields)
-RedTeamBuff (6 fields)
-BlueTeamBuff (1 field)
-PurpleParticipation (3 fields)
-TeamBuffComparison (6 fields)
-```
-
-**Proposed consolidation**:
-
-```dart
-/// Single response model for team stats RPC
-class TeamStatsSnapshot {
-  // Yesterday
-  final double? yesterdayDistanceKm;
-  final int yesterdayFlips;
-  final int yesterdayPoints;
-  final int yesterdayRunCount;
-
-  // Dominance (all range)
-  final int allRedHexes;
-  final int allBlueHexes;
-  final int allPurpleHexes;
-
-  // Dominance (city range)
-  final int? cityRedHexes;
-  final int? cityBlueHexes;
-  final int? cityPurpleHexes;
-
-  // Territory
-  final String? territoryName;
-  final int? districtNumber;
-
-  // Buff (user-specific)
-  final int userMultiplier;
-  final bool userIsElite;
-  final bool isCityLeader;
-  final bool hasProvinceRange;
-
-  // Computed
-  String? get allDominantTeam { ... }
-  String? get cityDominantTeam { ... }
-  double get purpleParticipationRate { ... }
-}
-```
-
-**Fields eliminated**: ~30 (from 46 to ~16)
-
-This removes:
-- `BlueTeamBuff` (1 field, can be derived)
-- `RedTeamBuff.commonMultiplier` (always 1)
-- `RedTeamBuff.activeMultiplier` (derivable)
-- `TeamBuffComparison` wrapper (fields flattened)
-- `HexDominanceScope.total` (derivable from sum)
-- `HexDominanceScope.dominantTeam` (derivable from max)
-- `HexDominance` wrapper (fields flattened)
-- `TeamRankings` (most fields computable)
+**Fields eliminated**: ~5 (2 derived fields from HexDominanceScope, 1 class eliminated, 2 redundant constructor params)
 
 ---
 
-### 4.9 MERGE: `BuffBreakdown` with `TeamBuffComparison`
+### 4.9 ~~MERGE: `BuffBreakdown` with `TeamBuffComparison`~~ DONE
 
-**Current**: Two separate classes for buff information.
-```
-BuffBreakdown (buff_service.dart) = { multiplier, baseBuff, allRangeBonus, reason, team, cityHex, isCityLeader, isElite }
-TeamBuffComparison (team_stats_provider.dart) = { redBuff, blueBuff, allRangeBonus, cityLeaderBonus, userTeam, userTotalMultiplier }
-```
+**Status**: Completed. `TeamBuffComparison` now holds a `BuffBreakdown breakdown` reference and delegates `allRangeBonus`, `cityLeaderBonus`, `userTeam`, `userTotalMultiplier` to it instead of duplicating. Removed 4 duplicated constructor parameters and 3 now-unused local variables from `_calculateBuffComparison()` in `team_stats_provider.dart`.
 
-**Proposed**: Use a single `BuffStatus` model:
-```dart
-class BuffStatus {
-  final int multiplier;
-  final int baseBuff;
-  final int allRangeBonus;
-  final int cityLeaderBonus;
-  final String team;
-  final bool isElite;
-  final String? reason;
-}
-```
-
-**Fields eliminated**: ~8
+**Fields eliminated**: 5 (4 duplicated params + 1 class wrapper simplified)
 
 ---
 
 ## 5. Summary: Optimization Impact
 
-### Already Completed
+### All Completed
 
 | Action | Fields Removed | Classes Removed | Status |
 |--------|:-:|:-:|---|
@@ -453,39 +361,35 @@ class BuffStatus {
 | Remove stored flip_points from Run.toMap + SQLite | 1 | 0 | DONE (v13) |
 | Normalize distance: distanceKm → distance_meters | 0 | 0 | DONE (v13) |
 | Remove avgPaceSecPerKm from Run.toMap + SQLite | 1 | 0 | DONE (v13) |
-| **Subtotal** | **14** | **2** | |
+| Remove stored avgPace from DailyRunningStat | 1 | 0 | DONE |
+| Derive LeaderboardEntry from UserModel | 9 | 0 | DONE |
+| Consolidate TeamStats inline models | ~5 | 1 | DONE |
+| Merge BuffBreakdown + TeamBuffComparison | 5 | 0 | DONE |
+| **Total** | **~34** | **3** | |
 
-### Remaining Opportunities
+### Final State
 
-| Action | Fields Removed | Classes Removed | Complexity Reduction |
-|--------|:-:|:-:|---|
-| Remove stored avgPace from DailyRunningStat | 1 | 0 | Compute on demand |
-| Derive LeaderboardEntry from UserModel | 9 | 0 | Single user data model |
-| Consolidate TeamStats models | ~30 | ~7 | Single snapshot model |
-| Merge BuffBreakdown + TeamBuffComparison | ~8 | 1 | Single buff model |
-| **Subtotal** | **~48 fields** | **~8 classes** | |
-
-### Current vs Fully Optimized
-
-| Metric | Current | After Remaining |
+| Metric | Before Optimization | After All Cleanups |
 |--------|:------:|:-----:|
-| Model files | 10 | 10 |
-| Inline model classes | 18 | ~10 |
-| Total stored/cached fields | ~189 | ~141 |
-| Redundant fields | ~48 | 0 |
+| Model files | 10 | 11 (added team_stats.dart) |
+| Inline model classes | 18 | 10 |
+| Total stored/cached fields | ~189 | ~169 |
+| Redundant fields | ~34 | 0 |
 
 ---
 
-## 6. Priority Order (Remaining)
+## 6. Priority Order (All Complete)
 
-| Priority | Action | Risk | Effort |
-|:--------:|--------|:----:|:------:|
-| ~~1~~ | ~~Remove `flip_points` from `Run.toMap`~~ | | DONE |
-| ~~6~~ | ~~Normalize distance unit in SQLite~~ | | DONE (v13) |
-| 1 | Remove stored `avgPaceMinPerKm` from `DailyRunningStat` | Low | Low |
-| 2 | Derive `LeaderboardEntry` from `UserModel` | Medium | Medium |
-| 3 | Consolidate TeamStats inline models | Medium | High |
-| 4 | Merge `BuffBreakdown` + `TeamBuffComparison` | Medium | Medium |
+| Priority | Action | Status |
+|:--------:|--------|:------:|
+| ~~1~~ | ~~Remove `flip_points` from `Run.toMap`~~ | DONE (v13) |
+| ~~2~~ | ~~Normalize distance unit in SQLite~~ | DONE (v13) |
+| ~~3~~ | ~~Remove stored `avgPaceMinPerKm` from `DailyRunningStat`~~ | DONE |
+| ~~4~~ | ~~Derive `LeaderboardEntry` from `UserModel`~~ | DONE |
+| ~~5~~ | ~~Consolidate TeamStats inline models~~ | DONE |
+| ~~6~~ | ~~Merge `BuffBreakdown` + `TeamBuffComparison`~~ | DONE |
+
+All data flow optimizations are complete. No remaining redundant fields.
 
 ---
 

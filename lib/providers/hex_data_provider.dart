@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/hex_model.dart';
@@ -68,7 +67,7 @@ class HexDataProvider with ChangeNotifier {
   ///
   /// Lookup order:
   /// 1. HexRepository cache (single source of truth, includes prefetched data)
-  /// 2. Fallback simulation based on hex ID hash
+  /// 2. Return neutral (unclaimed) hex — no fake simulation
   HexModel getHex(String hexId, dynamic center) {
     // center is expected to be LatLng from latlong2
 
@@ -76,33 +75,8 @@ class HexDataProvider with ChangeNotifier {
     final cached = _hexRepository.getHex(hexId);
     if (cached != null) return cached;
 
-    // 2. Fallback: Create hex with simulated last runner based on hash
-    final hash = hexId.hashCode;
-    final random = Random(hash);
-
-    Team? lastRunner;
-    final stateRoll = random.nextDouble();
-
-    // Fallback simulation distribution (only used when no prefetched data):
-    // 20% Neutral, 35% Blue, 35% Red, 10% Purple
-    if (stateRoll < 0.20) {
-      lastRunner = null;
-    } else if (stateRoll < 0.55) {
-      lastRunner = Team.blue;
-    } else if (stateRoll < 0.90) {
-      lastRunner = Team.red;
-    } else {
-      lastRunner = Team.purple;
-    }
-
-    final hex = HexModel(id: hexId, center: center, lastRunnerTeam: lastRunner);
-
-    // Store in HexRepository for future lookups
-    _hexRepository.bulkLoadFromServer([
-      {'hex_id': hexId, 'last_runner_team': lastRunner?.name},
-    ]);
-
-    return hex;
+    // 2. Not in cache = unclaimed hex (neutral)
+    return HexModel(id: hexId, center: center, lastRunnerTeam: null);
   }
 
   /// Update hex with runner's color (delegates to HexRepository)
@@ -131,18 +105,16 @@ class HexDataProvider with ChangeNotifier {
 
     for (final hexId in hexIds) {
       final hex = _hexRepository.getHex(hexId);
-      if (hex != null) {
-        if (hex.lastRunnerTeam == null) {
-          neutralCount++;
-        } else {
-          switch (hex.lastRunnerTeam!) {
-            case Team.blue:
-              blueCount++;
-            case Team.red:
-              redCount++;
-            case Team.purple:
-              purpleCount++;
-          }
+      if (hex == null || hex.lastRunnerTeam == null) {
+        neutralCount++;
+      } else {
+        switch (hex.lastRunnerTeam!) {
+          case Team.blue:
+            blueCount++;
+          case Team.red:
+            redCount++;
+          case Team.purple:
+            purpleCount++;
         }
       }
     }

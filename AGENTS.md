@@ -101,7 +101,7 @@ lib/
 │   ├── running_screen.dart      # Pre-run & active run tracking
 │   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, avatar, stats
+│   └── profile_screen.dart      # Manifesto, sex, birthday, stats (no avatar)
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers
 │   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
@@ -133,7 +133,7 @@ lib/
 │   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
 │   └── lru_cache.dart           # LRU cache for hex data
 └── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer pattern)
+    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer + boundary layers)
     ├── route_map.dart           # Route display + navigation mode
     ├── smooth_camera_controller.dart # 60fps camera interpolation
     ├── glowing_location_marker.dart  # Team-colored pulsing marker
@@ -370,14 +370,30 @@ Use `AppTheme.teamColor(isRed)` for team-aware coloring.
 // | Province win only     | 2x    |
 // | District + Province   | 3x    |
 //
-// PURPLE: Participation Rate = 1x-3x (no territory bonus)
+// PURPLE: Participation Rate = 1x (<30%), 2x (30-59%), 3x (≥60%) (no territory bonus)
 // New users = 1x (default until yesterday's data exists)
 final multiplier = BuffService().currentBuff; // Frozen at run start
 final points = flipsEarned * multiplier;
 ```
 
-### Hybrid Points System
+### Snapshot-Based Flip Points
 ```dart
+// Flip points are counted against the daily hex snapshot (frozen at midnight GMT+2).
+// All users start each day with the same snapshot baseline.
+//
+// Client flow:
+// 1. Download hex_snapshot on app launch / OnResume
+// 2. Apply local overlay (user's own today's flips from SQLite)
+// 3. During run: count flips against snapshot + overlay
+// 4. flip_points = total_flips × buff_multiplier (frozen at run start)
+// 5. Upload to server: hex_path[] + flip_points + buff_multiplier
+// 6. Server cap-validates: flip_points ≤ len(hex_path) × buff_multiplier
+//
+// Map shows: snapshot + own local flips (other users invisible until tomorrow)
+// Different users CAN flip the same hex independently (both earn points)
+// Same user CANNOT flip same hex twice in same run (session dedup)
+// Cross-run same-day: local overlay prevents double-counting own hexes
+
 // PointsService tracks points from two sources:
 // _serverTodayBaseline: synced runs (from appLaunchSync)
 // _localUnsyncedToday: unsynced runs on this device
@@ -397,11 +413,14 @@ When app returns to foreground, `AppLifecycleManager` triggers:
 
 Skipped during active runs. Throttled to max once per 30 seconds.
 
-### Hex Data Architecture
+### Hex Data Architecture (Snapshot + Local Overlay)
 `HexRepository` is the **single source of truth** for hex data (no duplicate caches).
 - `PrefetchService.getCachedHex()` delegates to `HexRepository().getHex()`
 - `HexDataProvider.getHex()` reads directly from `HexRepository`
-- PrefetchService downloads into HexRepository, does not maintain its own cache
+- PrefetchService downloads from `hex_snapshot` table (NOT live `hexes`) into HexRepository
+- **Local overlay**: User's own today's flips stored in SQLite, applied on top of snapshot
+- **Map display**: Snapshot + own local flips (other users' today activity invisible)
+- **Live `hexes` table**: Updated by `finalize_run()` for buff/dominance only, NOT for flip counting
 
 ### Hex Capture & Flip
 ```dart
@@ -637,6 +656,35 @@ await mapboxMap.style.setStyleLayerProperty(
 - Data-driven: Per-feature colors read from GeoJSON properties
 - Performance: GPU-accelerated fill rendering
 
+### Scope Boundary Layers (Province + District)
+
+Two additional GeoJSON sources render geographic scope boundaries:
+
+**Province Boundary** (`scope-boundary-source` / `scope-boundary-line`):
+- **ALL scope**: Merged outer boundary of all ~7 district (Res 6) hexes — irregular polygon (NOT a single hexagon)
+- **CITY scope**: Single district hex boundary
+- **ZONE scope**: Hidden
+- Styling: white, 8px width, 15% opacity, 4px blur, solid
+
+**District Boundaries** (`district-boundary-source` / `district-boundary-line`):
+- **ALL scope**: Individual dashed outlines for each ~7 district hex
+- **CITY/ZONE scope**: Hidden
+- Styling: white, 3px width, 12% opacity, 2px blur, dashed [4,3]
+
+**Merged Outer Boundary Algorithm** (`_computeMergedOuterBoundary`):
+- Collects all directed edges from district hex boundaries
+- Removes shared internal edges (opposite-direction edges cancel out)
+- Chains remaining outer edges into a closed polygon loop
+- Uses 7-decimal coordinate precision for edge matching (~1cm)
+
+### Leaderboard Electric Manifesto
+
+`_ElectricManifesto` widget in `leaderboard_screen.dart`:
+- `ShaderMask` + animated `LinearGradient` flowing left-to-right (3s cycle)
+- Gradient between `Colors.white54` (dim) and team color (bright neon)
+- Team-colored shadow glow, `GoogleFonts.sora()` italic
+- Used in podium cards (top 3) and rank tiles (4th+)
+
 ---
 
 ## Remote Configuration System
@@ -827,23 +875,23 @@ class Run {
 }
 ```
 
-### Delta Sync for Hexes
+### Hex Snapshot Prefetch
 
-Hex data uses delta sync to minimize downloads:
+Hex data is downloaded from the daily snapshot (frozen at midnight GMT+2):
 
 ```dart
-// First time: full download
-final hexes = await supabase.getHexesDelta(parentHex);
+// Download today's snapshot for the user's area
+final hexes = await supabase.getHexSnapshot(parentHex, snapshotDate: today);
 
-// Subsequent: only changes since last sync
-final hexes = await supabase.getHexesDelta(
-  parentHex, 
-  sinceTime: HexRepository().lastPrefetchTime,
-);
+// Load snapshot into HexRepository as base layer
+HexRepository().bulkLoadFromServer(hexes);
 
-// Merge into cache (with timestamp-based conflict resolution)
-// Server data older than local lastFlippedAt is skipped (newer local wins)
-HexRepository().mergeFromServer(hexes);
+// Apply local overlay: user's own today's flips from SQLite
+final localFlips = await localStorage.getTodayFlips();
+HexRepository().applyLocalOverlay(localFlips);
+
+// Map shows: snapshot + own local flips
+// Other users' today activity is invisible until tomorrow's snapshot
 ```
 
 ### Database Version

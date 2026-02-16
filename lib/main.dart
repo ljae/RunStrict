@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'theme/app_theme.dart';
+import 'models/user_model.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/run_provider.dart';
 import 'providers/leaderboard_provider.dart';
 import 'providers/hex_data_provider.dart';
+import 'screens/login_screen.dart';
+import 'screens/profile_register_screen.dart';
 import 'screens/team_selection_screen.dart';
 import 'screens/season_register_screen.dart';
 import 'screens/home_screen.dart';
@@ -14,7 +17,6 @@ import 'config/mapbox_config.dart';
 import 'services/hex_service.dart';
 import 'services/location_service.dart';
 import 'services/run_tracker.dart';
-// import 'services/in_memory_storage_service.dart'; // Now using LocalStorage
 import 'services/points_service.dart';
 import 'services/supabase_service.dart';
 import 'services/remote_config_service.dart';
@@ -23,17 +25,6 @@ import 'services/app_lifecycle_manager.dart';
 import 'services/buff_service.dart';
 import 'services/sync_retry_service.dart';
 import 'storage/local_storage.dart';
-import 'utils/dummy_data_generator.dart';
-
-/// Debug setting to control which team selection screen to show.
-/// Set to true to use the new SeasonRegisterScreen (recommended).
-/// Set to false to use the original TeamSelectionScreen.
-const bool kUseSeasonRegisterScreen = true;
-
-/// Debug setting to force show SeasonRegisterScreen on every app launch.
-/// Set to true during development to test the screen.
-/// Set to false for normal flow (only show when no user exists).
-const bool kForceShowSeasonRegister = true;
 
 /// Global LocalStorage instance for run history persistence
 late final LocalStorage _localStorage;
@@ -53,6 +44,13 @@ void main() async {
   // Initialize LocalStorage for run history persistence
   _localStorage = LocalStorage();
   await _localStorage.initialize();
+
+  // One-time cleanup: remove local-only runs that were never synced to server.
+  // This ensures the app shows only server-verified data for production review.
+  final deletedCount = await _localStorage.deleteUnsyncedRuns();
+  if (deletedCount > 0) {
+    debugPrint('main: Cleaned up $deletedCount unsynced local runs');
+  }
 
   // Set Mapbox access token
   MapboxOptions.setAccessToken(MapboxConfig.accessToken);
@@ -106,6 +104,8 @@ class RunnerApp extends StatelessWidget {
         home: const _AppInitializer(),
         routes: {
           '/home': (context) => const HomeScreen(),
+          '/login': (context) => const LoginScreen(),
+          '/profile-register': (context) => const ProfileRegisterScreen(),
           '/team-selection': (context) => const TeamSelectionScreen(),
           '/season-register': (context) => const SeasonRegisterScreen(),
         },
@@ -123,7 +123,9 @@ class _AppInitializer extends StatefulWidget {
 }
 
 class _AppInitializerState extends State<_AppInitializer> {
-  bool _isPrefetching = false;
+  // Start true to prevent HomeScreen from rendering before prefetch.
+  // Set to false after prefetch completes, or if user is not logged in.
+  bool _isPrefetching = true;
   String? _prefetchError;
 
   @override
@@ -141,14 +143,16 @@ class _AppInitializerState extends State<_AppInitializer> {
     final appState = context.read<AppStateProvider>();
     await appState.initialize();
 
-    // After app state is initialized, initialize prefetch for location data
-    // Also run when kForceShowSeasonRegister is true to show location badge
-    if ((appState.hasUser || kForceShowSeasonRegister) && mounted) {
+    if (appState.hasUser && mounted) {
       await _initializePrefetch();
       await _loadTodayFlipPoints();
+    } else if (mounted) {
+      // No user — no prefetch needed, allow login screen to render
+      setState(() {
+        _isPrefetching = false;
+      });
     }
 
-    // Initialize AppLifecycleManager for data refresh on resume
     if (mounted) {
       _initializeLifecycleManager();
     }
@@ -166,22 +170,47 @@ class _AppInitializerState extends State<_AppInitializer> {
       final supabase = SupabaseService();
       final result = await supabase.appLaunchSync(appState.currentUser!.id);
 
-      // Server baseline: synced runs from today (may include other devices)
-      final serverTodayBaseline =
-          (result['today_flip_points'] as num?)?.toInt() ?? 0;
-      final seasonPoints =
-          (result['user_stats']?['season_points'] as num?)?.toInt() ?? 0;
-
-      // Set server baseline first
-      pointsService.setServerTodayBaseline(serverTodayBaseline);
+      final userStats = result['user_stats'] as Map<String, dynamic>?;
+      final seasonPoints = (userStats?['season_points'] as num?)?.toInt() ?? 0;
       pointsService.setSeasonPoints(seasonPoints);
 
-      // Then add local unsynced runs on top (hybrid calculation)
-      await pointsService.refreshLocalUnsyncedPoints();
+      if (userStats != null && appState.currentUser != null) {
+        final cur = appState.currentUser!;
+        // Construct fresh UserModel with server display aggregates.
+        // Cannot use copyWith because null means "keep old" in copyWith,
+        // but server null means "no data through yesterday" (must clear).
+        appState.setUser(
+          UserModel(
+            id: cur.id,
+            name: cur.name,
+            team: cur.team,
+            avatar: cur.avatar,
+            seasonPoints: seasonPoints,
+            manifesto: cur.manifesto,
+            sex: cur.sex,
+            birthday: cur.birthday,
+            nationality: cur.nationality,
+            homeHex: userStats['home_hex'] as String?,
+            homeHexEnd: userStats['home_hex_end'] as String?,
+            seasonHomeHex: userStats['season_home_hex'] as String?,
+            totalDistanceKm:
+                (userStats['total_distance_km'] as num?)?.toDouble() ?? 0,
+            avgPaceMinPerKm: (userStats['avg_pace_min_per_km'] as num?)
+                ?.toDouble(),
+            avgCv: (userStats['avg_cv'] as num?)?.toDouble(),
+            totalRuns: (userStats['total_runs'] as num?)?.toInt() ?? 0,
+          ),
+        );
+      }
+
+      final userBuff = result['user_buff'] as Map<String, dynamic>?;
+      BuffService().setBuffFromLaunchSync(userBuff);
+
+      await pointsService.refreshFromLocalTotal();
 
       debugPrint(
-        'AppInitializer: Loaded points - '
-        'serverBaseline: $serverTodayBaseline, '
+        'AppInitializer: Launch sync - '
+        'buff: ${BuffService().multiplier}x, '
         'todayTotal: ${pointsService.todayFlipPoints}, '
         'season: $seasonPoints',
       );
@@ -208,26 +237,6 @@ class _AppInitializerState extends State<_AppInitializer> {
     try {
       await PrefetchService().initialize();
       debugPrint('AppInitializer: PrefetchService initialized successfully');
-
-      // DEBUG: Generate dummy data (4 years of runs + hex colors)
-      // Remove this block after testing!
-      final homeHex = PrefetchService().homeHex;
-      if (homeHex != null) {
-        // Force regenerate hex colors to match current home hex location
-        final runsCount = await DummyDataGenerator.insertDummyRuns(
-          _localStorage,
-        );
-        final hexCount = await DummyDataGenerator.generateHexColors(
-          _localStorage,
-          homeHex,
-          unclaimedPercent: 1.0,
-          forceRegenerate: true, // Always regenerate to match current location
-        );
-        debugPrint(
-          'AppInitializer: Generated dummy data - '
-          'Runs: $runsCount, Hexes: $hexCount',
-        );
-      }
     } catch (e) {
       debugPrint('AppInitializer: PrefetchService failed - $e');
       if (mounted) {
@@ -261,8 +270,7 @@ class _AppInitializerState extends State<_AppInitializer> {
         final userId = appState.currentUser?.id;
         if (userId != null) {
           // Retry failed syncs
-          final syncedPoints =
-              await SyncRetryService().retryUnsyncedRuns();
+          final syncedPoints = await SyncRetryService().retryUnsyncedRuns();
           if (syncedPoints > 0) {
             pointsService.onRunSynced(syncedPoints);
           }
@@ -270,16 +278,46 @@ class _AppInitializerState extends State<_AppInitializer> {
           // Refresh buff multiplier (may have changed at midnight)
           await BuffService().refresh(userId);
 
-          // Refresh today's points baseline
+          // Refresh season points from server + today's points from local
           try {
             final supabase = SupabaseService();
             final result = await supabase.appLaunchSync(userId);
-            final baseline =
-                (result['today_flip_points'] as num?)?.toInt() ?? 0;
-            pointsService.setServerTodayBaseline(baseline);
-            await pointsService.refreshLocalUnsyncedPoints();
+            final userStats = result['user_stats'] as Map<String, dynamic>?;
+            final seasonPoints =
+                (userStats?['season_points'] as num?)?.toInt() ?? 0;
+            pointsService.setSeasonPoints(seasonPoints);
+
+            if (userStats != null && appState.currentUser != null) {
+              final cur = appState.currentUser!;
+              appState.setUser(
+                UserModel(
+                  id: cur.id,
+                  name: cur.name,
+                  team: cur.team,
+                  avatar: cur.avatar,
+                  seasonPoints: seasonPoints,
+                  manifesto: cur.manifesto,
+                  sex: cur.sex,
+                  birthday: cur.birthday,
+                  nationality: cur.nationality,
+                  homeHex: userStats['home_hex'] as String?,
+                  homeHexEnd: userStats['home_hex_end'] as String?,
+                  seasonHomeHex: userStats['season_home_hex'] as String?,
+                  totalDistanceKm:
+                      (userStats['total_distance_km'] as num?)?.toDouble() ?? 0,
+                  avgPaceMinPerKm: (userStats['avg_pace_min_per_km'] as num?)
+                      ?.toDouble(),
+                  avgCv: (userStats['avg_cv'] as num?)?.toDouble(),
+                  totalRuns: (userStats['total_runs'] as num?)?.toInt() ?? 0,
+                ),
+              );
+            }
+
+            await pointsService.refreshFromLocalTotal();
           } catch (e) {
             debugPrint('OnResume: Failed to refresh points - $e');
+            // Still refresh local today's points even if server fails
+            await pointsService.refreshFromLocalTotal();
           }
         }
       },
@@ -290,35 +328,31 @@ class _AppInitializerState extends State<_AppInitializer> {
   Widget build(BuildContext context) {
     return Consumer<AppStateProvider>(
       builder: (context, appState, _) {
-        // Show loading while initializing
         if (!appState.isInitialized) {
           return _buildLoadingScreen('Initializing...');
         }
 
-        // Show loading while prefetching (for existing user or debug mode)
-        if ((appState.hasUser || kForceShowSeasonRegister) && _isPrefetching) {
+        if (appState.hasUser && _isPrefetching) {
           return _buildLoadingScreen('Getting your location...');
         }
 
-        // Show error with retry option if prefetch failed
-        if ((appState.hasUser || kForceShowSeasonRegister) &&
-            _prefetchError != null) {
+        if (appState.hasUser && _prefetchError != null) {
           return _buildErrorScreen(_prefetchError!);
         }
 
-        // DEBUG: Force show SeasonRegisterScreen during development
-        if (kForceShowSeasonRegister) {
+        if (!appState.isAuthenticated) {
+          return const LoginScreen();
+        }
+
+        if (!appState.hasProfile) {
+          return const ProfileRegisterScreen();
+        }
+
+        if (!appState.hasTeamSelected) {
           return const SeasonRegisterScreen();
         }
 
-        // After initialization, show appropriate screen
-        if (appState.hasUser) {
-          return const HomeScreen();
-        }
-        // Use debug setting to determine which team selection screen to show
-        return kUseSeasonRegisterScreen
-            ? const SeasonRegisterScreen()
-            : const TeamSelectionScreen();
+        return const HomeScreen();
       },
     );
   }

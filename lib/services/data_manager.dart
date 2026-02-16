@@ -86,14 +86,14 @@ abstract class DataManager {
 class SeasonAggregate {
   final double totalDistanceKm;
   final int totalDurationSeconds;
-  final int totalFlipCount;
+  final int totalFlipPoints;
   final int totalRuns;
   final double avgPaceSecPerKm;
 
   const SeasonAggregate({
     this.totalDistanceKm = 0,
     this.totalDurationSeconds = 0,
-    this.totalFlipCount = 0,
+    this.totalFlipPoints = 0,
     this.totalRuns = 0,
     this.avgPaceSecPerKm = 0,
   });
@@ -108,7 +108,7 @@ class SeasonAggregate {
     for (final stat in stats) {
       totalDist += stat.totalDistanceKm;
       totalDur += stat.totalDurationSeconds;
-      totalFlips += stat.flipCount;
+      totalFlips += stat.flipPoints;
     }
 
     final avgPace = totalDist > 0 ? totalDur / totalDist : 0;
@@ -116,7 +116,7 @@ class SeasonAggregate {
     return SeasonAggregate(
       totalDistanceKm: totalDist,
       totalDurationSeconds: totalDur,
-      totalFlipCount: totalFlips,
+      totalFlipPoints: totalFlips,
       totalRuns: stats.length,
       avgPaceSecPerKm: avgPace.toDouble(),
     );

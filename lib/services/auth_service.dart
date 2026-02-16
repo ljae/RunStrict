@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/user_model.dart';
+import '../config/auth_config.dart';
 import '../models/team.dart';
+import '../models/user_model.dart';
 
-/// Authentication service for Supabase Auth.
-///
-/// Handles user registration, sign in, sign out, and session management.
-/// Creates corresponding user profile in `users` table on sign up.
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -15,139 +16,213 @@ class AuthService {
 
   SupabaseClient get _client => Supabase.instance.client;
 
-  /// Current Supabase auth user (null if not logged in)
   User? get currentAuthUser => _client.auth.currentUser;
-
-  /// Whether user is currently authenticated
   bool get isAuthenticated => currentAuthUser != null;
-
-  /// Stream of auth state changes
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
 
-  /// Sign up a new user with email and password.
-  ///
-  /// Creates both Supabase Auth user and profile in `users` table.
-  /// Returns the created [UserModel] on success.
-  Future<UserModel> signUp({
+  // ── Email Auth ──────────────────────────────────────────────
+
+  Future<String> signUpWithEmail({
     required String email,
     required String password,
-    required String username,
-    required Team team,
   }) async {
-    // 1. Create auth user
-    final authResponse = await _client.auth.signUp(
+    final response = await _client.auth.signUp(
       email: email,
       password: password,
     );
 
-    final authUser = authResponse.user;
+    // Supabase returns a user object even for duplicate sign-ups,
+    // but without a valid session. If session is null, the user
+    // already exists — fall back to signIn.
+    if (response.session == null) {
+      debugPrint(
+        'AuthService: No session after signUp, falling back to signIn',
+      );
+      return signInWithEmail(email: email, password: password);
+    }
+
+    final authUser = response.user;
     if (authUser == null) {
       throw AuthException('Sign up failed: No user returned');
     }
 
-    // 2. Create user profile in users table
-    final userModel = UserModel(
-      id: authUser.id,
-      name: username,
-      team: team,
-      seasonPoints: 0,
-    );
-
-    await _client.from('users').insert({
-      'id': authUser.id,
-      ...userModel.toRow(),
-    });
-
-    debugPrint('AuthService: User signed up - ${authUser.id}');
-    return userModel;
+    debugPrint('AuthService: Email sign up - ${authUser.id}');
+    return authUser.id;
   }
 
-  /// Sign in existing user with email and password.
-  ///
-  /// Fetches user profile from `users` table.
-  /// Returns [UserModel] on success.
-  Future<UserModel> signIn({
+  Future<String> signInWithEmail({
     required String email,
     required String password,
   }) async {
-    final authResponse = await _client.auth.signInWithPassword(
+    final response = await _client.auth.signInWithPassword(
       email: email,
       password: password,
     );
 
-    final authUser = authResponse.user;
+    final authUser = response.user;
     if (authUser == null) {
       throw AuthException('Sign in failed: No user returned');
     }
 
-    // Fetch user profile
-    final userModel = await fetchUserProfile(authUser.id);
-    if (userModel == null) {
-      throw AuthException('Sign in failed: User profile not found');
-    }
-
-    debugPrint('AuthService: User signed in - ${authUser.id}');
-    return userModel;
+    debugPrint('AuthService: Email sign in - ${authUser.id}');
+    return authUser.id;
   }
 
-  /// Sign in anonymously (for quick onboarding).
-  ///
-  /// Creates anonymous auth user and profile in `users` table.
-  /// User can later link email/password to convert to permanent account.
-  Future<UserModel> signInAnonymously({
-    required String username,
-    required Team team,
-  }) async {
-    final authResponse = await _client.auth.signInAnonymously();
+  // ── Social Auth ─────────────────────────────────────────────
 
-    final authUser = authResponse.user;
-    if (authUser == null) {
-      throw AuthException('Anonymous sign in failed: No user returned');
-    }
+  Future<String> signInWithApple() async {
+    final rawNonce = _client.auth.generateRawNonce();
+    final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
 
-    // Create user profile
-    final userModel = UserModel(
-      id: authUser.id,
-      name: username,
-      team: team,
-      seasonPoints: 0,
+    final credential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: hashedNonce,
     );
 
-    await _client.from('users').insert({
-      'id': authUser.id,
-      ...userModel.toRow(),
-    });
+    final idToken = credential.identityToken;
+    if (idToken == null) {
+      throw AuthException('Apple Sign-In failed: No identity token');
+    }
 
-    debugPrint('AuthService: Anonymous user created - ${authUser.id}');
+    final response = await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.apple,
+      idToken: idToken,
+      nonce: rawNonce,
+    );
+
+    final authUser = response.user;
+    if (authUser == null) {
+      throw AuthException('Apple Sign-In failed: No user returned');
+    }
+
+    debugPrint('AuthService: Apple sign in - ${authUser.id}');
+    return authUser.id;
+  }
+
+  Future<String> signInWithGoogle() async {
+    final googleSignIn = GoogleSignIn(
+      clientId: AuthConfig.googleIosClientId,
+      serverClientId: AuthConfig.googleWebClientId,
+    );
+
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) {
+      throw AuthException('Google Sign-In cancelled');
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    if (idToken == null) {
+      throw AuthException('Google Sign-In failed: No ID token');
+    }
+
+    final response = await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: googleAuth.accessToken,
+    );
+
+    final authUser = response.user;
+    if (authUser == null) {
+      throw AuthException('Google Sign-In failed: No user returned');
+    }
+
+    debugPrint('AuthService: Google sign in - ${authUser.id}');
+    return authUser.id;
+  }
+
+  // ── Profile Management ──────────────────────────────────────
+
+  Future<bool> hasProfile(String userId) async {
+    final result = await _client
+        .from('users')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+    return result != null;
+  }
+
+  Future<bool> hasTeamSelected(String userId) async {
+    final result = await _client
+        .from('users')
+        .select('team')
+        .eq('id', userId)
+        .maybeSingle();
+    if (result == null) return false;
+    return result['team'] != null;
+  }
+
+  Future<bool> checkUsernameAvailable(String username) async {
+    final result = await _client
+        .from('users')
+        .select('id')
+        .ilike('name', username)
+        .maybeSingle();
+    return result == null;
+  }
+
+  Future<UserModel> createUserProfile({
+    required String userId,
+    required String username,
+    required String sex,
+    required DateTime birthday,
+    String? nationality,
+    String? manifesto,
+  }) async {
+    final row = <String, dynamic>{
+      'id': userId,
+      'name': username,
+      'sex': sex,
+      'birthday': birthday.toIso8601String().substring(0, 10),
+      'nationality': nationality,
+    };
+    if (manifesto != null) row['manifesto'] = manifesto;
+
+    await _client.from('users').insert(row);
+
+    final userModel = UserModel(
+      id: userId,
+      name: username,
+      team: Team.red,
+      sex: sex,
+      birthday: birthday,
+      nationality: nationality,
+      manifesto: manifesto,
+    );
+
+    debugPrint('AuthService: Profile created - $userId');
     return userModel;
   }
 
-  /// Fetch user profile from `users` table.
+  Future<void> updateTeam(String userId, Team team) async {
+    await _client.from('users').update({'team': team.name}).eq('id', userId);
+    debugPrint('AuthService: Team updated to ${team.name} - $userId');
+  }
+
   Future<UserModel?> fetchUserProfile(String userId) async {
     final result = await _client
         .from('users')
         .select()
         .eq('id', userId)
         .maybeSingle();
-
     if (result == null) return null;
     return UserModel.fromRow(result);
   }
 
-  /// Update user profile in `users` table.
   Future<void> updateUserProfile(UserModel user) async {
     await _client.from('users').update(user.toRow()).eq('id', user.id);
   }
 
-  /// Sign out current user.
+  // ── Session ─────────────────────────────────────────────────
+
   Future<void> signOut() async {
     await _client.auth.signOut();
     debugPrint('AuthService: User signed out');
   }
 
-  /// Try to restore session from stored credentials.
-  ///
-  /// Returns [UserModel] if session was restored, null otherwise.
   Future<UserModel?> restoreSession() async {
     final session = _client.auth.currentSession;
     if (session == null) {
@@ -161,7 +236,6 @@ class AuthService {
       return null;
     }
 
-    // Fetch user profile
     final userModel = await fetchUserProfile(authUser.id);
     if (userModel == null) {
       debugPrint('AuthService: Session restored but profile not found');
@@ -172,18 +246,11 @@ class AuthService {
     return userModel;
   }
 
-  /// Delete current user account (GDPR compliance).
-  ///
-  /// This requires server-side Edge Function to delete auth user.
-  /// For now, just deletes user profile and signs out.
   Future<void> deleteAccount() async {
     final userId = currentAuthUser?.id;
     if (userId == null) return;
 
-    // Delete user profile
     await _client.from('users').delete().eq('id', userId);
-
-    // Sign out
     await signOut();
 
     debugPrint('AuthService: Account deleted - $userId');

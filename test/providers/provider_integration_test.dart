@@ -57,6 +57,8 @@ void main() {
             id: 'user123',
             name: 'Test Runner',
             team: Team.red,
+            sex: 'other',
+            birthday: DateTime(2000, 1, 1),
             seasonPoints: 100,
           );
           await userRepo.setUser(user);
@@ -78,6 +80,8 @@ void main() {
           id: 'user456',
           name: 'Provider User',
           team: Team.blue,
+          sex: 'other',
+          birthday: DateTime(2000, 1, 1),
           seasonPoints: 200,
         );
 
@@ -106,6 +110,8 @@ void main() {
           id: 'user789',
           name: 'Notified User',
           team: Team.purple,
+          sex: 'other',
+          birthday: DateTime(2000, 1, 1),
           seasonPoints: 300,
         );
         await userRepo.setUser(user);
@@ -128,6 +134,8 @@ void main() {
             id: 'user123',
             name: 'Points User',
             team: Team.red,
+            sex: 'other',
+            birthday: DateTime(2000, 1, 1),
             seasonPoints: 500,
           );
           await userRepo.setUser(user);
@@ -148,6 +156,8 @@ void main() {
             id: 'user123',
             name: 'Points User',
             team: Team.red,
+            sex: 'other',
+            birthday: DateTime(2000, 1, 1),
             seasonPoints: 100,
           );
           await userRepo.setUser(user);
@@ -170,6 +180,8 @@ void main() {
           id: 'user123',
           name: 'Run User',
           team: Team.blue,
+          sex: 'other',
+          birthday: DateTime(2000, 1, 1),
           seasonPoints: 1000,
         );
         await userRepo.setUser(user);
@@ -191,6 +203,8 @@ void main() {
           id: 'user123',
           name: 'Season User',
           team: Team.red,
+          sex: 'other',
+          birthday: DateTime(2000, 1, 1),
           seasonPoints: 100,
         );
         await userRepo.setUser(user);
@@ -212,6 +226,8 @@ void main() {
           id: 'user123',
           name: 'Notified User',
           team: Team.red,
+          sex: 'other',
+          birthday: DateTime(2000, 1, 1),
           seasonPoints: 100,
         );
         await userRepo.setUser(user);
@@ -243,7 +259,7 @@ void main() {
 
           // Load entries through repository
           final entries = [
-            LeaderboardEntry(
+            LeaderboardEntry.create(
               id: '1',
               name: 'Alice',
               team: Team.red,
@@ -251,7 +267,7 @@ void main() {
               seasonPoints: 100,
               rank: 1,
             ),
-            LeaderboardEntry(
+            LeaderboardEntry.create(
               id: '2',
               name: 'Bob',
               team: Team.blue,
@@ -282,7 +298,7 @@ void main() {
 
           // Load entries through repository
           final entries = [
-            LeaderboardEntry(
+            LeaderboardEntry.create(
               id: '1',
               name: 'Notified Entry',
               team: Team.purple,
@@ -305,7 +321,7 @@ void main() {
 
         // Load entries
         final entries = [
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '1',
             name: 'Clear Entry',
             team: Team.red,
@@ -331,7 +347,7 @@ void main() {
 
         // Load mixed team entries
         final entries = [
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '1',
             name: 'Red1',
             team: Team.red,
@@ -339,7 +355,7 @@ void main() {
             seasonPoints: 100,
             rank: 1,
           ),
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '2',
             name: 'Blue1',
             team: Team.blue,
@@ -347,7 +363,7 @@ void main() {
             seasonPoints: 90,
             rank: 2,
           ),
-          LeaderboardEntry(
+          LeaderboardEntry.create(
             id: '3',
             name: 'Red2',
             team: Team.red,
@@ -378,6 +394,8 @@ void main() {
             id: 'syncUser',
             name: 'Sync Test',
             team: Team.red,
+            sex: 'other',
+            birthday: DateTime(2000, 1, 1),
             seasonPoints: 100,
           );
           appState.setUser(user);

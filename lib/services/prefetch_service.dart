@@ -38,13 +38,13 @@ enum PrefetchStatus {
 ///
 /// | Scope | Hex Count | Generation Center | Panning Behavior |
 /// |-------|-----------|-------------------|------------------|
-/// | ZONE  | ~91       | Camera center     | Shows different hexes as user pans |
-/// | CITY  | 331       | Home hex center   | **Fixed** - same 331 hexes always |
-/// | ALL   | 3,781     | Home hex center   | **Fixed** - same 3,781 hexes always |
+/// | ZONE  | ~7        | Camera center     | Shows different hexes as user pans |
+/// | CITY  | 343       | Home hex center   | **Fixed** - same 343 hexes always |
+/// | ALL   | 2,401     | Home hex center   | **Fixed** - same 2,401 hexes always |
 ///
 /// ### Data Prefetch
 ///
-/// On app launch, downloads hex colors for the ALL range (3,781 hexes).
+/// On app launch, downloads hex colors for the ALL range (2,401 hexes).
 /// This is the maximum data boundary - ZONE view uses this cached data.
 /// If user runs outside ALL range (rare), on-demand fetch is needed.
 ///
@@ -262,64 +262,74 @@ class PrefetchService {
   // DATA DOWNLOAD
   // ---------------------------------------------------------------------------
 
+  /// Download hex data from today's snapshot (frozen at midnight GMT+2).
+  ///
+  /// Always downloads the full snapshot — no delta sync needed because
+  /// the snapshot is immutable for the day.
+  /// After loading, applies local overlay (user's own today's flips from SQLite).
   Future<void> _downloadHexData() async {
     if (_homeHexAll == null) return;
 
-    if (kDebugMode) {
-      debugPrint(
-        'PrefetchService: Skipping Supabase hex download (debug mode)',
-      );
-      return;
-    }
-
     final repo = HexRepository();
-    final lastTime = await _loadLastPrefetchTime();
-    final isDelta = lastTime != null && repo.cacheStats['size']! > 0;
 
     try {
-      final hexes = await _supabase.getHexesDelta(
-        _homeHexAll!,
-        sinceTime: isDelta ? lastTime : null,
-      );
+      // Download today's snapshot (deterministic for all users)
+      final hexes = await _supabase.getHexSnapshot(_homeHexAll!);
 
-      if (isDelta) {
-        repo.mergeFromServer(hexes);
-        debugPrint(
-          'PrefetchService: Delta sync - ${hexes.length} hexes updated',
-        );
+      if (hexes.isNotEmpty) {
+        repo.bulkLoadFromSnapshot(hexes);
+        debugPrint('PrefetchService: Snapshot loaded - ${hexes.length} hexes');
       } else {
-        repo.bulkLoadFromServer(hexes);
+        // Snapshot empty (cron hasn't run yet) — fall back to live hexes
         debugPrint(
-          'PrefetchService: Full sync - ${repo.cacheStats['size']} hexes',
+          'PrefetchService: Snapshot empty, falling back to live hexes',
+        );
+        final liveHexes = await _supabase.getHexesDelta(_homeHexAll!);
+        repo.bulkLoadFromServer(liveHexes);
+        debugPrint(
+          'PrefetchService: Live hexes loaded - ${liveHexes.length} hexes',
         );
       }
+
+      // Apply local overlay: user's own today's flips from SQLite
+      await _applyLocalOverlay(repo);
 
       _lastPrefetchTime = DateTime.now();
       await _saveLastPrefetchTime(_lastPrefetchTime!);
     } catch (e) {
-      if (isDelta) {
+      debugPrint('PrefetchService: Failed to download hex data - $e');
+      // Fallback: try legacy delta sync
+      try {
+        final hexes = await _supabase.getHexesDelta(_homeHexAll!);
+        repo.bulkLoadFromServer(hexes);
+        await _applyLocalOverlay(repo);
+        _lastPrefetchTime = DateTime.now();
+        await _saveLastPrefetchTime(_lastPrefetchTime!);
         debugPrint(
-          'PrefetchService: Delta sync failed, falling back to full - $e',
+          'PrefetchService: Fallback delta sync - ${repo.cacheStats['size']} hexes',
         );
-        await _downloadHexDataFull();
-      } else {
-        debugPrint('PrefetchService: Failed to download hex data - $e');
+      } catch (e2) {
+        debugPrint('PrefetchService: Fallback delta sync also failed - $e2');
       }
     }
   }
 
-  Future<void> _downloadHexDataFull() async {
-    final repo = HexRepository();
+  /// Apply local overlay: user's own today's flips from SQLite.
+  ///
+  /// After loading the snapshot, the user's own flips from today
+  /// are applied on top so the map shows their personal progress.
+  /// This prevents double-counting when re-running the same hexes.
+  Future<void> _applyLocalOverlay(HexRepository repo) async {
     try {
-      final hexes = await _supabase.getHexesDelta(_homeHexAll!);
-      repo.bulkLoadFromServer(hexes);
-      _lastPrefetchTime = DateTime.now();
-      await _saveLastPrefetchTime(_lastPrefetchTime!);
-      debugPrint(
-        'PrefetchService: Fallback full sync - ${repo.cacheStats['size']} hexes',
-      );
+      final todayFlips = await _localStorage.getTodayFlippedHexes();
+      if (todayFlips.isNotEmpty) {
+        repo.applyLocalOverlay(todayFlips);
+        debugPrint(
+          'PrefetchService: Applied ${todayFlips.length} local overlay hexes',
+        );
+      }
     } catch (e) {
-      debugPrint('PrefetchService: Fallback full sync failed - $e');
+      debugPrint('PrefetchService: Failed to apply local overlay - $e');
     }
   }
 
@@ -547,6 +557,7 @@ class PrefetchService {
     }
   }
 
+  // ignore: unused_element
   Future<DateTime?> _loadLastPrefetchTime() async {
     try {
       final value = await _localStorage.getPrefetchMeta('last_prefetch_time');

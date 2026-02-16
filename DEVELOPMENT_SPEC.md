@@ -1,8 +1,8 @@
 # RunStrict Development Specification: "The 40-Day Journey"
 
-> **Last Updated**: 2026-02-01  
+> **Last Updated**: 2026-02-16  
 > **App Name**: RunStrict (The 40-Day Journey)  
-> **Current Season Status**: D-40 (Pre-season)
+> **Current Season Status**: Season 2 (Started 2026-02-11)
 
 ---
 
@@ -335,42 +335,79 @@ The buff multiplier is determined by team, performance tier, and territory domin
 - **Strategy**: Teams can coordinate city dominance and participation.
 - **Competition**: RED rewards individual excellence, BLUE rewards solidarity, PURPLE rewards district-wide consistency.
 
-#### 2.5.3 Points Calculation Flow ("The Final Sync")
+#### 2.5.3 Hex Snapshot System
 
-> **Design Goal**: Eliminate real-time hex synchronization. All data is uploaded at run completion.
+> **Design Goal**: Deterministic flip point calculation. All users run against the same daily hex snapshot.
+
+**Core Principle: Separation of Concerns**
+
+| Concern | Source | Purpose |
+|---------|--------|---------|
+| Flip Points calculation | Yesterday's hex snapshot | Deterministic, same baseline for all users |
+| Hex ownership tracking | Today's run activity (hex_path + end_time) | Builds tomorrow's snapshot at midnight |
+| Map display | Snapshot + user's own today's runs (local overlay) | Visual feedback |
+
+**Snapshot Lifecycle:**
 
 ```
-[During Run - Local Only]
-  Runner GPS → Client validates locally
-  Hex flip detected → Client records to local hex_path list
-  Points calculated locally using buff multiplier (frozen at run start)
-  NO server communication during run
+[Midnight GMT+2 — Server builds snapshot via pg_cron]
+  1. Start from yesterday's hex_snapshot (previous day's final state)
+  2. Apply ALL today's synced runs (from `runs` table, filtered by end_time within today GMT+2)
+  3. Conflict resolution: "Last run end-time wins" — later end_time determines hex color
+  4. Write result to `hex_snapshot` table with snapshot_date = tomorrow
+  5. This becomes tomorrow's "starting point" for all users
+  6. Runs that end after midnight (cross-midnight runs) → affect next day's snapshot
 
-[Run Completion - Batch Sync]
-  RunSession.endTime = now()
-  Client uploads:
-    → run_summary: { endTime, distanceKm, hex_path[], buffMultiplier }
+[Client Prefetch — App Launch / OnResume / Pre-run]
+  1. Download hex_snapshot WHERE snapshot_date = today (yesterday's midnight result)
+  2. Load into HexRepository as base layer
+  3. Apply local overlay: hexes flipped by THIS USER today (from local SQLite)
+  4. Map screen shows: snapshot + own local flips
+  5. Other users' today activity is INVISIBLE until tomorrow's snapshot
+
+[During Run — Client-side flip counting]
+  For each hex entered:
+  1. Look up hex in HexRepository (snapshot + own local overlay)
+  2. If hex color ≠ runner's team → FLIP (+1 point)
+  3. If hex color = runner's team → NO FLIP
+  4. If hex not in cache (neutral/absent from snapshot) → FLIP (+1 point)
+  5. Update local overlay with new color
+  6. Same hex can only flip once per run (session dedup)
   
-  Server processes (RPC: finalize_run):
-    → Count flips in hex_path (color changes from current hex state)
-    → Award points: total_flips × buffMultiplier
-    → Validate: buffMultiplier ≤ max allowed for user's team/tier
-    → Conflict Resolution: Later endTime wins hex color
-    → UPDATE hexes SET last_runner_team = team WHERE endTime > existing
-    → UPDATE users SET season_points += total_points_earned
-    → INSERT INTO run_history (lightweight stats, preserved across seasons)
+  flip_points = total_flips × buff_multiplier (frozen at run start)
+
+[Run Completion — "The Final Sync"]
+  Client uploads:
+    → hex_path[] (all hexes passed through)
+    → flip_points (client-calculated)
+    → buff_multiplier (frozen at run start)
+    → end_time
+  
+  Server (finalize_run):
+    → Validate: flip_points ≤ len(hex_path) × buff_multiplier (simple cap)
+    → Award points: season_points += flip_points
+    → Store hex_path + end_time in `runs` table (used at midnight for snapshot build)
+    → Update `hexes` table for live buff/dominance calculations
+    → INSERT INTO run_history (lightweight stats, preserved)
+    → Do NOT modify hex_snapshot (immutable until midnight)
 ```
 
-**Conflict Resolution Rule ("Later Run Wins"):**
-- `hexes` table stores `last_flipped_at` timestamp (run's endTime when hex was flipped).
-- When multiple runners pass through the same hex, **the runner whose run ended later wins** the hex color.
-- This prevents offline abusing: a runner cannot submit an old run to overwrite recent activity.
-- Server compares `run_endTime` with existing `last_flipped_at`:
-  - If `run_endTime > last_flipped_at` → Update hex color and timestamp
-  - If `run_endTime ≤ last_flipped_at` → Skip update (hex already claimed by later run)
-- Example: User A (run ends 10:00) passes Hex #123. User B (run ends 09:30) syncs later.
-  - **User A wins** because their run ended later, regardless of sync order.
-- **Flip points**: Calculated by client, **validated by server** (points ≤ hex_count × multiplier).
+**Cross-Run Same-Day Behavior:**
+- User runs at 9am → flips hex X (blue→red locally in overlay)
+- User runs at 2pm → client has snapshot (blue) + local overlay (red from 9am)
+- Hex X shows RED → same team → **no flip** (correct dedup)
+- **Different users**: Both see snapshot (blue). Both can flip independently. Both earn points.
+
+**Midnight-Crossing Runs:**
+- Run starts 23:45 Feb 15, ends 00:30 Feb 16 (GMT+2)
+- `end_time` = Feb 16 → hex_path goes into Feb 16's snapshot build
+- Flip points use the buff frozen at run start (Feb 15's buff)
+
+**Conflict Resolution Rule ("Later Run Wins" — Snapshot Build Only):**
+- During midnight snapshot build, when multiple runs affect the same hex, the run with the latest `end_time` determines the hex color in the snapshot.
+- This is for snapshot construction only — flip points are NOT recalculated.
+- The `hexes` table (live state) also uses this rule for buff/dominance calculations.
+- Flip points are always calculated by the client against the downloaded snapshot.
 
 ### 2.6 Pace Consistency (CV & Stability Score)
 
@@ -553,7 +590,10 @@ App Entry
      │   ├── Tab: Leaderboard Screen
      │   └── Tab: Run History Screen (Calendar)
     └── Profile Screen (accessible from settings/menu)
-        └── Manifesto (12-char, editable anytime)
+        ├── Manifesto (30-char, editable anytime)
+        ├── Sex (Male/Female/Other)
+        ├── Birthday
+        └── Nationality
 ```
 
 **Navigation:** Bottom tab bar with horizontal swipe between tabs. Tab order follows current implementation.
@@ -606,6 +646,26 @@ App Entry
 | Capturable | Different team color | 0.3 | Team color, 1.5px | **Pulsing** (see below) |
 | Current (runner here) | Team color | 0.5 | Team color, 2.5px | None |
 
+**Scope Boundary Layers:**
+
+The map renders geographic scope boundaries using separate GeoJSON sources:
+
+| Layer | Source | Scope | Style |
+|-------|--------|-------|-------|
+| Province Boundary | `scope-boundary-source` | ALL only | White, 8px, 15% opacity, 4px blur, solid |
+| District Boundaries | `district-boundary-source` | ALL only | White, 3px, 12% opacity, 2px blur, dashed [4,3] |
+
+**Province Boundary (ALL scope):**
+- Merged outer boundary of all ~7 district (Res 6) hexes — **irregular polygon** (NOT a single hexagon)
+- Algorithm: Collect all directed edges → remove shared internal edges (opposite-direction cancel) → chain remaining outer edges into closed polygon
+- Uses 7-decimal coordinate precision for edge matching (~1cm accuracy)
+
+**District Boundaries (ALL scope):**
+- Individual dashed outlines for each ~7 district hex
+- Hidden in CITY and ZONE scopes
+
+**CITY scope:** Single district hex boundary (solid, same style as province)
+**ZONE scope:** No boundaries shown
 
 #### 3.2.4 Running Screen
 
@@ -695,8 +755,9 @@ App Entry
 | Element | Spec |
 |---------|------|
 | Access | Via settings/menu (not a main tab) |
-| Manifesto | 12-character declaration, editable anytime |
-| Avatar | Personal emoji |
+| Manifesto | 30-character declaration, editable anytime |
+| Sex | User sex (Male/Female/Other), editable |
+| Birthday | User birthday, editable |
 | Team | Display only (cannot change mid-season) |
 | Season Stats | Total flips, distance, runs |
 | Buff Status | Current multiplier breakdown (Elite/City Leader/All Range) |
@@ -777,9 +838,15 @@ class UserModel {
   final String id;
   final String name;           // Display name
   final Team team;             // Current team (purple = defected)
-  final String avatar;         // Emoji avatar
+  final String avatar;         // Emoji avatar (legacy, not displayed)
+  final String sex;            // 'male', 'female', or 'other'
+  final DateTime birthday;     // User birthday
   final int seasonPoints;      // Flip points this season (preserved on Purple defection)
-  final String? manifesto;     // 12-char declaration, editable anytime
+  final String? manifesto;     // 30-char declaration, editable anytime
+  final String? nationality;   // ISO country code (e.g., 'KR', 'US')
+  final String? homeHex;       // First hex of last run (SELF leaderboard scope)
+  final String? homeHexEnd;    // Last hex of last run (OTHERS leaderboard scope)
+  final String? seasonHomeHex; // Home hex at season start
   final double totalDistanceKm; // Running season aggregate
   final double? avgPaceMinPerKm; // Weighted average pace (min/km)
   final double? avgCv;         // Average Coefficient of Variation (null if no CV data)
@@ -795,6 +862,12 @@ class UserModel {
 - `avgPaceMinPerKm` → incremental average pace (updated on each run)
 - `avgCv` → incremental average CV from runs with CV data (≥1km)
 - `totalRuns` → count of completed runs
+
+**Profile Fields (server-persisted, editable anytime):**
+- `sex` → Male/Female/Other (displayed as ♂/♀/⚥ icon)
+- `birthday` → user's date of birth
+- `manifesto` → 30-character declaration (shown on leaderboard with electric effect)
+- `nationality` → ISO country code (flag emoji display)
 
 #### HexModel
 
@@ -819,43 +892,43 @@ class HexModel {
 }
 ```
 
-#### RunSession (Active Run — Hot Data)
+#### Run (Unified Run Model — `lib/models/run.dart`)
+
+> **Note**: The unified `Run` model replaces three legacy models: `RunSession` (active runs), `RunSummary` (completed runs), and `RunHistoryModel` (history display). A single model handles the full run lifecycle.
 
 ```dart
-class RunSession {
+class Run {
+  // Core fields
   final String id;
   final DateTime startTime;
   DateTime? endTime;
   double distanceMeters;
-  List<LocationPoint> route;    // Full GPS path (active tracking)
-  int hexesColored;             // Flip count during this run
-  Team teamAtRun;               // Team at time of run
-  List<String> hexesPassed;     // H3 hex IDs passed through
+  int hexesPassed;
+  int hexesColored;              // Flip count during this run
+  Team teamAtRun;
+  List<String> hexPath;          // H3 hex IDs passed (deduplicated)
+  double buffMultiplier;         // Applied multiplier from buff system (frozen at run start)
+  double? cv;                    // Coefficient of Variation (null for runs < 1km)
+  String syncStatus;             // 'pending', 'synced', 'failed'
 
+  // Computed getters
   double get distanceKm => distanceMeters / 1000;
   Duration get duration => (endTime ?? DateTime.now()).difference(startTime);
-  double get paceMinPerKm => /* calculation */;
-  bool get canCaptureHex => paceMinPerKm < 8.0;
-}
-```
+  double get avgPaceMinPerKm => /* calculation */;
+  int? get stabilityScore => cv != null ? (100 - cv!).round().clamp(0, 100) : null;
+  int get flipPoints => (hexesColored * buffMultiplier).round();
 
-#### RunSummary (Completed Run — Warm Data, Storage-Minimized)
+  // Mutable methods for active runs
+  void addPoint(LocationPoint point) { ... }
+  void updateDistance(double meters) { ... }
+  void recordFlip() { ... }
+  void complete() { ... }
 
-```dart
-class RunSummary {
-  final String id;
-  final DateTime endTime;           // Conflict resolution: later endTime wins hex
-  final double distanceKm;
-  final int durationSeconds;
-  final double avgPaceMinPerKm;     // min/km (e.g., 6.0 = 6:00 min/km)
-  final int hexesColored;           // Flip count
-  final Team teamAtRun;
-  final List<String> hexPath;       // H3 hex IDs passed (deduplicated, no timestamps)
-  final int buffMultiplier;         // Applied multiplier from buff system
-  final double? cv;                 // Coefficient of Variation (null for runs < 1km)
-
-  /// Stability score (100 - CV, clamped 0-100). Higher = more consistent pace.
-  int? get stabilityScore => cv == null ? null : (100 - cv!).round().clamp(0, 100);
+  // Serialization
+  Map<String, dynamic> toMap();    // SQLite (includes hex_path as comma-separated, buff_multiplier)
+  Map<String, dynamic> toRow();    // Supabase
+  factory Run.fromMap(Map<String, dynamic> map);  // SQLite
+  factory Run.fromRow(Map<String, dynamic> row);  // Supabase
 }
 ```
 
@@ -865,43 +938,18 @@ class RunSummary {
 > - Route shape can be reconstructed by connecting hex centers.
 > - `endTime` is the sole timestamp used for conflict resolution.
 
-#### RunHistoryModel (Per-Run Stats — Preserved Across Seasons)
-
-```dart
-/// Lightweight run history preserved across season resets.
-/// Contains stats only, no heavy hex_path data.
-class RunHistoryModel {
-  final String id;
-  final String userId;
-  final DateTime runDate;           // Date of the run
-  final DateTime startTime;
-  final DateTime endTime;
-  final double distanceKm;
-  final int durationSeconds;
-  final double avgPaceMinPerKm;     // min/km (e.g., 6.0 = 6:00 min/km)
-  final int flipCount;              // Flips earned this run
-  final int pointsEarned;           // Points with multiplier
-  final Team teamAtRun;
-
-  Duration get duration => Duration(seconds: durationSeconds);
-}
-```
-
 > **Design Note**: `run_history` is separate from `runs` table.
 > - `runs`: Heavy data with `hex_path` → **DELETED on season reset**
 > - `run_history`: Lightweight stats → **PRESERVED across seasons** (5-year retention)
 
-**Model Usage Clarification:**
+**Data Flow:**
 
-| Model | Purpose | Contains hex_path | Used For |
-|-------|---------|-------------------|----------|
-| `RunSummary` | Server upload payload | ✅ Yes | `finalize_run()` RPC call |
-| `RunHistoryModel` | UI display model | ❌ No | Run History Screen, Calendar |
-
-- `RunSummary` is used ONLY for uploading to server at run completion.
-- `RunHistoryModel` is used for all UI display (history list, calendar, stats).
-- `runs` table (DB) stores `hex_path` for season data; `run_history` table (DB) stores stats only.
-- Both tables are **independent** with no foreign key relationship.
+| Stage | What Happens | Storage |
+|-------|-------------|---------|
+| Active run | `Run` tracks GPS, hexes, distance in memory | In-memory |
+| Run completion | `Run.complete()` → saved to SQLite + server sync | SQLite `runs` table |
+| Server sync | `finalize_run()` RPC with hex_path, flip_points, buff_multiplier | Supabase `runs` + `run_history` |
+| History display | `Run.fromMap()` from SQLite or `Run.fromRow()` from Supabase | Read-only |
 
 #### DailyRunningStat (Aggregated — Preserved Across Seasons)
 
@@ -969,10 +1017,14 @@ CREATE TABLE users (
   name TEXT NOT NULL,
   team TEXT CHECK (team IN ('red', 'blue', 'purple')),
   avatar TEXT NOT NULL DEFAULT '🏃',
+  sex TEXT CHECK (sex IN ('male', 'female', 'other')),
+  birthday DATE,
+  nationality TEXT,                           -- ISO country code (e.g., 'KR', 'US')
   season_points INTEGER NOT NULL DEFAULT 0,
-  manifesto TEXT CHECK (char_length(manifesto) <= 12),
+  manifesto TEXT CHECK (char_length(manifesto) <= 30),
   home_hex_start TEXT,                        -- First hex of last run (used for SELF leaderboard scope)
   home_hex_end TEXT,                          -- Last hex of last run (used for OTHERS leaderboard scope)
+  season_home_hex TEXT,                       -- Home hex at season start
   total_distance_km DOUBLE PRECISION NOT NULL DEFAULT 0,
   avg_pace_min_per_km DOUBLE PRECISION,
   avg_cv DOUBLE PRECISION,
@@ -1011,6 +1063,18 @@ CREATE TABLE daily_province_range_stats (
   blue_hex_count INTEGER NOT NULL DEFAULT 0,
   calculated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Hex snapshot (frozen daily at midnight GMT+2 — basis for flip point calculation)
+-- Only stores hexes that have been flipped (neutral hexes = absent from table)
+CREATE TABLE hex_snapshot (
+  hex_id TEXT NOT NULL,
+  last_runner_team TEXT NOT NULL CHECK (last_runner_team IN ('red', 'blue', 'purple')),
+  snapshot_date DATE NOT NULL,           -- Which day this snapshot is for (users download today's)
+  last_run_end_time TIMESTAMPTZ,         -- For conflict resolution during snapshot build
+  parent_hex TEXT,                        -- Resolution 5 parent (for prefetch filtering)
+  PRIMARY KEY (hex_id, snapshot_date)
+);
+CREATE INDEX idx_hex_snapshot_date_parent ON hex_snapshot(snapshot_date, parent_hex);
 ```
 
 #### Season-Partitioned Tables (pg_partman)
@@ -1151,7 +1215,9 @@ RETURNS TABLE(user_id UUID, name TEXT, team TEXT, season_points INTEGER, rank BI
   LIMIT p_limit;
 $$ LANGUAGE sql STABLE;
 
--- Finalize run: batch process hex flips and award points ("The Final Sync")
+-- Finalize run: accept client flip points with cap validation ("The Final Sync")
+-- Snapshot-based: client counts flips against daily snapshot, server cap-validates only.
+-- Server still updates live `hexes` table for buff/dominance calculations.
 CREATE OR REPLACE FUNCTION finalize_run(
   p_user_id UUID,
   p_start_time TIMESTAMPTZ,
@@ -1159,60 +1225,62 @@ CREATE OR REPLACE FUNCTION finalize_run(
   p_distance_km DOUBLE PRECISION,
   p_duration_seconds INTEGER,
   p_hex_path TEXT[],
-  p_cv DOUBLE PRECISION DEFAULT NULL,  -- Coefficient of Variation (null for runs < 1km)
-  p_client_points INTEGER DEFAULT NULL  -- Optional: client-calculated points for validation
+  p_buff_multiplier INTEGER DEFAULT 1,
+  p_cv DOUBLE PRECISION DEFAULT NULL,
+  p_client_points INTEGER DEFAULT 0,
+  p_home_region_flips INTEGER DEFAULT 0,
+  p_hex_parents TEXT[] DEFAULT NULL
 )
 RETURNS jsonb AS $$
 DECLARE
   v_hex_id TEXT;
-  v_total_flips INTEGER := 0;
   v_team TEXT;
   v_points INTEGER;
-  v_multiplier INTEGER;
-  v_current_team TEXT;
-  v_current_flipped_at TIMESTAMPTZ;
   v_max_allowed_points INTEGER;
+  v_flip_count INTEGER;
+  v_current_flipped_at TIMESTAMPTZ;
+  v_parent_hex TEXT;
+  v_idx INTEGER;
 BEGIN
-  -- Get user's team and buff multiplier
+  -- Get user's team
   SELECT team INTO v_team FROM users WHERE id = p_user_id;
-  SELECT COALESCE(buff_multiplier, 1) INTO v_multiplier 
-  FROM daily_buff_stats WHERE user_id = p_user_id AND date = CURRENT_DATE;
-  IF v_multiplier IS NULL THEN v_multiplier := 1; END IF;
   
-  -- Process each hex in the path (NO daily limit - all flips count)
-  FOREACH v_hex_id IN ARRAY p_hex_path LOOP
-    -- Check current hex color and timestamp
-    SELECT last_runner_team, last_flipped_at 
-    INTO v_current_team, v_current_flipped_at 
-    FROM hexes WHERE id = v_hex_id;
-    
-    -- Only update if this run ended LATER than the existing flip
-    IF v_current_flipped_at IS NULL OR p_end_time > v_current_flipped_at THEN
-      -- Count as flip if color changes (or hex is new/neutral)
-      IF v_current_team IS DISTINCT FROM v_team THEN
-        v_total_flips := v_total_flips + 1;
-      END IF;
-      
-      -- Update hex color with timestamp (conflict resolution: later run_endTime wins)
-      INSERT INTO hexes (id, last_runner_team, last_flipped_at)
-      VALUES (v_hex_id, v_team, p_end_time)
-      ON CONFLICT (id) DO UPDATE
-      SET last_runner_team = v_team,
-          last_flipped_at = p_end_time
-      WHERE hexes.last_flipped_at IS NULL OR hexes.last_flipped_at < p_end_time;
-    END IF;
-  END LOOP;
+  -- [SECURITY] Cap validation: client points cannot exceed hex_path_length × buff_multiplier
+  v_max_allowed_points := COALESCE(array_length(p_hex_path, 1), 0) * p_buff_multiplier;
+  v_points := LEAST(p_client_points, v_max_allowed_points);
+  v_flip_count := CASE WHEN p_buff_multiplier > 0 THEN v_points / p_buff_multiplier ELSE 0 END;
   
-  -- Calculate points with buff multiplier
-  v_points := v_total_flips * v_multiplier;
-  
-  -- [SECURITY] Server-side validation: points cannot exceed hex_count × multiplier
-  v_max_allowed_points := array_length(p_hex_path, 1) * v_multiplier;
-  IF p_client_points IS NOT NULL AND p_client_points > v_max_allowed_points THEN
-    RAISE WARNING 'Client claimed % points but max allowed is %', p_client_points, v_max_allowed_points;
+  IF p_client_points > v_max_allowed_points THEN
+    RAISE WARNING 'Client claimed % points but max allowed is %. Capped.', p_client_points, v_max_allowed_points;
   END IF;
   
-  -- Award points to user, update home hex, and update aggregates
+  -- Update live `hexes` table for buff/dominance calculations (NOT for flip points)
+  -- hex_snapshot is immutable until midnight build
+  IF p_hex_path IS NOT NULL AND array_length(p_hex_path, 1) > 0 THEN
+    v_idx := 1;
+    FOREACH v_hex_id IN ARRAY p_hex_path LOOP
+      -- Get parent hex from provided array or calculate
+      v_parent_hex := NULL;
+      IF p_hex_parents IS NOT NULL AND v_idx <= array_length(p_hex_parents, 1) THEN
+        v_parent_hex := p_hex_parents[v_idx];
+      END IF;
+      
+      SELECT last_flipped_at INTO v_current_flipped_at FROM public.hexes WHERE id = v_hex_id;
+      
+      IF v_current_flipped_at IS NULL OR p_end_time > v_current_flipped_at THEN
+        INSERT INTO public.hexes (id, last_runner_team, last_flipped_at, parent_hex)
+        VALUES (v_hex_id, v_team, p_end_time, v_parent_hex)
+        ON CONFLICT (id) DO UPDATE
+        SET last_runner_team = v_team,
+            last_flipped_at = p_end_time,
+            parent_hex = COALESCE(v_parent_hex, hexes.parent_hex)
+        WHERE hexes.last_flipped_at IS NULL OR hexes.last_flipped_at < p_end_time;
+      END IF;
+      v_idx := v_idx + 1;
+    END LOOP;
+  END IF;
+  
+  -- Award client-calculated points (cap-validated)
   UPDATE users SET 
     season_points = season_points + v_points,
     home_hex_start = CASE WHEN array_length(p_hex_path, 1) > 0 THEN p_hex_path[1] ELSE home_hex_start END,
@@ -1236,18 +1304,18 @@ BEGIN
   INSERT INTO run_history (
     user_id, run_date, start_time, end_time,
     distance_km, duration_seconds, avg_pace_min_per_km,
-    flip_count, points_earned, team_at_run, cv
+    flip_count, flip_points, team_at_run, cv
   ) VALUES (
-    p_user_id, p_end_time::DATE, p_start_time, p_end_time,
+    p_user_id, (p_end_time AT TIME ZONE 'Etc/GMT-2')::DATE, p_start_time, p_end_time,
     p_distance_km, p_duration_seconds,
     CASE WHEN p_distance_km > 0 THEN (p_duration_seconds / 60.0) / p_distance_km ELSE NULL END,
-    v_total_flips, v_points, v_team, p_cv
+    v_flip_count, v_points, v_team, p_cv
   );
   
   -- Return summary
   RETURN jsonb_build_object(
-    'flips', v_total_flips,
-    'multiplier', v_multiplier,
+    'flips', v_flip_count,
+    'multiplier', p_buff_multiplier,
     'points_earned', v_points,
     'server_validated', true
   );
@@ -1256,13 +1324,15 @@ $$ LANGUAGE plpgsql;
 ```
 
 **Design Principles:**
-- `hexes`: Only stores `last_runner_team`. No timestamps or runner IDs → privacy + cost.
+- `hex_snapshot`: Daily frozen hex state — basis for all flip point calculations. Immutable during the day.
+- `hexes`: Live hex state for buff/dominance calculations. Updated by `finalize_run()`. NOT used for flip counting.
 - `users`: Aggregate stats updated incrementally via `finalize_run()`.
-- `runs`: Heavy data with `hex_path` (H3 IDs) → **DELETED on season reset**.
+- `runs`: Heavy data with `hex_path` (H3 IDs) → **DELETED on season reset**. Used at midnight to build next snapshot.
 - `run_history`: Lightweight stats (distance, time, flips, cv) → **PRESERVED across seasons**.
 - `daily_buff_stats`: Team-based buff multipliers (District Leader, Province Range) calculated daily at midnight GMT+2.
+- **Snapshot-based flip counting**: Client counts flips against downloaded snapshot, server cap-validates only.
 - **No daily flip limit**: Same hex can be flipped multiple times per day.
-- **Multiplier**: Team-based buff via `calculate_daily_buffs()` Edge Function at midnight GMT+2.
+- **Multiplier**: Team-based buff via `calculate_daily_buffs()` at midnight GMT+2.
 - **Sync**: No real-time — all hex data uploaded via `finalize_run()` at run completion.
 - All security handled via RLS — **no separate backend API server needed**.
 
@@ -1330,31 +1400,39 @@ COMMIT;
 #### Data Flow Summary
 
 ```
+[Client Prefetch — App Launch / OnResume]
+  Download hex_snapshot WHERE snapshot_date = today (yesterday's midnight result)
+  Apply local overlay: user's own today's flips (from local SQLite)
+  Map shows: snapshot + own local flips (other users' today activity invisible)
+
 [During Run - Local Only]
-  Runner GPS → Client Kalman filter → Local hex_path list
-  Hex flip detected → Local calculation using cached buff multiplier
+  Runner GPS → Client validates → Local hex_path list
+  Flip counted against snapshot + local overlay (NOT live server state)
+  flip_points = total_flips × buff_multiplier (frozen at run start)
   NO server communication (battery + cost optimization)
-  NO daily flip limit (same hex can be flipped multiple times)
 
 [Run Completion - "The Final Sync"]
-  Client uploads: { startTime, endTime, distanceKm, hex_path[], cv }
+  Client uploads: { startTime, endTime, distanceKm, hex_path[], flip_points, buff_multiplier, cv }
   Server RPC: finalize_run() →
-    → Fetch buff_multiplier from daily_buff_stats
-    → Count flips (color changes from current hex state)
-    → Conflict resolution: later endTime wins hex color
-    → UPDATE hexes, users (including CV aggregate)
-    → INSERT INTO run_history (lightweight stats + cv, preserved)
+    → Cap validate: flip_points ≤ len(hex_path) × buff_multiplier
+    → Award capped points: season_points += flip_points
+    → Update live `hexes` table (for buff/dominance, NOT for flip counting)
+    → INSERT INTO run_history (lightweight stats, preserved)
+    → hex_snapshot NOT modified (immutable until midnight)
   
-[Daily Maintenance - Edge Function (midnight GMT+2)]
+[Daily Maintenance — pg_cron (midnight GMT+2)]
+  build_daily_hex_snapshot() →
+    → Start from yesterday's hex_snapshot
+    → Apply all today's runs (end_time within today GMT+2)
+    → Conflict: "last run end-time wins" hex color
+    → Write to hex_snapshot with snapshot_date = tomorrow
   calculate_daily_buffs() →
     → Calculate team-based buffs for all active users
-    → RED: Elite (Top 20%) + City Leader + All Range
-    → BLUE: City Leader + All Range
-    → PURPLE: City Participation Rate
+    → Uses live `hexes` table for dominance data
     → INSERT INTO daily_buff_stats
 
 [D-Day - Reset Path]
-  TRUNCATE hexes, daily_buff_stats (instant)
+  TRUNCATE hexes, hex_snapshot, daily_buff_stats (instant)
   UPDATE users (reset points/team/aggregates)
   DROP runs partitions (heavy data, instant disk reclaim)
   run_history PRESERVED (per-run stats)
@@ -1374,23 +1452,20 @@ COMMIT;
 > **Key Design**: Separate `runs` (heavy, deleted) from `run_history` (light, preserved).
 > Raw GPS coordinates are NOT stored. Only `hex_path` (H3 IDs) is in `runs`.
 
-**Batch Points Calculation Flow ("The Final Sync"):**
+**Snapshot-Based Points Flow ("The Final Sync"):**
 
 ```
-[Run Completion - Client uploads run_summary]
-  Server RPC: finalize_run(run_summary_jsonb)
-    → For each hex_id in hex_path:
-      → Check current hex color
-      → If color differs from runner's team → count as flip
-    → Conflict Resolution:
-      → UPDATE hexes SET last_runner_team = team
-        WHERE endTime > existing (later run wins)
-    → Calculate points: total_flips × buffMultiplier
-    → UPDATE users SET season_points += points
+[Run Completion - Client uploads run data]
+  Server RPC: finalize_run(hex_path[], flip_points, buff_multiplier, ...)
+    → Cap validate: flip_points ≤ len(hex_path) × buff_multiplier
+    → Award capped points: season_points += flip_points
+    → Update live hexes table (for buff/dominance only)
+    → hex_snapshot NOT modified (immutable until midnight)
     → INSERT INTO run_history (lightweight stats, preserved)
 ```
 
-> **Note**: No daily flip limit. Same hex can be flipped multiple times per day.
+> **Note**: Client counts flips against daily snapshot. Server does NOT re-count flips.
+> No daily flip limit. Same hex can be flipped multiple times per day.
 
 **Supabase Realtime Integration (Minimal Scope):**
 - **NO real-time features currently required** — all data synced on app launch and run completion
@@ -1551,9 +1626,7 @@ lib/
 │   ├── user_model.dart          # User data model (with CV aggregates)
 │   ├── hex_model.dart           # Hex tile (lastRunnerTeam only)
 │   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
-│   ├── run_session.dart         # Active run session data
-│   ├── run_summary.dart         # Completed run (with hexPath, cv) - seasonal
-│   ├── run_history_model.dart   # Lightweight run stats (preserved)
+│   ├── run.dart                 # Unified run model (active + completed + history)
 │   ├── lap_model.dart           # Per-km lap data for CV calculation
 │   ├── daily_running_stat.dart  # Daily stats (preserved)
 │   ├── location_point.dart      # GPS point (active run)
@@ -1569,7 +1642,7 @@ lib/
 │   ├── running_screen.dart      # Pre-run & active run (unified)
 │   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, avatar, stats
+│   └── profile_screen.dart      # Manifesto, sex, birthday, stats (no avatar)
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
 │   ├── remote_config_service.dart      # Server-configurable constants (fetch, cache, provide)
@@ -1601,7 +1674,7 @@ lib/
 │   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
 │   └── lru_cache.dart           # LRU cache for hex data
 └── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay
+    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer + boundary layers)
     ├── route_map.dart           # Running route display + navigation mode
     ├── smooth_camera_controller.dart  # 60fps camera interpolation
     ├── glowing_location_marker.dart   # Team-colored pulsing marker
@@ -1783,6 +1856,26 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 
 | Date | Change |
 |------|--------|
+| 2026-02-16 | **Province Boundary, Profile Redesign, Electric Manifesto**: |
+| | — Province boundary: merged outer polygon of ~7 district hexes (irregular shape, not a single hexagon) |
+| | — Added `_computeMergedOuterBoundary()` algorithm: directed edge collection → shared edge removal → polygon chaining |
+| | — District boundaries: individual dashed outlines in ALL scope view |
+| | — Profile screen redesign: added sex (♂/♀/⚥), birthday, nationality (flag emoji); removed avatar display |
+| | — Manifesto limit: 12 → 30 characters; server-persisted via Supabase |
+| | — Leaderboard electric manifesto: `ShaderMask` + animated `LinearGradient` (3s cycle, team-colored glow) |
+| | — Unified `Run` model (`run.dart`) replaces `RunSession`, `RunSummary`, `RunHistoryModel` |
+| | — Dummy test data: 4 days of realistic runs seeded (Feb 11-14), 49 red hexes |
+| | — Repository pattern: `UserRepository`, `HexRepository`, `LeaderboardRepository` as single source of truth |
+| | — SQLite v12: added `hex_path`, `buff_multiplier` to runs; added `run_checkpoint` table (crash recovery) |
+| | — Various bug fixes: season record stale pace, sex icon overflow, type safety (dynamic → UserModel) |
+| 2026-02-15 | **Snapshot-Based Flip Points System**: |
+| | — Replaced live-state flip counting with daily hex snapshot model |
+| | — New `hex_snapshot` table: frozen daily at midnight GMT+2 |
+| | — Client counts flips against snapshot, server cap-validates only |
+| | — `finalize_run` accepts client flip_points (no server-side recount) |
+| | — `build_daily_hex_snapshot()` cron job builds tomorrow's snapshot at midnight |
+| | — Map shows snapshot + user's own local flips (other users invisible until tomorrow) |
+| | — Cross-midnight runs: end_time determines which day's snapshot they affect |
 | 2026-01-27 | **Session 5 - GPS Polling Optimization**: |
 | | — Fixed 0.5Hz GPS polling (disabled adaptive polling for battery + lag prevention) |
 | | — Moving average window: 10s → 20s (~10 samples at 0.5Hz for stable pace calculation) |

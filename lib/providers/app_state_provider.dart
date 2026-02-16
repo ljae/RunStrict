@@ -1,14 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 import '../models/user_model.dart';
 import '../models/team.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 
-/// AppStateProvider - Thin wrapper around UserRepository for Provider pattern.
-///
-/// Delegates user state to UserRepository (single source of truth).
-/// Manages UI concerns: loading state, error handling, auth service integration.
 class AppStateProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
   final UserRepository _userRepository = UserRepository();
@@ -17,19 +12,22 @@ class AppStateProvider with ChangeNotifier {
   String? _error;
   bool _isInitialized = false;
 
-  /// Current user from UserRepository (single source of truth)
-  UserModel? get currentUser => _userRepository.currentUser;
+  String? _authUserId;
+  bool _hasProfile = false;
+  bool _hasTeamSelected = false;
 
+  UserModel? get currentUser => _userRepository.currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasUser => _userRepository.hasUser;
   bool get isInitialized => _isInitialized;
   Team? get userTeam => _userRepository.userTeam;
 
-  /// Whether current user is linked to Supabase auth
-  bool get isLinkedToAuth => _authService.isAuthenticated;
+  bool get isAuthenticated => _authUserId != null;
+  bool get hasProfile => _hasProfile;
+  bool get hasTeamSelected => _hasTeamSelected;
+  String? get authUserId => _authUserId;
 
-  // Territory balance
   double _redPercentage = 48.0;
   double _bluePercentage = 52.0;
 
@@ -37,7 +35,6 @@ class AppStateProvider with ChangeNotifier {
   double get bluePercentage => _bluePercentage;
 
   AppStateProvider() {
-    // Listen to UserRepository changes and forward notifications
     _userRepository.addListener(_onUserRepositoryChanged);
   }
 
@@ -51,7 +48,6 @@ class AppStateProvider with ChangeNotifier {
     super.dispose();
   }
 
-  /// Initialize app state - try to restore previous session
   Future<void> initialize() async {
     if (_isInitialized) return;
 
@@ -59,26 +55,26 @@ class AppStateProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // First try Supabase session (for linked accounts)
-      final authUser = await _authService.restoreSession();
+      final authUser = _authService.currentAuthUser;
       if (authUser != null) {
-        await _userRepository.setUser(authUser);
-        debugPrint(
-          'AppStateProvider: Auth session restored for ${authUser.name}',
-        );
-      } else {
-        // Fall back to local user (for unlinked accounts)
-        await _userRepository.loadFromDisk();
-        if (_userRepository.currentUser != null) {
-          debugPrint(
-            'AppStateProvider: Local user restored for ${_userRepository.currentUser!.name}',
-          );
+        _authUserId = authUser.id;
+        _hasProfile = await _authService.hasProfile(authUser.id);
+        if (_hasProfile) {
+          _hasTeamSelected = await _authService.hasTeamSelected(authUser.id);
+          final user = await _authService.fetchUserProfile(authUser.id);
+          if (user != null) {
+            await _userRepository.setUser(user);
+          }
         }
+        debugPrint(
+          'AppStateProvider: Session restored '
+          '(profile=$_hasProfile, team=$_hasTeamSelected)',
+        );
       }
       _error = null;
     } catch (e) {
       debugPrint('AppStateProvider: Failed to restore session - $e');
-      _error = null; // Don't show error for failed restore
+      _error = null;
     } finally {
       _isInitialized = true;
       _isLoading = false;
@@ -89,28 +85,31 @@ class AppStateProvider with ChangeNotifier {
   void setUser(UserModel user) {
     _userRepository.setUser(user);
     _error = null;
-    // notifyListeners() called via _onUserRepositoryChanged
   }
 
-  /// Sign up new user with email/password (for future use)
+  // ── Auth Methods ────────────────────────────────────────────
+
   Future<void> signUpWithEmail({
     required String email,
     required String password,
-    required String username,
-    required Team team,
   }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final user = await _authService.signUp(
+      _authUserId = await _authService.signUpWithEmail(
         email: email,
         password: password,
-        username: username,
-        team: team,
       );
-      await _userRepository.setUser(user);
+      _hasProfile = await _authService.hasProfile(_authUserId!);
+      if (_hasProfile) {
+        _hasTeamSelected = await _authService.hasTeamSelected(_authUserId!);
+        final user = await _authService.fetchUserProfile(_authUserId!);
+        if (user != null) {
+          await _userRepository.setUser(user);
+        }
+      }
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -122,7 +121,6 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
-  /// Sign in existing user with email/password (for future use)
   Future<void> signInWithEmail({
     required String email,
     required String password,
@@ -132,8 +130,18 @@ class AppStateProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _authService.signIn(email: email, password: password);
-      await _userRepository.setUser(user);
+      _authUserId = await _authService.signInWithEmail(
+        email: email,
+        password: password,
+      );
+      _hasProfile = await _authService.hasProfile(_authUserId!);
+      if (_hasProfile) {
+        _hasTeamSelected = await _authService.hasTeamSelected(_authUserId!);
+        final user = await _authService.fetchUserProfile(_authUserId!);
+        if (user != null) {
+          await _userRepository.setUser(user);
+        }
+      }
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -145,34 +153,25 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
-  /// Quick onboarding - creates local user (no auth required for MVP)
-  ///
-  /// User can optionally link email later to persist across devices.
-  Future<void> selectTeam(Team team, String username) async {
+  Future<void> signInWithApple() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      // Create local-only user for MVP (no Supabase auth required)
-      // User ID is a UUID that will be used if they later sign up
-      final localId = const Uuid().v4();
-      final user = UserModel(
-        id: localId,
-        name: username,
-        team: team,
-        seasonPoints: 0,
-      );
-
-      await _userRepository.setUser(user);
-      // Persist locally
-      await _userRepository.saveToDisk();
-
+      _authUserId = await _authService.signInWithApple();
+      _hasProfile = await _authService.hasProfile(_authUserId!);
+      if (_hasProfile) {
+        _hasTeamSelected = await _authService.hasTeamSelected(_authUserId!);
+        final user = await _authService.fetchUserProfile(_authUserId!);
+        if (user != null) {
+          await _userRepository.setUser(user);
+        }
+      }
       _error = null;
-      debugPrint('AppStateProvider: Local user created - $localId');
     } catch (e) {
       _error = e.toString();
-      debugPrint('AppStateProvider: Failed to create local user - $e');
+      debugPrint('AppStateProvider: Apple sign in failed - $e');
       rethrow;
     } finally {
       _isLoading = false;
@@ -180,15 +179,43 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
-  /// Link email/password to current local account (converts to permanent)
-  ///
-  /// This creates a Supabase auth account and syncs the user profile.
-  Future<void> linkEmailToAccount({
-    required String email,
-    required String password,
+  Future<void> signInWithGoogle() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _authUserId = await _authService.signInWithGoogle();
+      _hasProfile = await _authService.hasProfile(_authUserId!);
+      if (_hasProfile) {
+        _hasTeamSelected = await _authService.hasTeamSelected(_authUserId!);
+        final user = await _authService.fetchUserProfile(_authUserId!);
+        if (user != null) {
+          await _userRepository.setUser(user);
+        }
+      }
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('AppStateProvider: Google sign in failed - $e');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Profile & Team ──────────────────────────────────────────
+
+  Future<void> completeProfileRegistration({
+    required String username,
+    required String sex,
+    required DateTime birthday,
+    String? nationality,
+    String? manifesto,
   }) async {
-    if (_userRepository.currentUser == null) {
-      throw StateError('No user to link');
+    if (_authUserId == null) {
+      throw StateError('Must authenticate before creating profile');
     }
 
     _isLoading = true;
@@ -196,22 +223,51 @@ class AppStateProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _authService.signUp(
-        email: email,
-        password: password,
-        username: _userRepository.currentUser!.name,
-        team: _userRepository.currentUser!.team,
+      final user = await _authService.createUserProfile(
+        userId: _authUserId!,
+        username: username,
+        sex: sex,
+        birthday: birthday,
+        nationality: nationality,
+        manifesto: manifesto,
       );
-
-      // Update local user with server ID
-      await _userRepository.setUser(
-        user.copyWith(seasonPoints: _userRepository.seasonPoints),
-      );
+      await _userRepository.setUser(user);
+      await _userRepository.saveToDisk();
+      _hasProfile = true;
       _error = null;
-      debugPrint('AppStateProvider: Account linked - ${user.id}');
+      debugPrint('AppStateProvider: Profile created - $_authUserId');
     } catch (e) {
       _error = e.toString();
-      debugPrint('AppStateProvider: Failed to link account - $e');
+      debugPrint('AppStateProvider: Profile creation failed - $e');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectTeam(Team team) async {
+    if (_authUserId == null) {
+      throw StateError('Must authenticate before selecting team');
+    }
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _authService.updateTeam(_authUserId!, team);
+      final updatedUser = _userRepository.currentUser?.copyWith(team: team);
+      if (updatedUser != null) {
+        await _userRepository.setUser(updatedUser);
+        await _userRepository.saveToDisk();
+      }
+      _hasTeamSelected = true;
+      _error = null;
+      debugPrint('AppStateProvider: Team selected ${team.name} - $_authUserId');
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('AppStateProvider: Team selection failed - $e');
       rethrow;
     } finally {
       _isLoading = false;
@@ -225,23 +281,18 @@ class AppStateProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Update user's season points
   void updateSeasonPoints(int additionalPoints) {
     if (_userRepository.currentUser != null) {
       final newPoints = _userRepository.seasonPoints + additionalPoints;
       _userRepository.updateSeasonPoints(newPoints);
-      _userRepository.saveToDisk(); // Persist change
-      // notifyListeners() called via _onUserRepositoryChanged
+      _userRepository.saveToDisk();
     }
   }
 
-  /// Join Purple Team (The Traitor's Gate)
-  /// Points are PRESERVED on defection.
   void defectToPurple() {
     if (_userRepository.currentUser != null &&
         _userRepository.userTeam != Team.purple) {
       _userRepository.defectToPurple();
-      // notifyListeners() called via _onUserRepositoryChanged
     }
   }
 
@@ -255,26 +306,24 @@ class AppStateProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sign out current user
   Future<void> logout() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // Sign out from Supabase if linked
-      if (_authService.isAuthenticated) {
-        await _authService.signOut();
-      }
-
-      // Delete local user file
+      await _authService.signOut();
       await _userRepository.deleteFromDisk();
-
       _userRepository.clear();
+      _authUserId = null;
+      _hasProfile = false;
+      _hasTeamSelected = false;
       _error = null;
     } catch (e) {
       debugPrint('AppStateProvider: Sign out failed - $e');
-      // Still clear local state even if remote fails
       _userRepository.clear();
+      _authUserId = null;
+      _hasProfile = false;
+      _hasTeamSelected = false;
       _error = null;
     } finally {
       _isLoading = false;
@@ -282,7 +331,6 @@ class AppStateProvider with ChangeNotifier {
     }
   }
 
-  /// Refresh user profile from server
   Future<void> refreshUserProfile() async {
     if (_userRepository.currentUser == null) return;
 
@@ -292,14 +340,12 @@ class AppStateProvider with ChangeNotifier {
       );
       if (user != null) {
         await _userRepository.setUser(user);
-        // notifyListeners() called via _onUserRepositoryChanged
       }
     } catch (e) {
       debugPrint('AppStateProvider: Failed to refresh profile - $e');
     }
   }
 
-  /// Update user profile on server
   Future<void> saveUserProfile() async {
     if (_userRepository.currentUser == null) return;
 

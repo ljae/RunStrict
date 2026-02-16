@@ -24,6 +24,17 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(result as List);
   }
 
+  Future<List<Map<String, dynamic>>> getSeasonLeaderboard(
+    int seasonNumber, {
+    int limit = 200,
+  }) async {
+    final result = await client.rpc(
+      'get_season_leaderboard',
+      params: {'p_season_number': seasonNumber, 'p_limit': limit},
+    );
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
   Future<Map<String, dynamic>> finalizeRun(Run run) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) {
@@ -39,8 +50,10 @@ class SupabaseService {
         'p_distance_km': run.distanceKm,
         'p_duration_seconds': run.durationSeconds,
         'p_hex_path': run.hexPath,
+        'p_hex_parents': run.hexParents.isNotEmpty ? run.hexParents : null,
         'p_buff_multiplier': run.buffMultiplier,
         'p_cv': run.cv,
+        'p_client_points': run.flipPoints,
       },
     );
     return result as Map<String, dynamic>;
@@ -112,6 +125,23 @@ class SupabaseService {
         'p_since_time': sinceTime?.toUtc().toIso8601String(),
       },
     );
+    return List<Map<String, dynamic>>.from(result as List? ?? []);
+  }
+
+  /// Get hex snapshot for a given parent hex and date.
+  ///
+  /// Downloads the daily snapshot (frozen at midnight GMT+2).
+  /// Returns list of {hex_id, last_runner_team, last_run_end_time}.
+  Future<List<Map<String, dynamic>>> getHexSnapshot(
+    String parentHex, {
+    String? snapshotDate,
+  }) async {
+    final params = <String, dynamic>{'p_parent_hex': parentHex};
+    if (snapshotDate != null) {
+      params['p_snapshot_date'] = snapshotDate;
+    }
+
+    final result = await client.rpc('get_hex_snapshot', params: params);
     return List<Map<String, dynamic>>.from(result as List? ?? []);
   }
 }

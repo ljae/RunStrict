@@ -1,0 +1,63 @@
+class CountryUtils {
+  static const List<Map<String, String>> countries = [
+    {'code': 'KR', 'name': 'South Korea', 'flag': '🇰🇷'},
+    {'code': 'US', 'name': 'United States', 'flag': '🇺🇸'},
+    {'code': 'JP', 'name': 'Japan', 'flag': '🇯🇵'},
+    {'code': 'CN', 'name': 'China', 'flag': '🇨🇳'},
+    {'code': 'GB', 'name': 'United Kingdom', 'flag': '🇬🇧'},
+    {'code': 'DE', 'name': 'Germany', 'flag': '🇩🇪'},
+    {'code': 'FR', 'name': 'France', 'flag': '🇫🇷'},
+    {'code': 'IT', 'name': 'Italy', 'flag': '🇮🇹'},
+    {'code': 'ES', 'name': 'Spain', 'flag': '🇪🇸'},
+    {'code': 'CA', 'name': 'Canada', 'flag': '🇨🇦'},
+    {'code': 'AU', 'name': 'Australia', 'flag': '🇦🇺'},
+    {'code': 'BR', 'name': 'Brazil', 'flag': '🇧🇷'},
+    {'code': 'IN', 'name': 'India', 'flag': '🇮🇳'},
+    {'code': 'RU', 'name': 'Russia', 'flag': '🇷🇺'},
+    {'code': 'MX', 'name': 'Mexico', 'flag': '🇲🇽'},
+    {'code': 'ID', 'name': 'Indonesia', 'flag': '🇮🇩'},
+    {'code': 'TR', 'name': 'Turkey', 'flag': '🇹🇷'},
+    {'code': 'SA', 'name': 'Saudi Arabia', 'flag': '🇸🇦'},
+    {'code': 'CH', 'name': 'Switzerland', 'flag': '🇨🇭'},
+    {'code': 'SE', 'name': 'Sweden', 'flag': '🇸🇪'},
+    {'code': 'NL', 'name': 'Netherlands', 'flag': '🇳🇱'},
+    {'code': 'PL', 'name': 'Poland', 'flag': '🇵🇱'},
+    {'code': 'BE', 'name': 'Belgium', 'flag': '🇧🇪'},
+    {'code': 'AT', 'name': 'Austria', 'flag': '🇦🇹'},
+    {'code': 'NO', 'name': 'Norway', 'flag': '🇳🇴'},
+    {'code': 'DK', 'name': 'Denmark', 'flag': '🇩🇰'},
+    {'code': 'FI', 'name': 'Finland', 'flag': '🇫🇮'},
+    {'code': 'IE', 'name': 'Ireland', 'flag': '🇮🇪'},
+    {'code': 'NZ', 'name': 'New Zealand', 'flag': '🇳🇿'},
+    {'code': 'SG', 'name': 'Singapore', 'flag': '🇸🇬'},
+    {'code': 'MY', 'name': 'Malaysia', 'flag': '🇲🇾'},
+    {'code': 'TH', 'name': 'Thailand', 'flag': '🇹🇭'},
+    {'code': 'VN', 'name': 'Vietnam', 'flag': '🇻🇳'},
+    {'code': 'PH', 'name': 'Philippines', 'flag': '🇵🇭'},
+    {'code': 'ZA', 'name': 'South Africa', 'flag': '🇿🇦'},
+    {'code': 'EG', 'name': 'Egypt', 'flag': '🇪🇬'},
+    {'code': 'AR', 'name': 'Argentina', 'flag': '🇦🇷'},
+    {'code': 'CL', 'name': 'Chile', 'flag': '🇨🇱'},
+    {'code': 'CO', 'name': 'Colombia', 'flag': '🇨🇴'},
+    {'code': 'PE', 'name': 'Peru', 'flag': '🇵🇪'},
+    {'code': 'UA', 'name': 'Ukraine', 'flag': '🇺🇦'},
+    {'code': 'PT', 'name': 'Portugal', 'flag': '🇵🇹'},
+    {'code': 'GR', 'name': 'Greece', 'flag': '🇬🇷'},
+    {'code': 'CZ', 'name': 'Czech Republic', 'flag': '🇨🇿'},
+    {'code': 'HU', 'name': 'Hungary', 'flag': '🇭🇺'},
+    {'code': 'RO', 'name': 'Romania', 'flag': '🇷🇴'},
+    {'code': 'IL', 'name': 'Israel', 'flag': '🇮🇱'},
+    {'code': 'AE', 'name': 'UAE', 'flag': '🇦🇪'},
+    {'code': 'HK', 'name': 'Hong Kong', 'flag': '🇭🇰'},
+    {'code': 'TW', 'name': 'Taiwan', 'flag': '🇹🇼'},
+  ];
+
+  static String getFlag(String? code) {
+    if (code == null) return '🌍';
+    final country = countries.firstWhere(
+      (c) => c['code'] == code,
+      orElse: () => {'flag': '🌍'},
+    );
+    return country['flag']!;
+  }
+}

@@ -22,6 +22,7 @@ class Run {
   int hexesColored;
   final Team teamAtRun;
   final List<String> hexPath;
+  final List<String> hexParents;
   final int buffMultiplier;
   final double? cv; // Coefficient of Variation (null for runs < 1km)
   final String syncStatus; // 'pending', 'synced', 'failed'
@@ -43,6 +44,7 @@ class Run {
     required this.hexesColored,
     required this.teamAtRun,
     List<String>? hexPath,
+    List<String>? hexParents,
     this.buffMultiplier = 1,
     this.cv,
     this.syncStatus = 'pending',
@@ -53,6 +55,7 @@ class Run {
     this.distanceInCurrentHex = 0,
     this.isActive = false,
   }) : hexPath = hexPath ?? const [],
+       hexParents = hexParents ?? const [],
        route = route ?? [],
        hexesPassed = hexesPassed ?? [];
 
@@ -126,7 +129,8 @@ class Run {
     'durationSeconds': durationSeconds,
     'hexesColored': hexesColored,
     'teamAtRun': teamAtRun.name,
-    'hex_path': hexPath.join(','), // Comma-separated for SQLite
+    'hex_path': hexPath.join(','),
+    'hex_parents': hexParents.join(','),
     'buff_multiplier': buffMultiplier,
     'cv': cv,
     'sync_status': syncStatus,
@@ -164,10 +168,14 @@ class Run {
       durationSeconds = 0;
     }
 
-    // Parse hex_path from comma-separated string (SQLite storage format)
     final hexPathStr = map['hex_path'] as String?;
     final hexPath = (hexPathStr != null && hexPathStr.isNotEmpty)
         ? hexPathStr.split(',')
+        : <String>[];
+
+    final hexParentsStr = map['hex_parents'] as String?;
+    final hexParents = (hexParentsStr != null && hexParentsStr.isNotEmpty)
+        ? hexParentsStr.split(',')
         : <String>[];
 
     return Run(
@@ -179,6 +187,7 @@ class Run {
       hexesColored: (map['hexesColored'] as num?)?.toInt() ?? 0,
       teamAtRun: Team.values.byName(map['teamAtRun'] as String),
       hexPath: hexPath,
+      hexParents: hexParents,
       buffMultiplier:
           (map['buff_multiplier'] as num?)?.toInt() ??
           (map['buffMultiplier'] as num?)?.toInt() ??
@@ -202,6 +211,7 @@ class Run {
     'hexes_colored': hexesColored,
     'team_at_run': teamAtRun.name,
     'hex_path': hexPath,
+    'hex_parents': hexParents,
     'buff_multiplier': buffMultiplier,
     'cv': cv,
   };
@@ -235,6 +245,7 @@ class Run {
       hexesColored: (row['hexes_colored'] as num?)?.toInt() ?? 0,
       teamAtRun: team,
       hexPath: List<String>.from(row['hex_path'] as List? ?? []),
+      hexParents: List<String>.from(row['hex_parents'] as List? ?? []),
       buffMultiplier: (row['buff_multiplier'] as num?)?.toInt() ?? 1,
       cv: (row['cv'] as num?)?.toDouble(),
     );
@@ -251,6 +262,7 @@ class Run {
     int? hexesColored,
     Team? teamAtRun,
     List<String>? hexPath,
+    List<String>? hexParents,
     int? buffMultiplier,
     Object? cv = const _Unspecified(),
     String? syncStatus,
@@ -270,6 +282,7 @@ class Run {
       hexesColored: hexesColored ?? this.hexesColored,
       teamAtRun: teamAtRun ?? this.teamAtRun,
       hexPath: hexPath ?? this.hexPath,
+      hexParents: hexParents ?? this.hexParents,
       buffMultiplier: buffMultiplier ?? this.buffMultiplier,
       cv: cv is _Unspecified ? this.cv : cv as double?,
       syncStatus: syncStatus ?? this.syncStatus,

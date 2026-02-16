@@ -321,10 +321,10 @@ class _BuffBadge extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
-                Icons.bolt_rounded,
+                Icons.flash_on,
                 size: 14,
                 color: isBuffed
-                    ? accentColor
+                    ? Colors.amber
                     : AppTheme.textSecondary.withValues(alpha: 0.5),
               ),
               const SizedBox(width: 2),

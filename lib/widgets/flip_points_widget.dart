@@ -242,10 +242,26 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Hex icon instead of "FP" text
-          Icon(
-            Icons.hexagon_outlined,
-            size: widget.compact ? 14 : 16,
-            color: widget.accentColor.withValues(alpha: 0.8),
+          SizedBox(
+            width: widget.compact ? 14 : 16,
+            height: widget.compact ? 14 : 16,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Filled background (semi-transparent)
+                Icon(
+                  Icons.hexagon,
+                  size: widget.compact ? 14 : 16,
+                  color: widget.accentColor.withValues(alpha: 0.3),
+                ),
+                // Outline border (more opaque)
+                Icon(
+                  Icons.hexagon_outlined,
+                  size: widget.compact ? 14 : 16,
+                  color: widget.accentColor.withValues(alpha: 0.8),
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 4),
 

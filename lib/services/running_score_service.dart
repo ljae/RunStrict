@@ -226,13 +226,13 @@ class RunningScoreState {
   final double totalDistanceKm;
   final double currentPaceMinPerKm;
   final String? currentHexId;
-  final int flipCount;
+  final int flipPoints;
 
   RunningScoreState({
     this.totalDistanceKm = 0,
     this.currentPaceMinPerKm = 7.0,
     this.currentHexId,
-    this.flipCount = 0,
+    this.flipPoints = 0,
   });
 
   ImpactTier get currentTier => RunningScoreService.getTier(totalDistanceKm);
@@ -249,13 +249,13 @@ class RunningScoreState {
     double? totalDistanceKm,
     double? currentPaceMinPerKm,
     String? currentHexId,
-    int? flipCount,
+    int? flipPoints,
   }) {
     return RunningScoreState(
       totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
       currentPaceMinPerKm: currentPaceMinPerKm ?? this.currentPaceMinPerKm,
       currentHexId: currentHexId ?? this.currentHexId,
-      flipCount: flipCount ?? this.flipCount,
+      flipPoints: flipPoints ?? this.flipPoints,
     );
   }
 

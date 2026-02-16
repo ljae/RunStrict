@@ -6,6 +6,7 @@ import '../providers/app_state_provider.dart';
 import '../providers/team_stats_provider.dart';
 import '../config/h3_config.dart';
 import '../services/hex_service.dart';
+import '../services/season_service.dart';
 import '../theme/app_theme.dart';
 import 'traitor_gate_screen.dart';
 
@@ -30,7 +31,9 @@ class _TeamScreenState extends State<TeamScreen> {
     final userId = appState.currentUser?.id;
     final userTeam = appState.userTeam?.name;
     final homeHex =
-        appState.currentUser?.seasonHomeHex ?? appState.currentUser?.homeHex;
+        appState.currentUser?.seasonHomeHex ??
+        appState.currentUser?.homeHex ??
+        appState.currentUser?.homeHexEnd;
     final cityHex = homeHex != null && homeHex.length >= 10
         ? homeHex.substring(0, 10)
         : null;
@@ -39,6 +42,7 @@ class _TeamScreenState extends State<TeamScreen> {
         userId,
         cityHex: cityHex,
         userTeam: userTeam,
+        userName: appState.currentUser?.name,
       );
       _syncTerritoryBalance(appState);
     }
@@ -161,6 +165,16 @@ class _TeamScreenState extends State<TeamScreen> {
     );
   }
 
+  String _yesterdayLabel() {
+    final season = SeasonService();
+    final remaining = season.daysRemaining;
+    final yesterdayDDay = remaining + 1;
+    if (remaining >= 0 && yesterdayDDay <= SeasonService.seasonDurationDays) {
+      return 'YESTERDAY · D-$yesterdayDDay';
+    }
+    return 'YESTERDAY';
+  }
+
   Widget _buildYesterdaySection() {
     final stats = _statsProvider.yesterdayStats;
     final hasData = stats?.hasData ?? false;
@@ -170,7 +184,7 @@ class _TeamScreenState extends State<TeamScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'YESTERDAY',
+            _yesterdayLabel(),
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -247,8 +261,8 @@ class _TeamScreenState extends State<TeamScreen> {
                         ),
                         Flexible(
                           child: _buildMiniStat(
-                            '${stats.flipCount ?? 0}',
-                            'flips',
+                            '${stats.flipPoints ?? 0}',
+                            'pts',
                           ),
                         ),
                         Flexible(
@@ -275,7 +289,9 @@ class _TeamScreenState extends State<TeamScreen> {
     final dominance = _statsProvider.dominance;
     final appState = context.read<AppStateProvider>();
     final homeHex =
-        appState.currentUser?.seasonHomeHex ?? appState.currentUser?.homeHex;
+        appState.currentUser?.seasonHomeHex ??
+        appState.currentUser?.homeHex ??
+        appState.currentUser?.homeHexEnd;
 
     // Use deterministic hex-based naming (consistent across all users/seasons)
     final territoryName = homeHex != null
@@ -550,42 +566,57 @@ class _TeamScreenState extends State<TeamScreen> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: userTeam?.color.withValues(alpha: 0.1),
+                    color:
+                        (_statsProvider.yesterdayStats?.hasData == true
+                                ? userTeam?.color
+                                : Colors.white)
+                            ?.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color:
-                          userTeam?.color.withValues(alpha: 0.2) ??
+                          (_statsProvider.yesterdayStats?.hasData == true
+                                  ? userTeam?.color
+                                  : Colors.white)
+                              ?.withValues(alpha: 0.2) ??
                           Colors.white12,
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Your rank: ',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      Text(
-                        '#${rankings.userRank}',
-                        style: GoogleFonts.sora(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: userTeam?.color ?? Colors.white,
-                        ),
-                      ),
-                      if (rankings.userIsElite && userTeam == Team.red)
-                        Text(
-                          ' in Elite',
+                  child: _statsProvider.yesterdayStats?.hasData == true
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Your rank: ',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            Text(
+                              '#${rankings.userRank}',
+                              style: GoogleFonts.sora(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: userTeam?.color ?? Colors.white,
+                              ),
+                            ),
+                            if (rankings.userIsElite && userTeam == Team.red)
+                              Text(
+                                ' in Elite',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                              ),
+                          ],
+                        )
+                      : Text(
+                          'No record yesterday',
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.5),
+                            color: Colors.white.withValues(alpha: 0.4),
                           ),
                         ),
-                    ],
-                  ),
                 ),
               ],
             ],
@@ -776,7 +807,7 @@ class _TeamScreenState extends State<TeamScreen> {
     // Calculate breakdown
     final baseMultiplier = userTeam == Team.red
         ? comparison.redBuff.activeMultiplier
-        : comparison.blueBuff.unionMultiplier;
+        : comparison.blueUnionMultiplier;
     final tierLabel = userTeam == Team.red
         ? (comparison.redBuff.isElite ? 'Elite' : 'Common')
         : 'Union';
@@ -941,14 +972,21 @@ class _TeamScreenState extends State<TeamScreen> {
       return const SizedBox.shrink();
     }
 
-    // Determine territory winners for badge display
-    final redProvince = dominance?.allRange.redHexCount ?? 0;
-    final blueProvince = dominance?.allRange.blueHexCount ?? 0;
-    final provinceWinner = redProvince > blueProvince ? Team.red : Team.blue;
+    // Determine territory winners from server dominance data (midnight snapshot).
+    // dominantTeam returns null on ties, so no team gets a false win badge.
+    final provinceDominant = dominance?.allRange.dominantTeam;
+    final provinceWinner = provinceDominant == 'red'
+        ? Team.red
+        : provinceDominant == 'blue'
+        ? Team.blue
+        : null;
 
-    final redDistrict = dominance?.cityRange?.redHexCount ?? 0;
-    final blueDistrict = dominance?.cityRange?.blueHexCount ?? 0;
-    final districtWinner = redDistrict > blueDistrict ? Team.red : Team.blue;
+    final districtDominant = dominance?.cityRange?.dominantTeam;
+    final districtWinner = districtDominant == 'red'
+        ? Team.red
+        : districtDominant == 'blue'
+        ? Team.blue
+        : null;
 
     // Left side team (user's team)
     final leftTeam = userTeam == Team.red ? Team.red : Team.blue;
@@ -1203,14 +1241,11 @@ class _TeamScreenState extends State<TeamScreen> {
     final teamColor = team.color;
     final teamName = team == Team.red ? 'FLAME' : 'WAVE';
 
-    // Get total with bonuses
+    // activeMultiplier and blueUnionMultiplier already include
+    // district/province bonuses — do NOT add them again.
     final totalMultiplier = team == Team.red
-        ? (comparison.redBuff.activeMultiplier +
-              (hasProvinceWin ? 1 : 0) +
-              (hasDistrictWin ? 1 : 0))
-        : (comparison.blueBuff.unionMultiplier +
-              (hasProvinceWin ? 1 : 0) +
-              (hasDistrictWin ? 1 : 0));
+        ? comparison.redBuff.activeMultiplier
+        : comparison.blueUnionMultiplier;
 
     return _buildCard(
       padding: const EdgeInsets.all(12),
@@ -1440,7 +1475,7 @@ class _TeamScreenState extends State<TeamScreen> {
     TeamBuffComparison comparison, {
     required bool isUserTeam,
   }) {
-    final blueBuff = comparison.blueBuff;
+    final blueMultiplier = comparison.blueUnionMultiplier;
 
     return _buildCard(
       child: Column(
@@ -1531,7 +1566,7 @@ class _TeamScreenState extends State<TeamScreen> {
                 const SizedBox(height: 12),
                 // Current multiplier - big display
                 Text(
-                  '${blueBuff.unionMultiplier}x',
+                  '${blueMultiplier}x',
                   style: GoogleFonts.sora(
                     fontSize: 36,
                     fontWeight: FontWeight.w700,

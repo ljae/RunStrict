@@ -1,6 +1,6 @@
-# Supabase Database Setup
+# Supabase Database
 
-This directory contains the SQL migrations for RunStrict's Supabase backend.
+RunStrict's Supabase backend. Schema is managed directly on the remote database.
 
 ## Prerequisites
 
@@ -8,178 +8,62 @@ This directory contains the SQL migrations for RunStrict's Supabase backend.
 2. Get your project URL and anon key from Settings > API
 3. Update `lib/config/supabase_config.dart` with your credentials
 
-## Migration Files
+## Current Schema
 
-| File | Description |
-|------|-------------|
-| `001_initial_schema.sql` | Tables, RLS policies, basic functions |
-| `002_rpc_functions.sql` | RPC functions (finalize_run, app_launch_sync, etc.) |
-| `003_cv_aggregates.sql` | CV tracking and user aggregate statistics |
-| `004_scoped_data_functions.sql` | Scoped hex/leaderboard data, home_hex migration |
-| `005_add_season_home_hex.sql` | Season home hex support |
-| `006_region_aware_multiplier.sql` | Region-aware buff multiplier |
-| `007_remove_total_runs_from_responses.sql` | Remove total_runs from get_leaderboard response |
+### Tables
 
-## Deployment Instructions
+| Table | Purpose |
+|-------|---------|
+| `users` | User profiles, season points, aggregates |
+| `hexes` | Live hex state (for buff/dominance calculations) |
+| `hex_snapshot` | Daily frozen hex state (for flip point calculation) |
+| `daily_buff_stats` | Per-district buff stats (calculated at midnight GMT+2) |
+| `daily_all_range_stats` | Province-wide hex dominance stats |
+| `run_history` | Lightweight run stats (preserved across seasons) |
+| `app_config` | Server-configurable game constants (single row) |
 
-### Option 1: Supabase Dashboard (Recommended for first setup)
+### RPC Functions
 
-1. Go to your Supabase project dashboard
-2. Navigate to **SQL Editor**
-3. Run migrations in order:
-   ```
-   1. Copy contents of migrations/001_initial_schema.sql → Run
-   2. Copy contents of migrations/002_rpc_functions.sql → Run
-   ```
+| Function | Purpose |
+|----------|---------|
+| `finalize_run` | The Final Sync — batch upload at run completion |
+| `app_launch_sync` | Fetch all initial state on app launch |
+| `get_leaderboard` | Season rankings |
+| `get_scoped_leaderboard` | Scoped rankings by geographic area |
+| `get_user_buff` | Current buff multiplier |
+| `get_hex_snapshot` | Download daily hex snapshot |
+| `get_hexes_delta` | Delta sync for hex updates |
+| `get_hexes_in_scope` | Hex data within geographic scope |
+| `get_hex_dominance` | Hex counts per team by scope |
+| `get_run_history` | User's run history |
+| `get_team_rankings` | Team ranking data |
+| `get_user_yesterday_stats` | Yesterday's personal performance |
+| `calculate_daily_buffs` | Midnight cron: calculate buff multipliers |
+| `build_daily_hex_snapshot` | Midnight cron: build next day's hex snapshot |
+| `reset_season` | D-Day reset (wipe season data) |
 
-### Option 2: Supabase CLI
+### Cron Jobs (pg_cron)
 
-```bash
-# Install Supabase CLI
-brew install supabase/tap/supabase
+| Schedule | Function |
+|----------|----------|
+| `0 22 * * *` (midnight GMT+2) | `calculate_daily_buffs()` |
+| `0 22 * * *` (midnight GMT+2) | `build_daily_hex_snapshot()` |
 
-# Login
-supabase login
+## Schema Changes
 
-# Link to your project
-supabase link --project-ref YOUR_PROJECT_REF
+Schema is defined in `DEVELOPMENT_SPEC.md` §4.2. To make changes:
 
-# Apply migrations
-supabase db push
-```
-
-## Verify Deployment
-
-After running migrations, verify functions exist:
-
-```sql
--- Check RPC functions are available
-SELECT routine_name, routine_type 
-FROM information_schema.routines 
-WHERE routine_schema = 'public' 
-  AND routine_type = 'FUNCTION'
-ORDER BY routine_name;
-```
-
-Expected functions:
-- `app_launch_sync`
-- `calculate_yesterday_checkins`
-- `finalize_run`
-- `get_user_buff`
-- `get_hexes_in_scope`
-- `get_leaderboard`
-- `get_run_history`
-- `get_scoped_leaderboard`
-- `has_flipped_today`
-- `increment_season_points`
-- `reset_season`
-- `set_home_hex`
-
-## RPC Function Signatures
-
-### `finalize_run` - The Final Sync
-
-Called at run completion to batch upload hex captures.
-
-```sql
-finalize_run(
-  p_user_id UUID,
-  p_start_time TIMESTAMPTZ,
-  p_end_time TIMESTAMPTZ,
-  p_distance_km DOUBLE PRECISION,
-  p_duration_seconds INTEGER,
-  p_hex_path TEXT[],
-  p_buff_multiplier INTEGER,
-  p_client_points INTEGER DEFAULT NULL  -- optional
-) RETURNS JSONB
-```
-
-**Returns:**
-```json
-{
-  "run_id": "uuid",
-  "flips": 5,
-  "multiplier": 3,
-  "points_earned": 15,
-  "server_validated": true
-}
-```
-
-### `app_launch_sync` - Pre-patch on Launch
-
-Called once on app launch to fetch all initial state.
-
-```sql
-app_launch_sync(
-  p_user_id UUID,
-  p_viewport_min_lng DOUBLE PRECISION DEFAULT NULL,
-  p_viewport_min_lat DOUBLE PRECISION DEFAULT NULL,
-  p_viewport_max_lng DOUBLE PRECISION DEFAULT NULL,
-  p_viewport_max_lat DOUBLE PRECISION DEFAULT NULL,
-  p_leaderboard_limit INTEGER DEFAULT 20
-) RETURNS JSONB
-```
-
-**Returns:**
-```json
-{
-  "user_stats": {...},
-  "buff_multiplier": 3,
-  "hex_map": [...],
-  "leaderboard": [...],
-  "server_time": "2024-01-27T12:00:00Z"
-}
-```
-
-### `get_leaderboard`
-
-```sql
-get_leaderboard(p_limit INTEGER DEFAULT 20)
-RETURNS TABLE(
-  id UUID,
-  name TEXT,
-  team TEXT,
-  avatar TEXT,
-  season_points INTEGER,
-  total_distance_km DOUBLE PRECISION,
-  avg_pace_min_per_km DOUBLE PRECISION,
-  avg_cv DOUBLE PRECISION,
-  rank INTEGER
-)
-```
-
-## Troubleshooting
-
-### Error: "Could not find the function public.X in the schema cache"
-
-This means the SQL function hasn't been deployed. Solutions:
-
-1. **Run the migration again** in SQL Editor
-2. **Check for syntax errors** in the SQL output
-3. **Verify function exists**:
-   ```sql
-   SELECT * FROM information_schema.routines 
-   WHERE routine_name = 'finalize_run';
-   ```
-
-### Error: "permission denied for function X"
-
-RLS or function security issue:
-
-1. Ensure functions have `SECURITY DEFINER`
-2. Check user is authenticated
-3. Verify RLS policies allow the operation
+1. Write and test SQL in the Supabase SQL Editor
+2. Update `DEVELOPMENT_SPEC.md` to reflect the new schema
 
 ## Season Reset
-
-To reset the season (D-Day), run:
 
 ```sql
 SELECT reset_season();
 ```
 
-**WARNING**: This will:
+This will:
 - TRUNCATE all hexes
 - Reset all user season_points to 0
 - Reset team assignments (users must re-select)
-- Preserve run_history (5-year retention)
+- Preserve run_history

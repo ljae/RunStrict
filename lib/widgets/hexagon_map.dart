@@ -46,6 +46,8 @@ class _HexagonMapState extends State<HexagonMap> {
   static const String _hexLayerId = 'hex-polygons-fill';
   static const String _boundarySourceId = 'scope-boundary-source';
   static const String _boundaryLayerId = 'scope-boundary-line';
+  static const String _districtBoundarySourceId = 'district-boundary-source';
+  static const String _districtBoundaryLayerId = 'district-boundary-line';
 
   MapboxMap? _mapboxMap;
   // PolygonAnnotationManager? _polygonManager; // Removed for GeoJSON migration
@@ -226,16 +228,33 @@ class _HexagonMapState extends State<HexagonMap> {
       ),
     );
 
-    // Add line layer for scope boundary with soft/blurred styling
-    // Wide line with low opacity creates a blur-like effect to indicate range
     await mapboxMap.style.addLayer(
       LineLayer(
         id: _boundaryLayerId,
         sourceId: _boundarySourceId,
         lineColor: Colors.white.toARGB32(),
-        lineWidth: 8.0, // Wide line for blur effect
-        lineOpacity: 0.15, // Low opacity for soft appearance
-        lineBlur: 4.0, // Blur the line edges
+        lineWidth: 8.0,
+        lineOpacity: 0.15,
+        lineBlur: 4.0,
+      ),
+    );
+
+    await mapboxMap.style.addSource(
+      GeoJsonSource(
+        id: _districtBoundarySourceId,
+        data: '{"type":"FeatureCollection","features":[]}',
+      ),
+    );
+
+    await mapboxMap.style.addLayer(
+      LineLayer(
+        id: _districtBoundaryLayerId,
+        sourceId: _districtBoundarySourceId,
+        lineColor: Colors.white.toARGB32(),
+        lineWidth: 3.0,
+        lineOpacity: 0.12,
+        lineBlur: 2.0,
+        lineDasharray: [4.0, 3.0],
       ),
     );
 
@@ -451,16 +470,20 @@ class _HexagonMapState extends State<HexagonMap> {
   }) async {
     if (_mapboxMap == null) return;
 
-    // Only show boundary for CITY and ALL scopes (not ZONE)
+    const emptyCollection = '{"type":"FeatureCollection","features":[]}';
+
     if (scope == GeographicScope.zone || parentHexId == null) {
-      // Clear boundary for ZONE view or when no parent hex
       if (_lastBoundaryScope != GeographicScope.zone) {
         try {
           final source = await _mapboxMap!.style.getSource(_boundarySourceId);
           if (source is GeoJsonSource) {
-            await source.updateGeoJSON(
-              '{"type":"FeatureCollection","features":[]}',
-            );
+            await source.updateGeoJSON(emptyCollection);
+          }
+          final districtSource = await _mapboxMap!.style.getSource(
+            _districtBoundarySourceId,
+          );
+          if (districtSource is GeoJsonSource) {
+            await districtSource.updateGeoJSON(emptyCollection);
           }
           _lastBoundaryScope = GeographicScope.zone;
         } catch (e) {
@@ -470,39 +493,183 @@ class _HexagonMapState extends State<HexagonMap> {
       return;
     }
 
-    // Always update boundary when we have valid parentHexId
     _lastBoundaryScope = scope;
 
     try {
-      // Get the H3 parent hex's geometric boundary
-      final boundary = HexService().getHexBoundary(parentHexId);
-      if (boundary.isEmpty) return;
+      final hexService = HexService();
 
-      // Build GeoJSON LineString from parent hex boundary (closed polygon)
-      final coordinates = boundary
-          .map((p) => [p.longitude, p.latitude])
-          .toList();
-      coordinates.add(coordinates.first); // Close the loop
+      // Determine boundary coordinates based on scope
+      List<List<double>> coordinates = [];
+      List<String> districtHexIds = [];
 
-      final geoJson = jsonEncode({
-        'type': 'FeatureCollection',
-        'features': [
-          {
+      if (scope == GeographicScope.all) {
+        // For ALL scope (Province), merge the 7 district hexes into one outer boundary
+        districtHexIds = hexService.getChildHexIds(
+          parentHexId,
+          H3Config.cityResolution,
+        );
+        coordinates = _computeMergedOuterBoundary(districtHexIds);
+      } else {
+        // For CITY scope, use the simple parent hex boundary
+        final boundary = hexService.getHexBoundary(parentHexId);
+        if (boundary.isNotEmpty) {
+          coordinates = boundary.map((p) => [p.longitude, p.latitude]).toList();
+          coordinates.add(coordinates.first);
+        }
+      }
+
+      if (coordinates.isNotEmpty) {
+        final geoJson = jsonEncode({
+          'type': 'FeatureCollection',
+          'features': [
+            {
+              'type': 'Feature',
+              'geometry': {'type': 'LineString', 'coordinates': coordinates},
+              'properties': {},
+            },
+          ],
+        });
+
+        final source = await _mapboxMap!.style.getSource(_boundarySourceId);
+        if (source is GeoJsonSource) {
+          await source.updateGeoJSON(geoJson);
+        }
+      }
+
+      if (scope == GeographicScope.all) {
+        // districtHexIds is already fetched above if scope is ALL
+        if (districtHexIds.isEmpty) {
+          // Fallback if not fetched (shouldn't happen with above logic, but safe)
+          districtHexIds = hexService.getChildHexIds(
+            parentHexId,
+            H3Config.cityResolution,
+          );
+        }
+
+        final districtFeatures = <Map<String, dynamic>>[];
+        for (final districtId in districtHexIds) {
+          final districtBoundary = hexService.getHexBoundary(districtId);
+          if (districtBoundary.isEmpty) continue;
+
+          final coords = districtBoundary
+              .map((p) => [p.longitude, p.latitude])
+              .toList();
+          coords.add(coords.first);
+
+          districtFeatures.add({
             'type': 'Feature',
-            'geometry': {'type': 'LineString', 'coordinates': coordinates},
+            'geometry': {'type': 'LineString', 'coordinates': coords},
             'properties': {},
-          },
-        ],
-      });
+          });
+        }
 
-      // Update the boundary source
-      final source = await _mapboxMap!.style.getSource(_boundarySourceId);
-      if (source is GeoJsonSource) {
-        await source.updateGeoJSON(geoJson);
+        final districtGeoJson = jsonEncode({
+          'type': 'FeatureCollection',
+          'features': districtFeatures,
+        });
+
+        final districtSource = await _mapboxMap!.style.getSource(
+          _districtBoundarySourceId,
+        );
+        if (districtSource is GeoJsonSource) {
+          await districtSource.updateGeoJSON(districtGeoJson);
+        }
+      } else {
+        final districtSource = await _mapboxMap!.style.getSource(
+          _districtBoundarySourceId,
+        );
+        if (districtSource is GeoJsonSource) {
+          await districtSource.updateGeoJSON(emptyCollection);
+        }
       }
     } catch (e) {
       debugPrint('Error updating scope boundary: $e');
     }
+  }
+
+  /// Computes the merged outer boundary of a set of hexes.
+  /// Used for the Province (ALL) scope to draw a precise outline of the 7 districts.
+  List<List<double>> _computeMergedOuterBoundary(List<String> hexIds) {
+    final hexService = HexService();
+    // Set of directed edges "u|v"
+    final Set<String> edges = {};
+    // Map to retrieve LatLng from string key
+    final Map<String, latlong.LatLng> keyToPoint = {};
+
+    // Helper to generate consistent key for a point (7 decimal places ~1cm precision)
+    String pointKey(latlong.LatLng p) =>
+        '${p.latitude.toStringAsFixed(7)},${p.longitude.toStringAsFixed(7)}';
+
+    for (final hexId in hexIds) {
+      final boundary = hexService.getHexBoundary(hexId);
+      if (boundary.isEmpty) continue;
+
+      for (int i = 0; i < boundary.length; i++) {
+        final p1 = boundary[i];
+        final p2 = boundary[(i + 1) % boundary.length];
+
+        final k1 = pointKey(p1);
+        final k2 = pointKey(p2);
+
+        keyToPoint[k1] = p1;
+        keyToPoint[k2] = p2;
+
+        final edgeKey = '$k1|$k2';
+        final reverseEdgeKey = '$k2|$k1';
+
+        if (edges.contains(reverseEdgeKey)) {
+          // Shared edge found - remove the reverse one to cancel it out
+          edges.remove(reverseEdgeKey);
+        } else {
+          // Add this directed edge
+          edges.add(edgeKey);
+        }
+      }
+    }
+
+    if (edges.isEmpty) return [];
+
+    // Build adjacency map for tracing: startKey -> endKey
+    final Map<String, String> nextMap = {};
+    for (final edge in edges) {
+      final parts = edge.split('|');
+      if (parts.length == 2) {
+        nextMap[parts[0]] = parts[1];
+      }
+    }
+
+    // Trace the polygon
+    final List<List<double>> polygon = [];
+
+    if (nextMap.isEmpty) return [];
+
+    // Start from any point
+    final startKey = nextMap.keys.first;
+    String currentKey = startKey;
+
+    // Safety counter to prevent infinite loops
+    int count = 0;
+    final maxPoints = edges.length + 1;
+
+    do {
+      final point = keyToPoint[currentKey];
+      if (point != null) {
+        polygon.add([point.longitude, point.latitude]);
+      }
+
+      final next = nextMap[currentKey];
+      if (next == null) break;
+
+      currentKey = next;
+      count++;
+    } while (currentKey != startKey && count <= maxPoints);
+
+    // Close the loop
+    if (polygon.isNotEmpty) {
+      polygon.add(polygon.first);
+    }
+
+    return polygon;
   }
 
   // Fixed resolution from remote config for consistent hex display across all scopes
@@ -784,7 +951,9 @@ class _HexagonMapState extends State<HexagonMap> {
     _labelManager = null;
     _polylineManager = null;
 
-    // Clean up GeoJSON source and layer (fire and forget - don't block dispose)
+    // Clean up GeoJSON source and layer (fire and forget - don't block dispose).
+    // PlatformException is expected here when the native map channel is already
+    // torn down before the microtask runs — safe to ignore.
     final mapboxMap = _mapboxMap;
     if (mapboxMap != null) {
       Future.microtask(() async {
@@ -793,8 +962,11 @@ class _HexagonMapState extends State<HexagonMap> {
           await mapboxMap.style.removeStyleSource(_hexSourceId);
           await mapboxMap.style.removeStyleLayer(_boundaryLayerId);
           await mapboxMap.style.removeStyleSource(_boundarySourceId);
-        } catch (e) {
-          debugPrint('Error cleaning up hex layer/source: $e');
+          await mapboxMap.style.removeStyleLayer(_districtBoundaryLayerId);
+          await mapboxMap.style.removeStyleSource(_districtBoundarySourceId);
+        } catch (_) {
+          // Expected during widget disposal — native map channel may already
+          // be closed. No action needed.
         }
       });
     }

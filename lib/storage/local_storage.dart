@@ -25,8 +25,7 @@ class LocalStorage implements StorageService {
   LocalStorage._internal();
 
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion =
-      13; // v13: distance_meters, drop redundant columns
+  static const int _databaseVersion = 14; // v14: add hex_parents column
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -67,6 +66,7 @@ class LocalStorage implements StorageService {
         hexesColored INTEGER NOT NULL DEFAULT 0,
         teamAtRun TEXT NOT NULL,
         hex_path TEXT DEFAULT '',
+        hex_parents TEXT DEFAULT '',
         buff_multiplier INTEGER DEFAULT 1,
         cv REAL,
         sync_status TEXT DEFAULT 'pending',
@@ -417,6 +417,15 @@ class LocalStorage implements StorageService {
         ''');
       } catch (e) {
         debugPrint('LocalStorage: v13 migration failed: $e');
+      }
+    }
+    if (oldVersion < 14) {
+      try {
+        await db.execute(
+          "ALTER TABLE $_tableRuns ADD COLUMN hex_parents TEXT DEFAULT ''",
+        );
+      } catch (e) {
+        debugPrint('LocalStorage: v14 migration skipped: $e');
       }
     }
   }
@@ -908,6 +917,28 @@ class LocalStorage implements StorageService {
     return (result.first['total'] as num?)?.toInt() ?? 0;
   }
 
+  /// Sum flip points from ALL runs that occurred today (GMT+2).
+  ///
+  /// Includes both synced and unsynced runs. Used for header display
+  /// to stay consistent with run history screen totals.
+  Future<int> sumAllTodayPoints() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final today = Gmt2DateUtils.todayGmt2String;
+    final result = await _database!.rawQuery(
+      '''
+      SELECT COALESCE(SUM(hexesColored * buff_multiplier), 0) as total
+      FROM $_tableRuns
+      WHERE run_date = ?
+    ''',
+      [today],
+    );
+
+    return (result.first['total'] as num?)?.toInt() ?? 0;
+  }
+
   /// Update sync status for a run after successful server sync.
   ///
   /// [runId] - The run ID to update
@@ -990,6 +1021,59 @@ class LocalStorage implements StorageService {
     );
   }
 
+  /// Delete all local-only runs that were never truly synced to the server.
+  ///
+  /// This catches two categories:
+  /// 1. `sync_status = 'pending'` — never attempted sync
+  /// 2. `sync_status = 'synced'` but `hex_path` is empty/null — marked synced
+  ///    by SyncRetryService without actual server upload (pre-v12 runs)
+  ///
+  /// Used for production readiness: ensures the app shows only
+  /// server-verified data. Also clears any active run checkpoint.
+  Future<int> deleteUnsyncedRuns() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    // Find runs that are either pending OR were falsely marked synced
+    // (empty hex_path = never actually uploaded to server)
+    final ghostIds = await _database!.query(
+      _tableRuns,
+      columns: ['id', 'sync_status', 'hex_path'],
+      where: "sync_status = 'pending' OR hex_path IS NULL OR hex_path = ''",
+    );
+
+    for (final row in ghostIds) {
+      final runId = row['id'] as String;
+      await _database!.delete(
+        _tableRoutes,
+        where: 'runId = ?',
+        whereArgs: [runId],
+      );
+      await _database!.delete(
+        _tableLaps,
+        where: 'runId = ?',
+        whereArgs: [runId],
+      );
+    }
+
+    // Delete the ghost runs themselves
+    final totalDeleted = await _database!.delete(
+      _tableRuns,
+      where: "sync_status = 'pending' OR hex_path IS NULL OR hex_path = ''",
+    );
+
+    // Clear any active checkpoint
+    await clearRunCheckpoint();
+
+    debugPrint(
+      'LocalStorage: Deleted $totalDeleted ghost runs '
+      '(pending + empty hex_path)',
+    );
+
+    return totalDeleted;
+  }
+
   /// Get aggregated stats for yesterday's runs (GMT+2 date).
   Future<Map<String, dynamic>?> getYesterdayRunStats() async {
     final db = _database;
@@ -1032,7 +1116,6 @@ class LocalStorage implements StorageService {
     return {
       'run_count': runCount,
       'distance_km': totalDistKm,
-      'flip_count': (row['total_flips'] as num?)?.toInt() ?? 0,
       'flip_points': (row['total_flip_points'] as num?)?.toInt() ?? 0,
       'avg_pace_min_per_km': avgPaceMinPerKm,
       'avg_cv': (row['avg_cv'] as num?)?.toDouble(),
@@ -1078,6 +1161,44 @@ class LocalStorage implements StorageService {
     ''');
 
     return (result.first['total'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Get today's flipped hex IDs and teams from local runs (for overlay).
+  ///
+  /// Extracts unique hex_id + team pairs from today's runs' hex_path.
+  /// Used to apply local overlay on top of the daily snapshot,
+  /// showing the user their own flips that aren't yet in the snapshot.
+  Future<List<Map<String, dynamic>>> getTodayFlippedHexes() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final today = Gmt2DateUtils.todayGmt2String;
+    final runs = await _database!.query(
+      _tableRuns,
+      columns: ['hex_path', 'teamAtRun'],
+      where: 'run_date = ? AND hex_path IS NOT NULL AND hex_path != ?',
+      whereArgs: [today, ''],
+    );
+
+    // Collect unique hex_id → team mappings (last run wins for same hex)
+    final hexTeamMap = <String, String>{};
+    for (final run in runs) {
+      final hexPathStr = run['hex_path'] as String?;
+      final teamName = run['teamAtRun'] as String?;
+      if (hexPathStr == null || hexPathStr.isEmpty || teamName == null)
+        continue;
+
+      for (final hexId in hexPathStr.split(',')) {
+        if (hexId.isNotEmpty) {
+          hexTeamMap[hexId] = teamName;
+        }
+      }
+    }
+
+    return hexTeamMap.entries
+        .map((e) => {'hex_id': e.key, 'team': e.value})
+        .toList();
   }
 
   /// Mark all runs from today as synced (after server confirms baseline).

@@ -422,6 +422,7 @@ class RunProvider with ChangeNotifier {
           cv: result.cv,
           durationSeconds: _duration.inSeconds,
           hexPath: capturedHexIds,
+          hexParents: result.capturedHexParents,
           buffMultiplier: effectiveMultiplier,
           runDate: Gmt2DateUtils.toGmt2DateString(DateTime.now()),
         );

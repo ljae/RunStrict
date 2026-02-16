@@ -70,6 +70,11 @@ dependencies:
   # Network connectivity check
   connectivity_plus: ^6.1.0
 
+  # Social auth
+  sign_in_with_apple: ^6.1.0
+  google_sign_in: ^6.2.0
+  crypto: ^3.0.6
+
   # Animations
   animated_text_kit: ^4.2.2
   shimmer: ^3.0.0

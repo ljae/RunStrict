@@ -7,6 +7,7 @@ import '../models/team.dart';
 import '../providers/leaderboard_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../services/season_service.dart';
+import 'profile_screen.dart';
 
 /// League scope for leaderboard rankings
 enum LeagueScope { myLeague, globalTop100 }
@@ -49,15 +50,29 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
     });
   }
 
+  bool get _isViewingCurrentSeason => _currentSeason == _totalSeasons;
+
   void _navigatePreviousSeason() {
     if (_currentSeason > 1) {
       setState(() => _currentSeason--);
+      _fetchForSeason();
     }
   }
 
   void _navigateNextSeason() {
     if (_currentSeason < _totalSeasons) {
       setState(() => _currentSeason++);
+      _fetchForSeason();
+    }
+  }
+
+  void _fetchForSeason() {
+    final provider = context.read<LeaderboardProvider>();
+    if (_isViewingCurrentSeason) {
+      provider.clearHistorical();
+      provider.fetchLeaderboard(forceRefresh: true);
+    } else {
+      provider.fetchSeasonLeaderboard(_currentSeason);
     }
   }
 
@@ -77,7 +92,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             team: e.team,
             flipPoints: e.seasonPoints,
             totalDistanceKm: e.totalDistanceKm,
-            avatar: e.avatar,
+            manifesto: e.manifesto,
             avgPaceMinPerKm: e.avgPaceMinPerKm,
             stabilityScore: e.stabilityScore,
           ),
@@ -125,7 +140,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           team: entry.team,
           flipPoints: entry.seasonPoints,
           totalDistanceKm: entry.totalDistanceKm,
-          avatar: entry.avatar,
+          manifesto: entry.manifesto,
           avgPaceMinPerKm: entry.avgPaceMinPerKm,
           stabilityScore: entry.stabilityScore,
         );
@@ -139,7 +154,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       team: currentUser.team,
       flipPoints: currentUser.seasonPoints,
       totalDistanceKm: currentUser.totalDistanceKm,
-      avatar: currentUser.avatar,
+      manifesto: currentUser.manifesto,
       avgPaceMinPerKm: currentUser.avgPaceMinPerKm,
       stabilityScore: currentUser.stabilityScore,
     );
@@ -227,7 +242,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 ],
               ),
 
-              if (!isUserVisible && currentUserData != null)
+              if (currentUserData != null)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -235,6 +250,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                   child: _buildMyRankFooter(
                     currentUserData,
                     _getCurrentUserRank(context, runners),
+                    showStats: !isUserVisible,
                   ),
                 ),
             ],
@@ -247,6 +263,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // ---------------------------------------------------------------------------
   // SEASON STATS & CONTROLS (Matching History Screen Design)
   // ---------------------------------------------------------------------------
+
+  String _seasonRecordLabel() {
+    final season = SeasonService();
+    final remaining = season.daysRemaining;
+    final yesterdayDDay = remaining + 1;
+    if (remaining >= 0 && yesterdayDDay <= SeasonService.seasonDurationDays) {
+      return 'SEASON RECORD  until D-$yesterdayDDay';
+    }
+    return 'SEASON RECORD';
+  }
 
   /// Season stats section - user's season record (matching ALL TIME design in history)
   Widget _buildSeasonStatsSection(BuildContext context) {
@@ -273,7 +299,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           children: [
             // Season label (matching ALL TIME style)
             Text(
-              'SEASON RECORD',
+              _seasonRecordLabel(),
               style: GoogleFonts.inter(
                 fontSize: 9,
                 fontWeight: FontWeight.w600,
@@ -626,14 +652,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
                   const SizedBox(height: 4),
 
-                  // Avatar
-                  Text(
-                    runner.avatar,
-                    style: TextStyle(fontSize: isFirst ? 48 : 36),
-                  ),
-
-                  const SizedBox(height: 4),
-
                   // Name
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -648,6 +666,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       ),
                     ),
                   ),
+
+                  // Manifesto
+                  if (runner.manifesto != null &&
+                      runner.manifesto!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _ElectricManifesto(
+                        manifesto: runner.manifesto!,
+                        teamColor: teamColor,
+                        fontSize: 10,
+                        isCentered: true,
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 4),
 
                   // Points
                   Text(
@@ -796,37 +831,33 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                     ),
                   ),
 
-                  // Avatar
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      runner.avatar,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                  ),
-
                   const SizedBox(width: 12),
 
-                  // Name
+                  // Name & Manifesto
                   Expanded(
-                    child: Text(
-                      runner.name,
-                      style: GoogleFonts.sora(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          runner.name,
+                          style: GoogleFonts.sora(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (runner.manifesto != null &&
+                            runner.manifesto!.isNotEmpty)
+                          _ElectricManifesto(
+                            manifesto: runner.manifesto!,
+                            teamColor: teamColor,
+                            fontSize: 11,
+                            isCentered: false,
+                          ),
+                      ],
                     ),
                   ),
 
@@ -909,7 +940,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   // STICKY FOOTER
   // ---------------------------------------------------------------------------
 
-  Widget _buildMyRankFooter(LeaderboardRunner user, int rank) {
+  Widget _buildMyRankFooter(
+    LeaderboardRunner user,
+    int rank, {
+    bool showStats = true,
+  }) {
     final teamColor = user.team.color;
 
     return ClipRRect(
@@ -927,39 +962,74 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             top: false,
             child: Row(
               children: [
-                Text(
-                  'YOUR RANK',
-                  style: GoogleFonts.bebasNeue(
-                    fontSize: 24,
-                    color: AppTheme.textSecondary,
-                    letterSpacing: 1.0,
+                // Profile button (always visible)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProfileScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: teamColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: teamColor.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.person_outline, color: teamColor, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          'PROFILE',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: teamColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  rank > 0 ? '#$rank' : '—',
-                  style: GoogleFonts.bebasNeue(
-                    fontSize: 24,
-                    color: Colors.white,
+                if (showStats) ...[
+                  Text(
+                    rank > 0 ? '#$rank' : '—',
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: 24,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 24),
-                Text(
-                  '${user.flipPoints}',
-                  style: GoogleFonts.sora(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: teamColor,
+                  const SizedBox(width: 24),
+                  Text(
+                    '${user.flipPoints}',
+                    style: GoogleFonts.sora(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: teamColor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'pts',
-                  style: GoogleFonts.sora(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
+                  const SizedBox(width: 4),
+                  Text(
+                    'pts',
+                    style: GoogleFonts.sora(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -993,6 +1063,89 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 }
 
 // ---------------------------------------------------------------------------
+// ELECTRIC MANIFESTO WIDGET
+// ---------------------------------------------------------------------------
+
+class _ElectricManifesto extends StatefulWidget {
+  final String manifesto;
+  final Color teamColor;
+  final double fontSize;
+  final bool isCentered;
+
+  const _ElectricManifesto({
+    required this.manifesto,
+    required this.teamColor,
+    this.fontSize = 10.0,
+    this.isCentered = false,
+  });
+
+  @override
+  State<_ElectricManifesto> createState() => _ElectricManifestoState();
+}
+
+class _ElectricManifestoState extends State<_ElectricManifesto>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (bounds) {
+            return LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [Colors.white54, widget.teamColor, Colors.white54],
+              stops: [
+                _controller.value - 0.3,
+                _controller.value,
+                _controller.value + 0.3,
+              ],
+              tileMode: TileMode.clamp,
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.srcIn,
+          child: Text(
+            widget.manifesto,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.sora(
+              fontSize: widget.fontSize,
+              fontStyle: FontStyle.italic,
+              color: Colors.white,
+              shadows: [
+                Shadow(
+                  color: widget.teamColor.withValues(alpha: 0.6),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            textAlign: widget.isCentered ? TextAlign.center : TextAlign.start,
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // DATA MODEL
 // ---------------------------------------------------------------------------
 
@@ -1002,7 +1155,7 @@ class LeaderboardRunner {
   final Team team;
   final int flipPoints;
   final double totalDistanceKm;
-  final String avatar;
+  final String? manifesto;
   final String? lastHexId;
   final String? zoneHexId;
   final String? cityHexId;
@@ -1019,7 +1172,7 @@ class LeaderboardRunner {
     required this.team,
     required this.flipPoints,
     required this.totalDistanceKm,
-    required this.avatar,
+    this.manifesto,
     this.lastHexId,
     this.zoneHexId,
     this.cityHexId,
