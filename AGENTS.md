@@ -122,6 +122,7 @@ lib/
 │   ├── running_score_service.dart # Pace validation for capture
 │   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
 │   ├── sync_retry_service.dart  # Retry failed Final Syncs (uses connectivity_plus)
+│   ├── ad_service.dart          # Google AdMob initialization & ad unit IDs
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite v12 (runs, routes, run_checkpoint)
@@ -355,6 +356,9 @@ Use `AppTheme.teamColor(isRed)` for team-aware coloring.
 // Calculated daily at midnight GMT+2 via Edge Function
 //
 // RED FLAME:
+// Elite = Top 20% by yesterday's FLIP POINTS (points with multiplier, NOT raw flip count)
+//         among RED runners in the same District
+// Common = Bottom 80%
 // | Scenario              | Elite (Top 20%) | Common |
 // |-----------------------|-----------------|--------|
 // | Normal (no wins)      | 2x              | 1x     |
@@ -403,6 +407,32 @@ final points = flipsEarned * multiplier;
 // to prevent points from disappearing during the sync window.
 ```
 
+### Two Data Domains (Critical Architecture Rule)
+
+All app data belongs to exactly one of two domains. **Never mix them.**
+
+**Snapshot Domain** (Server → Local, read-only until next midnight):
+- Hex map base, leaderboard rankings + season record, team stats, buff, user aggregates (`UserModel`)
+- Downloaded on app launch/OnResume. NEVER changes from running.
+- Leaderboard: `get_leaderboard` RPC reads from `season_leaderboard_snapshot` (NOT live `users` table)
+- LeaderboardScreen Season Record uses snapshot `LeaderboardEntry`, NOT live `currentUser`
+- Used by: TeamScreen, LeaderboardScreen, ALL TIME stats (distance, pace, stability, run count)
+
+**Live Domain** (Local creation → Upload):
+- Header FlipPoints, run records, hex overlay (own runs only)
+- Created/updated by running. Uploaded via Final Sync.
+- Used by: FlipPointsWidget, RunHistoryScreen period stats (DAY/WEEK/MONTH/YEAR)
+
+**Only hybrid value**: `PointsService.totalSeasonPoints` = server `season_points` + local unsynced. Used for header AND ALL TIME points.
+
+| Screen | Domain | Rule |
+|--------|--------|------|
+| TeamScreen | Snapshot | Server RPCs only |
+| LeaderboardScreen | Snapshot | `season_leaderboard_snapshot` via RPC (NOT live `users` or `currentUser`) |
+| ALL TIME stats | Snapshot + hybrid points | `UserModel` + `totalSeasonPoints` |
+| Period stats | Live | Local SQLite runs |
+| Header FlipPoints | Live (hybrid) | `totalSeasonPoints` |
+
 ### OnResume Data Refresh
 When app returns to foreground, `AppLifecycleManager` triggers:
 - Hex map data refresh (PrefetchService)
@@ -411,7 +441,7 @@ When app returns to foreground, `AppLifecycleManager` triggers:
 - Buff multiplier refresh (BuffService)
 - Today's points baseline refresh (appLaunchSync + PointsService)
 
-Skipped during active runs. Throttled to max once per 30 seconds.
+Skipped during active runs (including stopRun via `_isStopping` flag). Throttled to max once per 30 seconds.
 
 ### Hex Data Architecture (Snapshot + Local Overlay)
 `HexRepository` is the **single source of truth** for hex data (no duplicate caches).
@@ -421,6 +451,7 @@ Skipped during active runs. Throttled to max once per 30 seconds.
 - **Local overlay**: User's own today's flips stored in SQLite, applied on top of snapshot
 - **Map display**: Snapshot + own local flips (other users' today activity invisible)
 - **Live `hexes` table**: Updated by `finalize_run()` for buff/dominance only, NOT for flip counting
+- **District scoping**: `users.district_hex` (Res 6 H3 parent) set by `finalize_run()`, used by `get_user_buff()` and `get_team_rankings()` for district-level filtering
 
 ### Hex Capture & Flip
 ```dart
@@ -592,6 +623,7 @@ void main() {
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |
 | `connectivity_plus` | Network connectivity check before sync |
+| `google_mobile_ads` | Google AdMob banner ads |
 
 ---
 
@@ -661,14 +693,14 @@ await mapboxMap.style.setStyleLayerProperty(
 Two additional GeoJSON sources render geographic scope boundaries:
 
 **Province Boundary** (`scope-boundary-source` / `scope-boundary-line`):
-- **ALL scope**: Merged outer boundary of all ~7 district (Res 6) hexes — irregular polygon (NOT a single hexagon)
-- **CITY scope**: Single district hex boundary
+- **PROVINCE scope**: Merged outer boundary of all ~7 district (Res 6) hexes — irregular polygon (NOT a single hexagon)
+- **DISTRICT scope**: Single district hex boundary
 - **ZONE scope**: Hidden
 - Styling: white, 8px width, 15% opacity, 4px blur, solid
 
 **District Boundaries** (`district-boundary-source` / `district-boundary-line`):
-- **ALL scope**: Individual dashed outlines for each ~7 district hex
-- **CITY/ZONE scope**: Hidden
+- **PROVINCE scope**: Individual dashed outlines for each ~7 district hex
+- **DISTRICT/ZONE scope**: Hidden
 - Styling: white, 3px width, 12% opacity, 2px blur, dashed [4,3]
 
 **Merged Outer Boundary Algorithm** (`_computeMergedOuterBoundary`):
@@ -893,6 +925,27 @@ HexRepository().applyLocalOverlay(localFlips);
 // Map shows: snapshot + own local flips
 // Other users' today activity is invisible until tomorrow's snapshot
 ```
+
+### UI Conventions
+
+**Geographic Scope Categories** (zone/district/province):
+
+| Scope | Enum Value | H3 Resolution | Description |
+|-------|------------|---------------|-------------|
+| ZONE | `zone` | 8 | Neighborhood (~461m) |
+| DISTRICT | `district` | 6 | District (~3.2km) |
+| PROVINCE | `province` | 4 | Metro/Regional (server-wide) |
+
+**Stat Panel Display Order** (consistent across all screens):
+1. Points (primary) → 2. Distance → 3. Pace → 4. Rank/Stability
+
+**Pace Format**: Unified `X'XX` (e.g., `5'30`). No trailing `"`.
+
+**FlipPoints Header**: Shows season total points (not today's). Uses `FittedBox` for overflow prevention.
+
+**Google AdMob**: BannerAd on MapScreen (all scope views, portrait + landscape). `AdService` singleton manages SDK initialization.
+
+**Landscape Layout**: MapScreen shows ad + zoom selector in column. LeaderboardScreen uses single `CustomScrollView` for full scrollability.
 
 ### Database Version
 

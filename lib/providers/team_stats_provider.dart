@@ -3,6 +3,7 @@ import '../models/team_stats.dart';
 import '../services/buff_service.dart';
 import '../services/hex_service.dart';
 import '../services/supabase_service.dart';
+import '../utils/gmt2_date_utils.dart';
 
 export '../models/team_stats.dart';
 
@@ -42,8 +43,13 @@ class TeamStatsProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Compute yesterday in server timezone (GMT+2) to avoid local/server mismatch
+      final serverYesterday = Gmt2DateUtils.todayGmt2.subtract(const Duration(days: 1));
+      final yesterdayStr =
+          '${serverYesterday.year}-${serverYesterday.month.toString().padLeft(2, '0')}-${serverYesterday.day.toString().padLeft(2, '0')}';
+
       final results = await Future.wait([
-        _supabase.getUserYesterdayStats(userId),
+        _supabase.getUserYesterdayStats(userId, date: yesterdayStr),
         _supabase.getTeamRankings(userId, cityHex: cityHex),
         _supabase.getHexDominance(cityHex: cityHex),
       ]);
@@ -56,12 +62,11 @@ class TeamStatsProvider with ChangeNotifier {
       _rankings = TeamRankings.fromJson(rankingsData);
 
       final dominanceFromServer = HexDominance.fromJson(dominanceData);
-      if (cityHex != null && cityHex.length >= 10) {
+      if (cityHex != null && cityHex.isNotEmpty) {
         final hexService = HexService();
-        final parentHex = '${cityHex.substring(0, 10)}fffff';
         _dominance = dominanceFromServer.copyWith(
-          territoryName: hexService.getTerritoryName(parentHex),
-          districtNumber: hexService.getCityNumber(parentHex),
+          territoryName: hexService.getTerritoryName(cityHex),
+          districtNumber: hexService.getCityNumber(cityHex),
         );
       } else {
         _dominance = dominanceFromServer;
@@ -109,19 +114,30 @@ class TeamStatsProvider with ChangeNotifier {
     if (blueDistrictWin) blueUnionMultiplier += 1;
     if (blueProvinceWin) blueUnionMultiplier += 1;
 
+    // For the user's team, use server-authoritative multiplier (bd.multiplier)
+    // to avoid mismatch between YOUR BUFF and BUFF COMPARISON display.
+    // Locally-computed values are theoretical; server value is actual.
+    final serverMultiplier = bd.multiplier;
+
     _buffComparison = TeamBuffComparison(
       breakdown: bd,
       redBuff: RedTeamBuff(
-        eliteMultiplier: redEliteMultiplier,
-        commonMultiplier: redCommonMultiplier,
+        eliteMultiplier: userTeam == 'red' && userIsElite
+            ? serverMultiplier
+            : redEliteMultiplier,
+        commonMultiplier: userTeam == 'red' && !userIsElite
+            ? serverMultiplier
+            : redCommonMultiplier,
         isElite: userTeam == 'red' ? userIsElite : false,
         activeMultiplier: userTeam == 'red'
-            ? (userIsElite ? redEliteMultiplier : redCommonMultiplier)
+            ? serverMultiplier
             : redEliteMultiplier,
         redRunnerCountCity: _rankings!.redRunnerCountCity,
         eliteCutoffRank: _rankings!.eliteCutoffRank,
       ),
-      blueUnionMultiplier: blueUnionMultiplier,
+      blueUnionMultiplier: userTeam == 'blue'
+          ? serverMultiplier
+          : blueUnionMultiplier,
     );
 
     // For purple team, calculate participation stats

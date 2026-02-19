@@ -1,54 +1,50 @@
 -- ============================================================
--- RunStrict: Reset Simulation Data
+-- RunStrict: FULL Data Wipe + Reset
 -- ============================================================
--- Clears ALL season data to prepare for a fresh day-by-day simulation.
--- Preserves: real user accounts (non aaaaaaaa-* prefix)
---            real user run_history
---
--- Usage: Paste into Supabase SQL Editor and execute before starting simulation
--- https://supabase.com/dashboard/project/vhooaslzkmbnzmzwiium/sql
+-- Wipes ALL season data. Preserves real user accounts only.
+-- Usage: Paste into Supabase SQL Editor or run via psql
 -- ============================================================
 
-BEGIN;
+-- 1. Wipe ALL run history
+DELETE FROM public.run_history;
 
--- 1. Delete simulation user run_history
-DELETE FROM public.run_history
-WHERE user_id IN (SELECT id FROM public.users WHERE id::text LIKE 'aaaaaaaa-%');
+-- 2. Wipe ALL daily buff stats
+DELETE FROM public.daily_buff_stats;
 
--- 2. Delete simulation users
+-- 3. Wipe ALL daily range stats
+DELETE FROM public.daily_all_range_stats;
+
+-- 4. Wipe ALL hexes
+DELETE FROM public.hexes;
+
+-- 5. Wipe ALL hex snapshots
+DELETE FROM public.hex_snapshot;
+
+-- 6. Wipe ALL leaderboard snapshots
+DELETE FROM public.season_leaderboard_snapshot;
+
+-- 7. Delete simulation users
 DELETE FROM public.users WHERE id::text LIKE 'aaaaaaaa-%';
 
--- 2b. Delete simulation auth entries
+-- 8. Delete simulation auth entries
 DELETE FROM auth.users WHERE id::text LIKE 'aaaaaaaa-%';
 
--- 3. Wipe ALL hex colors (hexes are season-scoped, no ownership to preserve)
-TRUNCATE public.hexes;
-
--- 4. Clear daily flips
-TRUNCATE public.daily_flips;
-
--- 5. Clear active runs
-TRUNCATE public.active_runs;
-
--- 6. Reset real users' season data (if any exist) but keep their accounts
+-- 9. Reset real users' season data
 UPDATE public.users SET
   season_points = 0,
   total_distance_km = 0,
   avg_pace_min_per_km = NULL,
   avg_cv = NULL,
+  cv_run_count = 0,
   total_runs = 0,
   season_home_hex = NULL
 WHERE id::text NOT LIKE 'aaaaaaaa-%';
 
-COMMIT;
-
--- Verify cleanup
-SELECT 'Users remaining' as check_name, count(*) as count FROM public.users
-UNION ALL
-SELECT 'Sim users remaining', count(*) FROM public.users WHERE id::text LIKE 'aaaaaaaa-%'
-UNION ALL
-SELECT 'Hexes remaining', count(*) FROM public.hexes
-UNION ALL
-SELECT 'Run history (sim)', count(*) FROM public.run_history WHERE user_id IN (SELECT id FROM public.users WHERE id::text LIKE 'aaaaaaaa-%')
-UNION ALL
-SELECT 'Run history (real)', count(*) FROM public.run_history WHERE user_id NOT IN (SELECT id FROM public.users WHERE id::text LIKE 'aaaaaaaa-%');
+-- ===== VERIFY (all should be 0 except real users) =====
+SELECT 'Real users' as check_name, count(*) as count FROM public.users WHERE id::text NOT LIKE 'aaaaaaaa-%'
+UNION ALL SELECT 'Sim users', count(*) FROM public.users WHERE id::text LIKE 'aaaaaaaa-%'
+UNION ALL SELECT 'run_history', count(*) FROM public.run_history
+UNION ALL SELECT 'hexes', count(*) FROM public.hexes
+UNION ALL SELECT 'hex_snapshot', count(*) FROM public.hex_snapshot
+UNION ALL SELECT 'daily_buff_stats', count(*) FROM public.daily_buff_stats
+UNION ALL SELECT 'leaderboard_snapshot', count(*) FROM public.season_leaderboard_snapshot;

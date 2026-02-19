@@ -14,6 +14,8 @@ import '../services/buff_service.dart';
 import '../models/team.dart';
 import '../providers/hex_data_provider.dart';
 import '../services/hex_service.dart';
+import '../services/app_lifecycle_manager.dart';
+import '../services/voice_announcement_service.dart';
 import '../storage/local_storage.dart';
 import '../utils/gmt2_date_utils.dart';
 
@@ -47,6 +49,9 @@ class RunProvider with ChangeNotifier {
 
   /// Flag to show stop button immediately while GPS initializes
   bool _isStartingRun = false;
+
+  /// Flag to prevent app resume from racing with stopRun
+  bool _isStopping = false;
 
   /// Buff multiplier for runs (from BuffService)
 
@@ -83,10 +88,10 @@ class RunProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  /// Returns true if run is active OR if we're in the process of starting
-  /// This allows the UI to show stop button immediately while GPS initializes
+  /// Returns true if run is active, starting, or stopping (Final Sync in progress).
+  /// Prevents app resume from racing with stopRun and overwriting points.
   bool get isRunning =>
-      _isStartingRun || (_activeRun != null && _activeRun!.isActive);
+      _isStartingRun || _isStopping || (_activeRun != null && _activeRun!.isActive);
 
   // Timer state
   Timer? _tickTimer;
@@ -149,20 +154,20 @@ class RunProvider with ChangeNotifier {
   /// During active run: calculates from UI timer (_duration) and distance
   /// After run completion: uses the stored durationSeconds in Run model
   String get formattedPace {
-    if (_activeRun == null) return '-:--';
+    if (_activeRun == null) return "-'--";
 
     // Calculate pace from real-time data during active run
     final distanceKm = _activeRun!.distanceKm;
     final durationMinutes = _duration.inSeconds / 60.0;
 
-    if (distanceKm <= 0 || durationMinutes <= 0) return '-:--';
+    if (distanceKm <= 0 || durationMinutes <= 0) return "-'--";
 
     final pace = durationMinutes / distanceKm; // min/km
-    if (pace.isInfinite || pace.isNaN || pace > 99) return '-:--';
+    if (pace.isInfinite || pace.isNaN || pace > 99) return "-'--";
 
     final m = pace.floor();
     final s = ((pace - m) * 60).round();
-    return '$m:${s.toString().padLeft(2, '0')}';
+    return "$m'${s.toString().padLeft(2, '0')}";
   }
 
   /// Distance in km
@@ -277,6 +282,9 @@ class RunProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Initialize voice announcements
+      await VoiceAnnouncementService().initialize();
+
       // Freeze buff multiplier for this run
       _buffService.freezeForRun();
 
@@ -303,6 +311,9 @@ class RunProvider with ChangeNotifier {
                 localDb.saveRunCheckpoint(checkpoint);
               }
             : null,
+        onLapCompleted: (lapNumber, paceSecPerKm) {
+          VoiceAnnouncementService().announceKilometer(lapNumber, paceSecPerKm);
+        },
       );
 
       _runTracker.startNewRun(
@@ -315,6 +326,9 @@ class RunProvider with ChangeNotifier {
       _activeRun = _runTracker.currentRun;
       _isStartingRun = false; // No longer "starting", now actually running
       notifyListeners();
+
+      // Announce run start
+      VoiceAnnouncementService().announceRunStart();
 
       // Listen to location updates for UI sync
       _locationSubscription = _locationService.locationStream.listen((point) {
@@ -355,7 +369,12 @@ class RunProvider with ChangeNotifier {
       'pointsService=${_pointsService != null ? "OK" : "NULL"}',
     );
 
+    if (result == HexUpdateResult.sameTeam) {
+      VoiceAnnouncementService().announceFlipFailed();
+    }
+
     if (result == HexUpdateResult.flipped) {
+      VoiceAnnouncementService().announceFlip();
       final oldPoints = _pointsService?.todayFlipPoints ?? 0;
 
       // Use buff multiplier from BuffService (frozen at run start)
@@ -395,6 +414,7 @@ class RunProvider with ChangeNotifier {
   Future<List<String>> stopRun() async {
     if (!isRunning) return [];
 
+    _isStopping = true;
     _setLoading(true);
     _setError(null);
 
@@ -406,6 +426,9 @@ class RunProvider with ChangeNotifier {
       // Cancel location stream subscription
       await _locationSubscription?.cancel();
       _locationSubscription = null;
+
+      // Stop voice announcements
+      await VoiceAnnouncementService().dispose();
 
       // Read frozen multiplier BEFORE unfreezing (must match run's buff)
       final effectiveMultiplier = _buffService.getEffectiveMultiplier();
@@ -525,6 +548,9 @@ class RunProvider with ChangeNotifier {
         _routeVersion = 0;
         notifyListeners();
 
+        // Notify lifecycle manager that run completed (triggers deferred midnight refresh if needed)
+        await AppLifecycleManager().onRunCompleted();
+
         // Return captured hex IDs for caller reference
         return capturedHexIds;
       }
@@ -535,6 +561,10 @@ class RunProvider with ChangeNotifier {
       _activeRun = null;
       _routeVersion = 0;
       notifyListeners();
+
+      // Notify lifecycle manager that run completed (triggers deferred midnight refresh if needed)
+      await AppLifecycleManager().onRunCompleted();
+
       return [];
     } catch (e) {
       _setError('Failed to stop run: $e');
@@ -544,14 +574,22 @@ class RunProvider with ChangeNotifier {
       // This ensures the run history screen shows the latest data.
       await loadRunHistory();
       await loadTotalStats();
+      _isStopping = false;
       _setLoading(false);
     }
   }
 
-  /// Load run history from storage
+  /// Load run history from storage.
+  /// If local is empty and user is logged in, backfill from Supabase run_history.
   Future<void> loadRunHistory() async {
     try {
       _runHistory = await _storageService.getAllRuns();
+
+      // One-time backfill: if local is empty, pull from Supabase
+      if (_runHistory.isEmpty) {
+        await _backfillFromServer();
+      }
+
       debugPrint(
         'RunProvider.loadRunHistory: Loaded ${_runHistory.length} runs'
         '${_runHistory.isNotEmpty ? " (latest: ${_runHistory.first.id.substring(0, 8)}..., "
@@ -562,6 +600,45 @@ class RunProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('RunProvider.loadRunHistory FAILED: $e');
       _setError('Failed to load run history: $e');
+    }
+  }
+
+  /// Backfill local SQLite from Supabase run_history when local is empty.
+  Future<void> _backfillFromServer() async {
+    try {
+      final userId = _supabaseService.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final rows = await _supabaseService.fetchRunHistory(userId);
+      if (rows.isEmpty) return;
+
+      debugPrint('RunProvider._backfillFromServer: Found ${rows.length} runs on server, importing...');
+
+      for (final row in rows) {
+        final run = Run(
+          id: row['id'] as String,
+          startTime: DateTime.parse(row['start_time'] as String),
+          endTime: row['end_time'] != null
+              ? DateTime.parse(row['end_time'] as String)
+              : null,
+          distanceMeters: ((row['distance_km'] as num?)?.toDouble() ?? 0) * 1000,
+          durationSeconds: (row['duration_seconds'] as num?)?.toInt() ?? 0,
+          hexesColored: (row['flip_count'] as num?)?.toInt() ?? 0,
+          teamAtRun: Team.values.byName(row['team_at_run'] as String? ?? 'red'),
+          buffMultiplier: (row['buff_multiplier'] as num?)?.toInt() ?? 1,
+          cv: (row['cv'] as num?)?.toDouble(),
+          syncStatus: 'synced',
+          runDate: row['run_date']?.toString(),
+        );
+        await _storageService.saveRun(run);
+      }
+
+      // Reload from local after backfill
+      _runHistory = await _storageService.getAllRuns();
+      debugPrint('RunProvider._backfillFromServer: Imported ${rows.length} runs');
+    } catch (e) {
+      debugPrint('RunProvider._backfillFromServer FAILED: $e');
+      // Non-fatal — local history just stays empty
     }
   }
 

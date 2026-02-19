@@ -53,3 +53,4 @@ build_output*.txt
 # Sensitive files
 *.env
 .env.*
+.mcp.json

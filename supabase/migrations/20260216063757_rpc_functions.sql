@@ -216,22 +216,28 @@ $$;
 -- =============================================================================
 -- get_user_yesterday_stats: Yesterday's run stats for a user
 -- Called by: SupabaseService.getUserYesterdayStats()
+-- Accepts optional p_date (client-computed GMT+2 yesterday) for timezone safety.
+-- Falls back to server-computed yesterday if not provided.
 -- =============================================================================
-CREATE OR REPLACE FUNCTION public.get_user_yesterday_stats(p_user_id UUID)
+CREATE OR REPLACE FUNCTION public.get_user_yesterday_stats(
+  p_user_id UUID,
+  p_date DATE DEFAULT NULL
+)
 RETURNS jsonb
 LANGUAGE sql STABLE
 AS $$
   SELECT jsonb_build_object(
     'has_data', COUNT(*) > 0,
+    'date', COALESCE(p_date, (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE - INTERVAL '1 day')::TEXT,
     'run_count', COUNT(*),
-    'total_distance_km', COALESCE(SUM(distance_km), 0),
-    'total_duration_seconds', COALESCE(SUM(duration_seconds), 0),
-    'total_flip_points', COALESCE(SUM(flip_points), 0),
+    'distance_km', COALESCE(SUM(distance_km), 0),
+    'duration_seconds', COALESCE(SUM(duration_seconds), 0),
+    'flip_points', COALESCE(SUM(flip_points), 0),
     'avg_cv', AVG(cv)
   )
   FROM public.run_history
   WHERE user_id = p_user_id
-    AND run_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE - INTERVAL '1 day';
+    AND run_date = COALESCE(p_date, (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE - INTERVAL '1 day');
 $$;
 
 -- =============================================================================

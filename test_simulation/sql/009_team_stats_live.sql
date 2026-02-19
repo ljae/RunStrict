@@ -1,6 +1,8 @@
--- RunStrict: Team Stats RPC Functions (LIVE version)
--- Modified to work WITHOUT daily_buff_stats / daily_all_range_stats tables
--- All calculations done live from hexes + run_history tables
+-- RunStrict: Team Stats RPC Functions (Fixed)
+-- Fixes:
+-- 1. Timezone: CURRENT_DATE → (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE
+-- 2. get_team_rankings: adds red_runner_count_city + elite_cutoff_rank, drops broken LIKE filter
+-- 3. get_hex_dominance: snapshot-based (hex_snapshot + daily_buff_stats), not live hexes
 --
 -- Functions:
 -- - get_user_yesterday_stats(p_user_id UUID) - Yesterday's run stats
@@ -8,7 +10,7 @@
 -- - get_hex_dominance(p_city_hex TEXT) - Hex counts for ALL Range and City Range
 
 -- ============================================================
--- 1. GET_USER_YESTERDAY_STATS FUNCTION (unchanged)
+-- 1. GET_USER_YESTERDAY_STATS FUNCTION (timezone fix)
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.get_user_yesterday_stats(p_user_id UUID)
@@ -18,17 +20,17 @@ STABLE
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_yesterday DATE := CURRENT_DATE - INTERVAL '1 day';
+  v_yesterday DATE := (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE - INTERVAL '1 day';
   v_stats RECORD;
   v_cv DOUBLE PRECISION;
   v_stability_score INTEGER;
 BEGIN
-  SELECT 
+  SELECT
     COALESCE(SUM(rh.distance_km), 0) as total_distance_km,
-    CASE 
-      WHEN SUM(rh.distance_km) > 0 
+    CASE
+      WHEN SUM(rh.distance_km) > 0
       THEN SUM(rh.duration_seconds / 60.0) / SUM(rh.distance_km)
-      ELSE NULL 
+      ELSE NULL
     END as avg_pace_min_per_km,
     COALESCE(SUM(rh.flip_count), 0) as total_flips,
     COALESCE(SUM(rh.flip_points), 0) as total_points,
@@ -78,9 +80,8 @@ END;
 $$;
 
 -- ============================================================
--- 2. GET_TEAM_RANKINGS FUNCTION (MODIFIED - no daily_buff_stats)
+-- 2. GET_TEAM_RANKINGS FUNCTION (timezone fix + missing fields + no broken LIKE)
 -- ============================================================
--- Elite threshold calculated live: top 20% of red runners by yesterday's flip_points
 
 CREATE OR REPLACE FUNCTION public.get_team_rankings(
   p_user_id UUID,
@@ -94,7 +95,7 @@ AS $$
 DECLARE
   v_user RECORD;
   v_city_hex TEXT;
-  v_yesterday DATE := CURRENT_DATE - INTERVAL '1 day';
+  v_yesterday DATE := (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE - INTERVAL '1 day';
   v_elite_threshold INTEGER;
   v_user_yesterday_points INTEGER;
   v_user_is_elite BOOLEAN := FALSE;
@@ -125,14 +126,13 @@ BEGIN
   END IF;
 
   -- Calculate elite threshold LIVE from run_history
-  -- Count red runners who ran yesterday in the city
+  -- Count all red runners who ran yesterday (no city filter — H3 prefix matching is broken)
   SELECT COUNT(DISTINCT u.id)
   INTO v_red_runner_count
   FROM public.users u
   JOIN public.run_history rh ON rh.user_id = u.id
   WHERE u.team = 'red'
-    AND rh.run_date = v_yesterday
-    AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%');
+    AND rh.run_date = v_yesterday;
 
   -- Top 20% cutoff rank
   v_top20_cutoff := GREATEST(1, CEIL(v_red_runner_count * 0.2));
@@ -147,7 +147,6 @@ BEGIN
     JOIN public.run_history rh ON rh.user_id = u.id
     WHERE u.team = 'red'
       AND rh.run_date = v_yesterday
-      AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
     GROUP BY u.id
     ORDER BY SUM(rh.flip_points) DESC
     LIMIT v_top20_cutoff
@@ -177,7 +176,7 @@ BEGIN
   ), '[]'::JSONB)
   INTO v_red_elite_top3
   FROM (
-    SELECT 
+    SELECT
       u.id as user_id,
       u.name,
       SUM(rh.flip_points) as yesterday_points,
@@ -186,7 +185,6 @@ BEGIN
     JOIN public.run_history rh ON rh.user_id = u.id
     WHERE u.team = 'red'
       AND rh.run_date = v_yesterday
-      AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
     GROUP BY u.id, u.name
     HAVING SUM(rh.flip_points) >= v_elite_threshold AND SUM(rh.flip_points) > 0 AND v_elite_threshold > 0
     ORDER BY SUM(rh.flip_points) DESC
@@ -204,7 +202,7 @@ BEGIN
   ), '[]'::JSONB)
   INTO v_red_common_top3
   FROM (
-    SELECT 
+    SELECT
       u.id as user_id,
       u.name,
       COALESCE(SUM(rh.flip_points), 0) as yesterday_points,
@@ -212,7 +210,6 @@ BEGIN
     FROM public.users u
     LEFT JOIN public.run_history rh ON rh.user_id = u.id AND rh.run_date = v_yesterday
     WHERE u.team = 'red'
-      AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
     GROUP BY u.id, u.name
     HAVING COALESCE(SUM(rh.flip_points), 0) < v_elite_threshold OR v_elite_threshold = 0
     ORDER BY COALESCE(SUM(rh.flip_points), 0) DESC
@@ -230,7 +227,7 @@ BEGIN
   ), '[]'::JSONB)
   INTO v_blue_union_top3
   FROM (
-    SELECT 
+    SELECT
       u.id as user_id,
       u.name,
       COALESCE(SUM(rh.flip_points), 0) as yesterday_points,
@@ -238,7 +235,6 @@ BEGIN
     FROM public.users u
     LEFT JOIN public.run_history rh ON rh.user_id = u.id AND rh.run_date = v_yesterday
     WHERE u.team = 'blue'
-      AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
     GROUP BY u.id, u.name
     ORDER BY COALESCE(SUM(rh.flip_points), 0) DESC
     LIMIT 3
@@ -249,14 +245,16 @@ BEGIN
     IF v_user_is_elite THEN
       SELECT COUNT(*) + 1
       INTO v_user_rank
-      FROM public.run_history rh
-      JOIN public.users u ON u.id = rh.user_id
-      WHERE u.team = 'red'
-        AND rh.run_date = v_yesterday
-        AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
-      GROUP BY u.id
-      HAVING SUM(rh.flip_points) > v_user_yesterday_points
-        AND SUM(rh.flip_points) >= v_elite_threshold;
+      FROM (
+        SELECT u.id
+        FROM public.run_history rh
+        JOIN public.users u ON u.id = rh.user_id
+        WHERE u.team = 'red'
+          AND rh.run_date = v_yesterday
+        GROUP BY u.id
+        HAVING SUM(rh.flip_points) > v_user_yesterday_points
+          AND SUM(rh.flip_points) >= v_elite_threshold
+      ) sub;
     ELSE
       SELECT COUNT(*) + 1
       INTO v_user_rank
@@ -268,7 +266,6 @@ BEGIN
         GROUP BY user_id
       ) rh ON rh.user_id = u.id
       WHERE u.team = 'red'
-        AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
         AND (COALESCE(rh.points, 0) < v_elite_threshold OR v_elite_threshold = 0)
         AND COALESCE(rh.points, 0) > v_user_yesterday_points;
     END IF;
@@ -283,7 +280,6 @@ BEGIN
       GROUP BY user_id
     ) rh ON rh.user_id = u.id
     WHERE u.team = 'blue'
-      AND (v_city_hex IS NULL OR u.home_hex_end LIKE v_city_hex || '%')
       AND COALESCE(rh.points, 0) > v_user_yesterday_points;
   ELSE
     v_user_rank := NULL;
@@ -298,15 +294,18 @@ BEGIN
     'city_hex', v_city_hex,
     'red_elite_top3', v_red_elite_top3,
     'red_common_top3', v_red_common_top3,
-    'blue_union_top3', v_blue_union_top3
+    'blue_union_top3', v_blue_union_top3,
+    'red_runner_count_city', v_red_runner_count,
+    'elite_cutoff_rank', v_top20_cutoff
   );
 END;
 $$;
 
 -- ============================================================
--- 3. GET_HEX_DOMINANCE FUNCTION (MODIFIED - always live)
+-- 3. GET_HEX_DOMINANCE FUNCTION (snapshot-based)
 -- ============================================================
--- Always calculates from hexes table directly (no dependency on daily tables)
+-- Province: from hex_snapshot (latest snapshot_date)
+-- District: from daily_buff_stats (latest stat_date)
 
 CREATE OR REPLACE FUNCTION public.get_hex_dominance(p_city_hex TEXT DEFAULT NULL)
 RETURNS JSONB
@@ -319,62 +318,84 @@ DECLARE
   v_all_blue INTEGER;
   v_all_purple INTEGER;
   v_all_total INTEGER;
-  v_all_dominant TEXT;
   v_city_red INTEGER;
   v_city_blue INTEGER;
   v_city_purple INTEGER;
   v_city_total INTEGER;
-  v_city_dominant TEXT;
+  v_latest_snapshot_date DATE;
+  v_latest_buff_date DATE;
 BEGIN
-  -- ALL Range: count all hexes by team
-  SELECT 
-    COALESCE(SUM(CASE WHEN h.last_runner_team = 'red' THEN 1 ELSE 0 END), 0),
-    COALESCE(SUM(CASE WHEN h.last_runner_team = 'blue' THEN 1 ELSE 0 END), 0),
-    COALESCE(SUM(CASE WHEN h.last_runner_team = 'purple' THEN 1 ELSE 0 END), 0)
-  INTO v_all_red, v_all_blue, v_all_purple
-  FROM public.hexes h
-  WHERE h.last_runner_team IS NOT NULL;
+  -- ALL Range: province-level from daily_all_range_stats (latest date)
+  SELECT stat_date INTO v_latest_snapshot_date
+  FROM public.daily_all_range_stats
+  ORDER BY stat_date DESC
+  LIMIT 1;
+
+  IF v_latest_snapshot_date IS NOT NULL THEN
+    SELECT
+      COALESCE(red_hex_count, 0),
+      COALESCE(blue_hex_count, 0),
+      COALESCE(purple_hex_count, 0)
+    INTO v_all_red, v_all_blue, v_all_purple
+    FROM public.daily_all_range_stats
+    WHERE stat_date = v_latest_snapshot_date;
+  ELSE
+    -- Fallback: count from hex_snapshot (latest snapshot_date)
+    SELECT MAX(snapshot_date) INTO v_latest_snapshot_date
+    FROM public.hex_snapshot;
+
+    IF v_latest_snapshot_date IS NOT NULL THEN
+      SELECT
+        COALESCE(SUM(CASE WHEN hs.last_runner_team = 'red' THEN 1 ELSE 0 END), 0),
+        COALESCE(SUM(CASE WHEN hs.last_runner_team = 'blue' THEN 1 ELSE 0 END), 0),
+        COALESCE(SUM(CASE WHEN hs.last_runner_team = 'purple' THEN 1 ELSE 0 END), 0)
+      INTO v_all_red, v_all_blue, v_all_purple
+      FROM public.hex_snapshot hs
+      WHERE hs.snapshot_date = v_latest_snapshot_date
+        AND hs.last_runner_team IS NOT NULL;
+    ELSE
+      v_all_red := 0;
+      v_all_blue := 0;
+      v_all_purple := 0;
+    END IF;
+  END IF;
 
   v_all_total := v_all_red + v_all_blue + v_all_purple;
 
-  v_all_dominant := CASE
-    WHEN v_all_red >= v_all_blue AND v_all_red >= v_all_purple THEN 'red'
-    WHEN v_all_blue >= v_all_red AND v_all_blue >= v_all_purple THEN 'blue'
-    ELSE 'purple'
-  END;
-
-  -- CITY Range: if city_hex provided, filter hexes by prefix
+  -- CITY Range: from daily_buff_stats (latest stat_date for this city_hex)
   IF p_city_hex IS NOT NULL THEN
-    SELECT 
-      COALESCE(SUM(CASE WHEN h.last_runner_team = 'red' THEN 1 ELSE 0 END), 0),
-      COALESCE(SUM(CASE WHEN h.last_runner_team = 'blue' THEN 1 ELSE 0 END), 0),
-      COALESCE(SUM(CASE WHEN h.last_runner_team = 'purple' THEN 1 ELSE 0 END), 0)
-    INTO v_city_red, v_city_blue, v_city_purple
-    FROM public.hexes h
-    WHERE h.last_runner_team IS NOT NULL
-      AND h.id LIKE p_city_hex || '%';
+    SELECT MAX(stat_date) INTO v_latest_buff_date
+    FROM public.daily_buff_stats
+    WHERE city_hex = p_city_hex;
+
+    IF v_latest_buff_date IS NOT NULL THEN
+      SELECT
+        COALESCE(red_hex_count, 0),
+        COALESCE(blue_hex_count, 0),
+        COALESCE(purple_hex_count, 0)
+      INTO v_city_red, v_city_blue, v_city_purple
+      FROM public.daily_buff_stats
+      WHERE city_hex = p_city_hex
+        AND stat_date = v_latest_buff_date;
+    ELSE
+      v_city_red := 0;
+      v_city_blue := 0;
+      v_city_purple := 0;
+    END IF;
 
     v_city_total := v_city_red + v_city_blue + v_city_purple;
-
-    v_city_dominant := CASE
-      WHEN v_city_red >= v_city_blue AND v_city_red >= v_city_purple THEN 'red'
-      WHEN v_city_blue >= v_city_red AND v_city_blue >= v_city_purple THEN 'blue'
-      ELSE 'purple'
-    END;
   END IF;
 
   RETURN jsonb_build_object(
     'all_range', jsonb_build_object(
-      'dominant_team', v_all_dominant,
       'red_hex_count', v_all_red,
       'blue_hex_count', v_all_blue,
       'purple_hex_count', v_all_purple,
       'total', v_all_total
     ),
-    'city_range', CASE 
+    'city_range', CASE
       WHEN p_city_hex IS NOT NULL THEN jsonb_build_object(
         'city_hex', p_city_hex,
-        'dominant_team', v_city_dominant,
         'red_hex_count', v_city_red,
         'blue_hex_count', v_city_blue,
         'purple_hex_count', v_city_purple,
@@ -390,10 +411,10 @@ $$;
 -- 4. ADD INDEXES FOR PERFORMANCE
 -- ============================================================
 
-CREATE INDEX IF NOT EXISTS idx_run_history_user_date 
+CREATE INDEX IF NOT EXISTS idx_run_history_user_date
 ON public.run_history(user_id, run_date);
 
-CREATE INDEX IF NOT EXISTS idx_users_team_home_hex 
+CREATE INDEX IF NOT EXISTS idx_users_team_home_hex
 ON public.users(team, home_hex_end);
 
 -- ============================================================

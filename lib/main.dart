@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +24,8 @@ import 'services/remote_config_service.dart';
 import 'services/prefetch_service.dart';
 import 'services/app_lifecycle_manager.dart';
 import 'services/buff_service.dart';
+import 'config/h3_config.dart';
+import 'services/ad_service.dart';
 import 'services/sync_retry_service.dart';
 import 'storage/local_storage.dart';
 
@@ -51,6 +54,9 @@ void main() async {
   if (deletedCount > 0) {
     debugPrint('main: Cleaned up $deletedCount unsynced local runs');
   }
+
+  // Initialize AdMob SDK
+  await AdService().initialize();
 
   // Set Mapbox access token
   MapboxOptions.setAccessToken(MapboxConfig.accessToken);
@@ -147,6 +153,7 @@ class _AppInitializerState extends State<_AppInitializer> {
       await Future.wait([
         _initializePrefetch(),
         _loadTodayFlipPoints(),
+        _retryFailedSyncs(),
       ]);
     } else if (mounted) {
       // No user — no prefetch needed, allow login screen to render
@@ -170,7 +177,16 @@ class _AppInitializerState extends State<_AppInitializer> {
 
     try {
       final supabase = SupabaseService();
-      final result = await supabase.appLaunchSync(appState.currentUser!.id);
+      final launchHomeHex = appState.currentUser?.seasonHomeHex ??
+          appState.currentUser?.homeHex ??
+          appState.currentUser?.homeHexEnd;
+      final launchCityHex = launchHomeHex != null && launchHomeHex.length >= 10
+          ? HexService().getParentHexId(launchHomeHex, H3Config.cityResolution)
+          : null;
+      final result = await supabase.appLaunchSync(
+        appState.currentUser!.id,
+        districtHex: launchCityHex,
+      );
 
       final userStats = result['user_stats'] as Map<String, dynamic>?;
       final seasonPoints = (userStats?['season_points'] as num?)?.toInt() ?? 0;
@@ -206,6 +222,22 @@ class _AppInitializerState extends State<_AppInitializer> {
       }
       // Still try to load local unsynced points even if server fails
       await pointsService.refreshLocalUnsyncedPoints();
+    }
+  }
+
+  /// Retry any runs that failed to sync on previous sessions.
+  /// Called on initial app launch (complements OnResume retry).
+  Future<void> _retryFailedSyncs() async {
+    if (!mounted) return;
+    final pointsService = context.read<PointsService>();
+    try {
+      final syncedPoints = await SyncRetryService().retryUnsyncedRuns();
+      if (syncedPoints > 0) {
+        pointsService.onRunSynced(syncedPoints);
+        debugPrint('AppInitializer: Retried syncs - $syncedPoints points synced');
+      }
+    } catch (e) {
+      debugPrint('AppInitializer: Retry failed syncs error - $e');
     }
   }
 
@@ -264,23 +296,39 @@ class _AppInitializerState extends State<_AppInitializer> {
     }
 
     // Refresh buff multiplier (may have changed at midnight)
-    await BuffService().refresh(userId);
+    final homeHex = appState.currentUser?.seasonHomeHex ??
+        appState.currentUser?.homeHex ??
+        appState.currentUser?.homeHexEnd;
+    final cityHex = homeHex != null && homeHex.length >= 10
+        ? HexService().getParentHexId(homeHex, H3Config.cityResolution)
+        : null;
+    await BuffService().refresh(userId, districtHex: cityHex);
 
     // Refresh season points from server + today's points from local
     try {
       final supabase = SupabaseService();
-      final result = await supabase.appLaunchSync(userId);
+      final result = await supabase.appLaunchSync(
+        userId,
+        districtHex: cityHex,
+      );
       final userStats = result['user_stats'] as Map<String, dynamic>?;
-      final seasonPoints =
+      final serverSeasonPoints =
           (userStats?['season_points'] as num?)?.toInt() ?? 0;
-      pointsService.setSeasonPoints(seasonPoints);
+      // Use max to prevent stale server data from overwriting locally-known
+      // higher values (e.g., after a just-completed run where finalize_run
+      // already incremented points but replication lag returns old value).
+      final safeSeasonPoints = math.max(
+        serverSeasonPoints,
+        pointsService.totalSeasonPoints,
+      );
+      pointsService.setSeasonPoints(safeSeasonPoints);
 
       if (userStats != null && appState.currentUser != null) {
         appState.setUser(
           UserModel.mergeWithServerStats(
             appState.currentUser!,
             userStats,
-            seasonPoints,
+            safeSeasonPoints,
           ),
         );
       }

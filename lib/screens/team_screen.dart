@@ -35,7 +35,7 @@ class _TeamScreenState extends State<TeamScreen> {
         appState.currentUser?.homeHex ??
         appState.currentUser?.homeHexEnd;
     final cityHex = homeHex != null && homeHex.length >= 10
-        ? homeHex.substring(0, 10)
+        ? HexService().getParentHexId(homeHex, H3Config.cityResolution)
         : null;
     if (userId != null) {
       await _statsProvider.loadTeamData(
@@ -166,13 +166,24 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   String _yesterdayLabel() {
+    // Show the actual server-timezone date being queried
+    final stats = _statsProvider.yesterdayStats;
+    final date = stats?.date;
+    final months = [
+      '', 'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+      'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+    ];
+    final dateStr = date != null
+        ? '${months[date.month]} ${date.day}'
+        : 'YESTERDAY';
+
     final season = SeasonService();
     final remaining = season.daysRemaining;
     final yesterdayDDay = remaining + 1;
     if (remaining >= 0 && yesterdayDDay <= SeasonService.seasonDurationDays) {
-      return 'YESTERDAY · D-$yesterdayDDay';
+      return '$dateStr · D-$yesterdayDDay';
     }
-    return 'YESTERDAY';
+    return dateStr;
   }
 
   Widget _buildYesterdaySection() {
@@ -220,7 +231,7 @@ class _TeamScreenState extends State<TeamScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          stats!.distanceKm?.toStringAsFixed(1) ?? '--',
+                          '${stats!.flipPoints ?? 0}',
                           style: GoogleFonts.sora(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -230,7 +241,7 @@ class _TeamScreenState extends State<TeamScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'km',
+                          'pts',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -255,14 +266,14 @@ class _TeamScreenState extends State<TeamScreen> {
                       children: [
                         Flexible(
                           child: _buildMiniStat(
-                            _formatPace(stats.avgPaceMinPerKm),
-                            '/km',
+                            stats.distanceKm?.toStringAsFixed(1) ?? '--',
+                            'km',
                           ),
                         ),
                         Flexible(
                           child: _buildMiniStat(
-                            '${stats.flipPoints ?? 0}',
-                            'pts',
+                            _formatPace(stats.avgPaceMinPerKm),
+                            '/km',
                           ),
                         ),
                         Flexible(
@@ -334,6 +345,7 @@ class _TeamScreenState extends State<TeamScreen> {
                 territoryName,
                 _formatHexCount(provinceHexCount),
                 dominance?.allRange,
+                totalHexCount: provinceHexCount,
                 isTerritory: true,
               ),
             ),
@@ -343,6 +355,7 @@ class _TeamScreenState extends State<TeamScreen> {
                 'District $districtNumber',
                 _formatHexCount(districtHexCount),
                 dominance?.cityRange,
+                totalHexCount: districtHexCount,
                 isTerritory: false,
               ),
             ),
@@ -395,12 +408,14 @@ class _TeamScreenState extends State<TeamScreen> {
     String title,
     String subtitle,
     HexDominanceScope? scope, {
+    required int totalHexCount,
     required bool isTerritory,
   }) {
-    final total = scope?.total ?? 0;
     final redCount = scope?.redHexCount ?? 0;
     final blueCount = scope?.blueHexCount ?? 0;
     final purpleCount = scope?.purpleHexCount ?? 0;
+    final claimed = redCount + blueCount + purpleCount;
+    final unclaimed = (totalHexCount - claimed).clamp(0, totalHexCount);
 
     return _buildCard(
       padding: const EdgeInsets.all(14),
@@ -426,35 +441,42 @@ class _TeamScreenState extends State<TeamScreen> {
             style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
           ),
           const SizedBox(height: 14),
-          if (total > 0) ...[
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: SizedBox(
-                height: 6,
-                child: Row(
-                  children: [
-                    if (redCount > 0)
-                      Expanded(
-                        flex: redCount,
-                        child: Container(color: AppTheme.athleticRed),
+          // Progress bar (always show — unclaimed fills the rest)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 6,
+              child: Row(
+                children: [
+                  if (redCount > 0)
+                    Expanded(
+                      flex: redCount,
+                      child: Container(color: AppTheme.athleticRed),
+                    ),
+                  if (blueCount > 0)
+                    Expanded(
+                      flex: blueCount,
+                      child: Container(color: AppTheme.electricBlue),
+                    ),
+                  if (purpleCount > 0)
+                    Expanded(
+                      flex: purpleCount,
+                      child: Container(color: AppTheme.chaosPurple),
+                    ),
+                  if (unclaimed > 0)
+                    Expanded(
+                      flex: unclaimed,
+                      child: Container(
+                        color: Colors.white.withValues(alpha: 0.08),
                       ),
-                    if (blueCount > 0)
-                      Expanded(
-                        flex: blueCount,
-                        child: Container(color: AppTheme.electricBlue),
-                      ),
-                    if (purpleCount > 0)
-                      Expanded(
-                        flex: purpleCount,
-                        child: Container(color: AppTheme.chaosPurple),
-                      ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 10),
-            // Team counts
+          ),
+          const SizedBox(height: 10),
+          // Team counts
+          if (claimed > 0)
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Row(
@@ -467,8 +489,8 @@ class _TeamScreenState extends State<TeamScreen> {
                   _buildTeamCount(purpleCount, AppTheme.chaosPurple),
                 ],
               ),
-            ),
-          ] else
+            )
+          else
             Center(
               child: Text(
                 'No data',
@@ -541,12 +563,6 @@ class _TeamScreenState extends State<TeamScreen> {
                   const SizedBox(height: 12),
                   _buildEliteCutlineInfo(rankings.eliteThreshold),
                 ],
-              ] else if (userTeam == Team.blue) ...[
-                _buildRankingGroup(
-                  'UNION',
-                  rankings?.blueUnionTop3 ?? [],
-                  AppTheme.electricBlue,
-                ),
               ] else ...[
                 Center(
                   child: Text(
@@ -581,7 +597,7 @@ class _TeamScreenState extends State<TeamScreen> {
                           Colors.white12,
                     ),
                   ),
-                  child: _statsProvider.yesterdayStats?.hasData == true
+                  child: rankings.userRank > 0
                       ? Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -737,171 +753,6 @@ class _TeamScreenState extends State<TeamScreen> {
             style: GoogleFonts.inter(
               fontSize: 10,
               color: Colors.white.withValues(alpha: 0.3),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBuffSection() {
-    final userTeam = context.read<AppStateProvider>().userTeam;
-    final comparison = _statsProvider.buffComparison;
-
-    if (comparison == null) {
-      return const SizedBox.shrink();
-    }
-
-    // Purple team gets special handling
-    if (userTeam == Team.purple) {
-      return _buildPurpleBuffSection();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // YOUR FINAL BUFF - prominent display
-        _buildUserFinalBuff(comparison, userTeam),
-        const SizedBox(height: 20),
-        Text(
-          'BUFF COMPARISON',
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Colors.white30,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Split screen: User's team on LEFT, opponent on RIGHT
-        // IntrinsicHeight ensures both panels have equal height
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // LEFT SIDE - User's team
-              Expanded(
-                child: userTeam == Team.red
-                    ? _buildRedTeamBuffPanel(comparison, isUserTeam: true)
-                    : _buildBlueTeamBuffPanel(comparison, isUserTeam: true),
-              ),
-              // Center divider with VS
-              _buildVsDivider(),
-              // RIGHT SIDE - Opponent team
-              Expanded(
-                child: userTeam == Team.red
-                    ? _buildBlueTeamBuffPanel(comparison, isUserTeam: false)
-                    : _buildRedTeamBuffPanel(comparison, isUserTeam: false),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// User's final buff - prominent display at top
-  Widget _buildUserFinalBuff(TeamBuffComparison comparison, Team? userTeam) {
-    final teamColor = userTeam?.color ?? Colors.white;
-
-    // Calculate breakdown
-    final baseMultiplier = userTeam == Team.red
-        ? comparison.redBuff.activeMultiplier
-        : comparison.blueUnionMultiplier;
-    final tierLabel = userTeam == Team.red
-        ? (comparison.redBuff.isElite ? 'Elite' : 'Common')
-        : 'Union';
-
-    return _buildCard(
-      child: Column(
-        children: [
-          Text(
-            'YOUR BUFF',
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Colors.white30,
-              letterSpacing: 1.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Big multiplier
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                '${comparison.userTotalMultiplier}',
-                style: GoogleFonts.sora(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w700,
-                  color: teamColor,
-                  height: 1.0,
-                ),
-              ),
-              Text(
-                'x',
-                style: GoogleFonts.sora(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w500,
-                  color: teamColor.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Breakdown pills
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            alignment: WrapAlignment.center,
-            children: [
-              _buildBreakdownPill(tierLabel, '${baseMultiplier}x', teamColor),
-              if (comparison.allRangeBonus > 0)
-                _buildBreakdownPill(
-                  'Prov. lead',
-                  '+${comparison.allRangeBonus}',
-                  const Color(0xFF22C55E),
-                ),
-              if (comparison.cityLeaderBonus > 0)
-                _buildBreakdownPill(
-                  'Dist. lead',
-                  '+${comparison.cityLeaderBonus}',
-                  const Color(0xFFF59E0B),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBreakdownPill(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              color: Colors.white.withValues(alpha: 0.5),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            value,
-            style: GoogleFonts.sora(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: color,
             ),
           ),
         ],
@@ -1139,220 +990,6 @@ class _TeamScreenState extends State<TeamScreen> {
             style: GoogleFonts.sora(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Buff comparison with territory indicators on winner's side
-  Widget _buildBuffComparisonWithTerritory() {
-    final userTeam = context.read<AppStateProvider>().userTeam;
-    final comparison = _statsProvider.buffComparison;
-    final dominance = _statsProvider.dominance;
-
-    if (comparison == null) {
-      return const SizedBox.shrink();
-    }
-
-    // Determine territory winners
-    final redProvince = dominance?.allRange.redHexCount ?? 0;
-    final blueProvince = dominance?.allRange.blueHexCount ?? 0;
-    final provinceWinner = redProvince > blueProvince ? Team.red : Team.blue;
-
-    final redDistrict = dominance?.cityRange?.redHexCount ?? 0;
-    final blueDistrict = dominance?.cityRange?.blueHexCount ?? 0;
-    final districtWinner = redDistrict > blueDistrict ? Team.red : Team.blue;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              'BUFF COMPARISON',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.white30,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const Spacer(),
-            _buildSnapshotBadge(),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // VS comparison with equal height
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // LEFT SIDE - User's team
-              Expanded(
-                child: _buildCompactBuffPanel(
-                  team: userTeam == Team.red ? Team.red : Team.blue,
-                  comparison: comparison,
-                  isUserTeam: true,
-                  hasProvinceWin:
-                      provinceWinner ==
-                      (userTeam == Team.red ? Team.red : Team.blue),
-                  hasDistrictWin:
-                      districtWinner ==
-                      (userTeam == Team.red ? Team.red : Team.blue),
-                  dominance: dominance,
-                ),
-              ),
-              // Center VS divider
-              _buildVsDivider(),
-              // RIGHT SIDE - Opponent team
-              Expanded(
-                child: _buildCompactBuffPanel(
-                  team: userTeam == Team.red ? Team.blue : Team.red,
-                  comparison: comparison,
-                  isUserTeam: false,
-                  hasProvinceWin:
-                      provinceWinner ==
-                      (userTeam == Team.red ? Team.blue : Team.red),
-                  hasDistrictWin:
-                      districtWinner ==
-                      (userTeam == Team.red ? Team.blue : Team.red),
-                  dominance: dominance,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Compact buff panel for VS comparison with territory badges
-  Widget _buildCompactBuffPanel({
-    required Team team,
-    required TeamBuffComparison comparison,
-    required bool isUserTeam,
-    required bool hasProvinceWin,
-    required bool hasDistrictWin,
-    HexDominance? dominance,
-  }) {
-    final teamColor = team.color;
-    final teamName = team == Team.red ? 'FLAME' : 'WAVE';
-
-    // activeMultiplier and blueUnionMultiplier already include
-    // district/province bonuses — do NOT add them again.
-    final totalMultiplier = team == Team.red
-        ? comparison.redBuff.activeMultiplier
-        : comparison.blueUnionMultiplier;
-
-    return _buildCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          // Team header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (isUserTeam)
-                Container(
-                  width: 6,
-                  height: 6,
-                  margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(
-                    color: teamColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              Text(
-                teamName,
-                style: GoogleFonts.bebasNeue(
-                  fontSize: 16,
-                  color: teamColor,
-                  letterSpacing: 2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Big multiplier
-          Text(
-            '${totalMultiplier}x',
-            style: GoogleFonts.sora(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: isUserTeam ? teamColor : teamColor.withValues(alpha: 0.6),
-              height: 1.0,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Territory badges (only show if winning)
-          if (hasProvinceWin || hasDistrictWin) ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              alignment: WrapAlignment.center,
-              children: [
-                if (hasProvinceWin)
-                  _buildTerritoryBadge(
-                    'Province',
-                    teamColor,
-                    dominance?.allRange,
-                    team,
-                  ),
-                if (hasDistrictWin)
-                  _buildTerritoryBadge(
-                    'District',
-                    teamColor,
-                    dominance?.cityRange,
-                    team,
-                  ),
-              ],
-            ),
-          ] else ...[
-            // Placeholder to maintain alignment
-            const SizedBox(height: 20),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Territory badge showing winning status
-  Widget _buildTerritoryBadge(
-    String label,
-    Color color,
-    HexDominanceScope? scope,
-    Team team,
-  ) {
-    final teamCount = team == Team.red
-        ? (scope?.redHexCount ?? 0)
-        : (scope?.blueHexCount ?? 0);
-    final total = scope?.total ?? 1;
-    final percent = ((teamCount / total) * 100).round();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.emoji_events_outlined,
-            size: 10,
-            color: color.withValues(alpha: 0.8),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '$label $percent%',
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
               color: color,
             ),
           ),
@@ -1793,7 +1430,7 @@ class _TeamScreenState extends State<TeamScreen> {
     final totalPurple = participation?.totalPurpleInCity ?? 0;
 
     // Calculate buff multiplier based on participation rate
-    // 0-33% = 1x, 34-66% = 2x, 67-100% = 3x
+    // 0-29% = 1x, 30-59% = 2x, 60-100% = 3x
     final buffMultiplier = _calculatePurpleBuff(percent);
 
     return Column(
@@ -2008,10 +1645,10 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   /// Calculate purple buff multiplier based on participation rate
-  /// 0-33% = 1x, 34-66% = 2x, 67-100% = 3x
+  /// 0-29% = 1x, 30-59% = 2x, 60-100% = 3x
   int _calculatePurpleBuff(int percent) {
-    if (percent >= 67) return 3;
-    if (percent >= 34) return 2;
+    if (percent >= 60) return 3;
+    if (percent >= 30) return 2;
     return 1;
   }
 
@@ -2031,21 +1668,21 @@ class _TeamScreenState extends State<TeamScreen> {
                 Row(
                   children: [
                     Expanded(
-                      flex: 34,
+                      flex: 30,
                       child: Container(
                         color: AppTheme.chaosPurple.withValues(alpha: 0.1),
                       ),
                     ),
                     Container(width: 1, color: Colors.white24),
                     Expanded(
-                      flex: 33,
+                      flex: 30,
                       child: Container(
                         color: AppTheme.chaosPurple.withValues(alpha: 0.15),
                       ),
                     ),
                     Container(width: 1, color: Colors.white24),
                     Expanded(
-                      flex: 33,
+                      flex: 40,
                       child: Container(
                         color: AppTheme.chaosPurple.withValues(alpha: 0.2),
                       ),
@@ -2075,16 +1712,16 @@ class _TeamScreenState extends State<TeamScreen> {
         Row(
           children: [
             Expanded(
-              flex: 34,
+              flex: 30,
               child: Center(
                 child: Text(
                   '1x',
                   style: GoogleFonts.sora(
                     fontSize: 10,
-                    fontWeight: percent < 34
+                    fontWeight: percent < 30
                         ? FontWeight.w700
                         : FontWeight.w500,
-                    color: percent < 34
+                    color: percent < 30
                         ? AppTheme.chaosPurple
                         : Colors.white.withValues(alpha: 0.3),
                   ),
@@ -2092,16 +1729,16 @@ class _TeamScreenState extends State<TeamScreen> {
               ),
             ),
             Expanded(
-              flex: 33,
+              flex: 30,
               child: Center(
                 child: Text(
                   '2x',
                   style: GoogleFonts.sora(
                     fontSize: 10,
-                    fontWeight: percent >= 34 && percent < 67
+                    fontWeight: percent >= 30 && percent < 60
                         ? FontWeight.w700
                         : FontWeight.w500,
-                    color: percent >= 34 && percent < 67
+                    color: percent >= 30 && percent < 60
                         ? AppTheme.chaosPurple
                         : Colors.white.withValues(alpha: 0.3),
                   ),
@@ -2109,16 +1746,16 @@ class _TeamScreenState extends State<TeamScreen> {
               ),
             ),
             Expanded(
-              flex: 33,
+              flex: 40,
               child: Center(
                 child: Text(
                   '3x',
                   style: GoogleFonts.sora(
                     fontSize: 10,
-                    fontWeight: percent >= 67
+                    fontWeight: percent >= 60
                         ? FontWeight.w700
                         : FontWeight.w500,
-                    color: percent >= 67
+                    color: percent >= 60
                         ? AppTheme.chaosPurple
                         : Colors.white.withValues(alpha: 0.3),
                   ),
@@ -2238,10 +1875,10 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   String _formatPace(double? pace) {
-    if (pace == null) return '--:--';
+    if (pace == null) return "-'--";
     final minutes = pace.floor();
     final seconds = ((pace - minutes) * 60).round();
-    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+    return "$minutes'${seconds.toString().padLeft(2, '0')}";
   }
 
   Color _getStabilityColor(int stability) {

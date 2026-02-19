@@ -1,77 +1,121 @@
 # RunStrict Test Simulation
 
-Generate random daily run data for 100 users to test the Flutter app.
+Generate day-by-day season data for 100 dummy runners to test the Flutter app.
 
-## Quick Start (Full Season Reset)
+## Setup
 
 ```bash
 cd test_simulation
-
-# Generate full 40-day season (D-40 to D-1) with data reset
-python3 daily_simulation.py --reset --days 40 > season_40days.sql
-
-# Copy SQL and paste into Supabase SQL Editor:
-# https://supabase.com/dashboard/project/vhooaslzkmbnzmzwiium/sql
+pip install h3    # Required for hex generation
 ```
 
-## Usage
+## Day-by-Day Workflow
 
-### Full season (40 days) with reset
 ```bash
-python3 daily_simulation.py --reset --days 40
+# Step 1: Get your home hex from Supabase
+# SELECT home_hex FROM users WHERE name = 'YourName'
+
+# Step 2: Reset everything
+python3 simulate_day.py --reset
+# → Copy SQL to Supabase SQL Editor, execute
+# → Delete app from device/simulator and reinstall (clears local SQLite)
+
+# Step 3: Day 1 (creates 100 users + first day of runs)
+python3 simulate_day.py --day 1 --home-hex 89283082803ffff
+# → Copy SQL to Supabase SQL Editor, execute
+# → Open app → check leaderboard, hex map, team standings
+
+# Step 4: Day 2
+python3 simulate_day.py --day 2
+# → Copy SQL, execute, check app
+
+# Repeat for days 3-40...
+
+# Check status anytime
+python3 simulate_day.py --status
 ```
 
-### Custom number of days
+## Province Split
+
+The `--home-hex` flag determines where runners are placed:
+
+- **50 runners** in your province (same Res 5 parent as your home hex)
+- **50 runners** in a neighboring province (different Res 5 parent)
+
+This lets you test:
+- Hex map with both nearby and distant activity
+- Leaderboard scoping (ZONE/DISTRICT/PROVINCE)
+- Province boundary rendering
+
+If `--home-hex` is omitted, defaults to Apple Park area (`89283082803ffff`).
+
+## Usage Reference
+
 ```bash
-python3 daily_simulation.py --reset --days 10   # 10 days
-python3 daily_simulation.py --reset --days 7    # 1 week
+# Day-by-day simulation
+python3 simulate_day.py --day 1 --home-hex <hex>  # First day (requires --home-hex)
+python3 simulate_day.py --day 2                     # Subsequent days use saved state
+python3 simulate_day.py --day 1 --save              # Save to sql/day_01.sql
+
+# Management
+python3 simulate_day.py --reset                     # Output reset SQL + clear local state
+python3 simulate_day.py --status                    # Show current simulation state
+python3 simulate_day.py --day 1 --seed 99           # Custom random seed
 ```
 
-### Reproducible results
-```bash
-python3 daily_simulation.py --reset --days 40 --seed 42
-```
+## What Gets Generated
 
-### Save to file
-```bash
-python3 daily_simulation.py --reset --days 40 > season.sql
-```
+**Reset SQL (`--reset`):**
+- Deletes simulation users (prefix `aaaaaaaa-*`)
+- Truncates hexes, hex_snapshot
+- Cleans daily_stats, daily_buff_stats for sim users
+- Resets real users' season data
 
-## What it generates
+**Day 1 SQL:**
+- 100 auth.users + public.users entries
+- Run history for active runners
+- Hex map state + hex_snapshot (app reads this)
+- Daily stats aggregates
+- Daily buff stats
 
-**Reset (with --reset flag):**
-- Truncates run_history, hexes, daily_flips
-- Deletes simulation users (keeps real users)
+**Day 2+ SQL:**
+- New run_history entries
+- Updated hex map + snapshot
+- Updated daily_stats + daily_buff_stats
+- Cumulative user season stats
+- Defections to Purple (days 15-25)
 
-**100 Users:**
-- 40 Red (FLAME)
-- 40 Blue (WAVE)  
-- 20 Purple (CHAOS)
+## 100 Users
 
-**40 Days of Activity:**
-- Each day: 40-70% participation
-- Distance: 2-15 km per run
-- Covers hexes around Apple Park
+| Team | Count | Distribution |
+|------|-------|-------------|
+| Red (FLAME) | 40 | Stars, regulars, casuals, ghosts |
+| Blue (WAVE) | 40 | Same archetypes |
+| Purple (CHAOS) | 20 | Initial + defectors from day 15+ |
 
-**Example 40-day summary:**
-```
--- Total runs: 2,222
--- Total distance: 19,033 km
--- Total flips: 29,985
--- Team Points: Red 28,668 | Blue 22,837 | Purple 14,074
--- Hex Control: Red 36 | Blue 78 | Purple 42
-```
+**Archetypes:**
+- **Star** (10%): 92% participation, 8-15km, fast pace, low CV
+- **Regular** (40%): 62% participation, 4-10km, moderate stats
+- **Casual** (35%): 32% participation, 2-6km, slower pace
+- **Ghost** (15%): 8% participation, rare appearances
 
-## Daily Workflow
+## What to Check in App
 
-1. Run the script: `python3 daily_simulation.py --reset --days 40`
-2. Copy output to [Supabase SQL Editor](https://supabase.com/dashboard/project/vhooaslzkmbnzmzwiium/sql)
-3. Execute SQL
-4. Open Flutter app: `flutter run`
-5. See hex map, leaderboard, team stats
+| Screen | What to verify |
+|--------|---------------|
+| **Hex Map** | Hex colors update, province boundaries visible |
+| **Leaderboard** | 100 users ranked, points accumulate, team totals shift |
+| **Home Screen** | Season countdown, flip points badge |
+| **Profile** | Stats, stability score |
 
-## Pre-generated Files
+## Data Tables Populated
 
-| File | Description |
-|------|-------------|
-| `season_40days.sql` | Full 40-day season (ready to use) |
+| Table | Content |
+|-------|---------|
+| `auth.users` | Auth entries for sim users |
+| `public.users` | User profiles with season stats |
+| `public.run_history` | Individual run records |
+| `public.hexes` | Live hex state (for buff/dominance) |
+| `public.hex_snapshot` | Daily hex snapshot (app reads this for flip counting) |
+| `public.daily_stats` | Per-user daily aggregates |
+| `public.daily_buff_stats` | Per-user daily buff multipliers |

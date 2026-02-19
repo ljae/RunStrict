@@ -174,61 +174,126 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           bottom: false,
           child: Stack(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 16),
-                  _buildSeasonStatsSection(context),
-                  const SizedBox(height: 12),
-                  _buildLeagueToggle(),
-                  const SizedBox(height: 8),
-                  // Season navigation
-                  _buildSeasonNavigation(),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: runners.isEmpty
-                        ? _buildEmptyState()
-                        : CustomScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            slivers: [
-                              const SliverToBoxAdapter(
-                                child: SizedBox(height: 20),
+              isLandscape
+                  // Landscape: everything scrolls together
+                  ? runners.isEmpty
+                      ? _buildEmptyState()
+                      : CustomScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _buildSeasonStatsSection(context),
                               ),
-                              if (runners.isNotEmpty)
-                                SliverToBoxAdapter(
-                                  child: _buildPodium(runners, isLandscape),
+                            ),
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: _buildLeagueToggle(),
+                              ),
+                            ),
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: _buildSeasonNavigation(),
+                              ),
+                            ),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 16),
+                            ),
+                            if (runners.isNotEmpty)
+                              SliverToBoxAdapter(
+                                child: _buildPodium(runners, isLandscape),
+                              ),
+                            if (runners.length > 3)
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  20,
+                                  20,
+                                  100,
                                 ),
-                              if (runners.length > 3)
-                                SliverPadding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    20,
-                                    20,
-                                    20,
-                                    100,
-                                  ),
-                                  sliver: SliverList(
-                                    delegate: SliverChildBuilderDelegate((
-                                      context,
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate((
+                                    context,
+                                    index,
+                                  ) {
+                                    final listIndex = index + 3;
+                                    if (listIndex >= runners.length) {
+                                      return null;
+                                    }
+                                    return _buildRankTile(
+                                      runners[listIndex],
+                                      listIndex + 1,
                                       index,
-                                    ) {
-                                      final listIndex = index + 3;
-                                      if (listIndex >= runners.length) {
-                                        return null;
-                                      }
-                                      return _buildRankTile(
-                                        runners[listIndex],
-                                        listIndex + 1,
-                                        index,
-                                        currentUserId,
-                                      );
-                                    }, childCount: runners.length - 3),
-                                  ),
+                                      currentUserId,
+                                    );
+                                  }, childCount: runners.length - 3),
                                 ),
-                            ],
-                          ),
-                  ),
-                ],
-              ),
+                              ),
+                          ],
+                        )
+                  // Portrait: stats pinned at top, list scrolls below
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 16),
+                        _buildSeasonStatsSection(context),
+                        const SizedBox(height: 12),
+                        _buildLeagueToggle(),
+                        const SizedBox(height: 8),
+                        _buildSeasonNavigation(),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: runners.isEmpty
+                              ? _buildEmptyState()
+                              : CustomScrollView(
+                                  physics: const BouncingScrollPhysics(),
+                                  slivers: [
+                                    const SliverToBoxAdapter(
+                                      child: SizedBox(height: 20),
+                                    ),
+                                    if (runners.isNotEmpty)
+                                      SliverToBoxAdapter(
+                                        child: _buildPodium(
+                                          runners,
+                                          isLandscape,
+                                        ),
+                                      ),
+                                    if (runners.length > 3)
+                                      SliverPadding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          20,
+                                          20,
+                                          20,
+                                          100,
+                                        ),
+                                        sliver: SliverList(
+                                          delegate:
+                                              SliverChildBuilderDelegate((
+                                                context,
+                                                index,
+                                              ) {
+                                                final listIndex = index + 3;
+                                                if (listIndex >=
+                                                    runners.length) {
+                                                  return null;
+                                                }
+                                                return _buildRankTile(
+                                                  runners[listIndex],
+                                                  listIndex + 1,
+                                                  index,
+                                                  currentUserId,
+                                                );
+                                              }, childCount: runners.length - 3),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                        ),
+                      ],
+                    ),
 
               if (currentUserData != null)
                 Positioned(
@@ -263,6 +328,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 
   /// Season stats section - user's season record (matching ALL TIME design in history)
+  /// Uses SNAPSHOT data (leaderboard frozen at midnight), not live UserModel.
   Widget _buildSeasonStatsSection(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
     final currentUser = appState.currentUser;
@@ -271,10 +337,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       return const SizedBox.shrink();
     }
 
-    // Always show current season rank (from PrefetchService province data)
+    // All values from leaderboard snapshot (Snapshot Domain — frozen at midnight)
     final currentSeasonRunners =
         PrefetchService().getLeaderboardForScope(GeographicScope.all);
     final rank = _getCurrentUserRank(context, currentSeasonRunners);
+    final userId = currentUser.id;
+    final snapshotEntry = currentSeasonRunners
+        .cast<LeaderboardEntry?>()
+        .firstWhere((e) => e!.id == userId, orElse: () => null);
+    final snapshotPoints = snapshotEntry?.seasonPoints ?? 0;
+    final snapshotDistance = snapshotEntry?.totalDistanceKm ?? 0.0;
+    final snapshotPace = snapshotEntry?.avgPaceMinPerKm;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -313,7 +386,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '${currentUser.seasonPoints}',
+                            '$snapshotPoints',
                             style: GoogleFonts.sora(
                               fontSize: 32,
                               fontWeight: FontWeight.w700,
@@ -350,12 +423,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _buildSeasonMiniStat(
-                          _formatPace(currentUser.avgPaceMinPerKm),
-                          '/km',
+                          _formatCompact(snapshotDistance),
+                          'km',
                         ),
                         _buildSeasonMiniStat(
-                          _formatCompact(currentUser.totalDistanceKm),
-                          'km',
+                          _formatPace(snapshotPace),
+                          '/km',
                         ),
                         _buildSeasonMiniStat(rank > 0 ? '#$rank' : '—', 'rank'),
                       ],

@@ -9,6 +9,7 @@ import '../models/team.dart';
 import '../services/season_service.dart';
 import '../models/user_model.dart';
 import '../utils/country_utils.dart';
+import '../services/voice_announcement_service.dart';
 import 'traitor_gate_screen.dart';
 
 /// Profile screen displaying user manifesto, avatar, team, and season stats.
@@ -33,11 +34,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _selectedSex;
   DateTime? _selectedBirthday;
   String? _selectedNationality;
+  bool _voiceMuted = false;
 
   @override
   void initState() {
     super.initState();
     _seasonService = SeasonService();
+    _voiceMuted = VoiceAnnouncementService().isMuted;
     final user = context.read<AppStateProvider>().currentUser;
     _manifestoController = TextEditingController(text: user?.manifesto ?? '');
     _selectedSex = user?.sex;
@@ -203,6 +206,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               seasonService: _seasonService,
                               teamColor: teamColor,
                             ),
+                            const SizedBox(height: AppTheme.spacingL),
+                            _VoiceMuteToggle(
+                              isMuted: _voiceMuted,
+                              teamColor: teamColor,
+                              onToggle: () async {
+                                final newVal =
+                                    await VoiceAnnouncementService()
+                                        .toggleMute();
+                                setState(() => _voiceMuted = newVal);
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -262,6 +276,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         user: user,
                         seasonService: _seasonService,
                         teamColor: teamColor,
+                      ),
+                      const SizedBox(height: AppTheme.spacingL),
+                      _VoiceMuteToggle(
+                        isMuted: _voiceMuted,
+                        teamColor: teamColor,
+                        onToggle: () async {
+                          final newVal =
+                              await VoiceAnnouncementService().toggleMute();
+                          setState(() => _voiceMuted = newVal);
+                        },
                       ),
                       if (_seasonService.isPurpleUnlocked &&
                           user.team != Team.purple) ...[
@@ -806,6 +830,83 @@ class _StatItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _VoiceMuteToggle extends StatelessWidget {
+  final bool isMuted;
+  final Color teamColor;
+  final VoidCallback onToggle;
+
+  const _VoiceMuteToggle({
+    required this.isMuted,
+    required this.teamColor,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingM,
+        vertical: AppTheme.spacingS,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+            color: isMuted ? AppTheme.textMuted : teamColor,
+            size: 20,
+          ),
+          const SizedBox(width: AppTheme.spacingS),
+          Expanded(
+            child: Text(
+              'VOICE ANNOUNCEMENTS',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onToggle,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 44,
+              height: 26,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(13),
+                color: isMuted
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : teamColor.withValues(alpha: 0.4),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 200),
+                alignment:
+                    isMuted ? Alignment.centerLeft : Alignment.centerRight,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isMuted ? AppTheme.textMuted : teamColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
-RunStrict Day-by-Day Season Simulator
+RunStrict Day-by-Day Season Simulator (v2)
 
-Generates SQL for one season day at a time. Run day 1, paste SQL into Supabase,
-check the app. Then run day 2, paste, check. See how the season evolves.
+Key changes from v1:
+- Relative date anchoring: day N (most recent) = yesterday GMT+2
+- New archetypes: elite(20%), normal(70%), slow(10%)
+- --user-id / --user-team: includes real user in simulation
+- --days N: batch mode (simulates N days at once)
+- Populates daily_all_range_stats table
 
 Usage:
-    python3 simulate_day.py --day 1              # Print day 1 SQL to stdout
-    python3 simulate_day.py --day 2              # Print day 2 SQL (cumulative)
-    python3 simulate_day.py --day 1 --save       # Save to sql/day_01.sql
-    python3 simulate_day.py --reset              # Print reset SQL only
-    python3 simulate_day.py --status             # Show current state summary
+    python3 simulate_day.py --days 5 --home-hex 89283472a93ffff \\
+      --user-id ff09fc1d-7f75-42da-9279-13a379c0c407 --user-team red
+    python3 simulate_day.py --reset                               # Wipe all data
+    python3 simulate_day.py --status                              # Show state
+    python3 simulate_day.py --days 3 --dry-run                    # Print SQL only
 
-State tracked in .sim_state.json between runs.
-Run --day 1 first (creates users), then --day 2, --day 3, etc.
+Requires: pip install h3 psycopg2-binary
 """
 
 import argparse
@@ -26,19 +29,47 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    import h3
+except ImportError:
+    print("ERROR: h3 library required. Install with: pip install h3", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 SCRIPT_DIR = Path(__file__).parent
 STATE_FILE = SCRIPT_DIR / '.sim_state.json'
 SQL_DIR = SCRIPT_DIR / 'sql'
 
-SEASON_START = datetime(2026, 2, 11, tzinfo=timezone.utc)
 NUM_USERS = 100
 TEAM_DISTRIBUTION = {'red': 40, 'blue': 40, 'purple': 20}
 
+# H3 resolutions matching the app
+BASE_RESOLUTION = 9      # Gameplay hex resolution
+CITY_RESOLUTION = 6      # District scope (city_hex in daily_buff_stats)
+ALL_RESOLUTION = 5       # Province/Region scope (parent_hex in hex_snapshot)
+
+# Fallback home hex (Apple Park area) if --home-hex not provided
+DEFAULT_HOME_HEX = '89283082803ffff'
+
+# GMT+2 timezone for date calculations
+GMT2 = timezone(timedelta(hours=2))
+
+# DB connection (Supabase direct)
+DB_HOST = 'aws-1-ap-southeast-1.pooler.supabase.com'
+DB_PORT = 5432
+DB_NAME = 'postgres'
+DB_USER = 'postgres.vhooaslzkmbnzmzwiium'
+DB_PASS = 'jue2wYWxL8YV7wM7'
+
+# New archetypes: 20% elite, 70% normal, 10% slow
 ARCHETYPES = {
-    'star':    {'weight': 10, 'participation': 0.92, 'dist': (8.0, 15.0), 'pace': (4.5, 5.5), 'cv': (3.0, 8.0)},
-    'regular': {'weight': 40, 'participation': 0.62, 'dist': (4.0, 10.0), 'pace': (5.0, 6.5), 'cv': (5.0, 15.0)},
-    'casual':  {'weight': 35, 'participation': 0.32, 'dist': (2.0, 6.0),  'pace': (6.0, 7.5), 'cv': (10.0, 25.0)},
-    'ghost':   {'weight': 15, 'participation': 0.08, 'dist': (2.0, 4.0),  'pace': (6.5, 8.0), 'cv': (15.0, 30.0)},
+    'elite':  {'weight': 20, 'participation': 0.80, 'dist': (8.0, 14.0), 'pace': (4.5, 5.2), 'cv': (2.0, 6.0)},
+    'normal': {'weight': 70, 'participation': 0.58, 'dist': (4.0, 9.0),  'pace': (5.5, 6.5), 'cv': (6.0, 15.0)},
+    'slow':   {'weight': 10, 'participation': 0.35, 'dist': (2.5, 5.5),  'pace': (6.8, 7.8), 'cv': (12.0, 25.0)},
 }
 
 FIRST_NAMES = [
@@ -70,65 +101,145 @@ AVATARS = [
     "\U0001f48e", "\U0001f680", "\U0001f31f", "\u2728",
 ]
 
-ALL_HEXES = [
-    '89283082803ffff', '89283082807ffff', '8928308280bffff', '8928308280fffff',
-    '89283082813ffff', '89283082817ffff', '8928308281bffff', '8928308281fffff',
-    '89283082823ffff', '89283082827ffff', '8928308282bffff', '8928308282fffff',
-    '89283082833ffff', '89283082837ffff', '8928308283bffff', '8928308283fffff',
-    '89283082843ffff', '89283082847ffff', '8928308284bffff', '8928308284fffff',
-    '89283082853ffff', '89283082857ffff', '8928308285bffff', '8928308285fffff',
-    '89283082863ffff', '89283082867ffff', '8928308286bffff', '8928308286fffff',
-    '89283082873ffff', '89283082877ffff', '8928308287bffff', '8928308287fffff',
-    '89283082883ffff', '89283082887ffff', '8928308288bffff', '8928308288fffff',
-    '89283082893ffff', '89283082897ffff', '8928308289bffff', '8928308289fffff',
-    '892830828a3ffff', '892830828a7ffff', '892830828abffff', '892830828afffff',
-    '892830828b3ffff', '892830828b7ffff', '892830828bbffff', '892830828bfffff',
-    '892830828c3ffff', '892830828c7ffff', '892830828cbffff', '892830828cfffff',
-    '892830828d3ffff', '892830828d7ffff', '892830828dbffff', '892830828dfffff',
-    '892830828e3ffff', '892830828e7ffff', '892830828ebffff', '892830828efffff',
-    '892830828f3ffff', '892830828f7ffff', '892830828fbffff', '892830828ffffff',
-    '89283082903ffff', '89283082907ffff', '8928308290bffff', '8928308290fffff',
-    '89283082913ffff', '89283082917ffff', '8928308291bffff', '8928308291fffff',
-    '89283082923ffff', '89283082927ffff', '8928308292bffff', '8928308292fffff',
-    '89283082933ffff', '89283082937ffff', '8928308293bffff', '8928308293fffff',
-    '89283082943ffff', '89283082947ffff', '8928308294bffff', '8928308294fffff',
-    '89283082953ffff', '89283082957ffff', '8928308295bffff', '8928308295fffff',
-    '89283082963ffff', '89283082967ffff', '8928308296bffff', '8928308296fffff',
-    '89283082973ffff', '89283082977ffff', '8928308297bffff', '8928308297fffff',
-    '89283082983ffff', '89283082987ffff', '8928308298bffff', '8928308298fffff',
-    '89283082993ffff', '89283082997ffff', '8928308299bffff', '8928308299fffff',
-    '892830829a3ffff', '892830829a7ffff', '892830829abffff', '892830829afffff',
-    '892830829b3ffff', '892830829b7ffff', '892830829bbffff', '892830829bfffff',
-    '892830829c3ffff', '892830829c7ffff', '892830829cbffff', '892830829cfffff',
-    '892830829d3ffff', '892830829d7ffff', '892830829dbffff', '892830829dfffff',
-    '892830829e3ffff', '892830829e7ffff', '892830829ebffff', '892830829efffff',
-    '892830829f3ffff', '892830829f7ffff', '892830829fbffff', '892830829ffffff',
-    '89283082a03ffff', '89283082a07ffff', '89283082a0bffff', '89283082a0fffff',
-    '89283082a13ffff', '89283082a17ffff', '89283082a1bffff', '89283082a1fffff',
-    '89283082a23ffff', '89283082a27ffff', '89283082a2bffff', '89283082a2fffff',
-    '89283082a33ffff', '89283082a37ffff', '89283082a3bffff', '89283082a3fffff',
-    '89283082a43ffff', '89283082a47ffff', '89283082a4bffff', '89283082a4fffff',
-    '89283082a53ffff', '89283082a57ffff', '89283082a5bffff', '89283082a5fffff',
-    '89283082a63ffff', '89283082a67ffff', '89283082a6bffff', '89283082a6fffff',
+# ISO country codes for nationality diversity
+NATIONALITIES = [
+    'KR', 'KR', 'KR', 'KR', 'KR',  # 25% Korean (weighted)
+    'US', 'US', 'US',                 # 15% American
+    'JP', 'JP',                        # 10% Japanese
+    'GB', 'DE', 'FR', 'AU', 'CA',     # 5% each
+    'BR', 'IN', 'MX', 'IT', 'ES',
 ]
 
 DEFECTION_DAYS = range(15, 26)
 DEFECTION_COUNT = 8
 
 
+# ==================== Date Anchoring ====================
+
+def today_gmt2():
+    """Current date in GMT+2."""
+    return datetime.now(GMT2).date()
+
+
+def run_date_for_day(day, total_days):
+    """Map simulation day number to a real date.
+
+    Day 1 = oldest, day total_days = yesterday GMT+2.
+    """
+    yesterday = today_gmt2() - timedelta(days=1)
+    return yesterday - timedelta(days=total_days - day)
+
+
+# ==================== DB Connection ====================
+
+def get_db_connection():
+    if psycopg2 is None:
+        print("ERROR: psycopg2 required for --execute. Install with: pip install psycopg2-binary", file=sys.stderr)
+        sys.exit(1)
+    return psycopg2.connect(
+        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+        user=DB_USER, password=DB_PASS,
+    )
+
+
+def execute_sql(sql, description="SQL"):
+    """Execute SQL directly against Supabase."""
+    conn = get_db_connection()
+    conn.autocommit = True
+    cur = conn.cursor()
+    try:
+        # Strip comment-only lines, then split on semicolons
+        lines = []
+        for line in sql.split('\n'):
+            stripped = line.strip()
+            if stripped and not stripped.startswith('--'):
+                lines.append(line)
+        clean_sql = '\n'.join(lines)
+        statements = [s.strip() for s in clean_sql.split(';') if s.strip()]
+        for stmt in statements:
+            if not stmt:
+                continue
+            try:
+                cur.execute(stmt + ';')
+                if cur.description:  # SELECT query
+                    cols = [d[0] for d in cur.description]
+                    rows = cur.fetchall()
+                    if rows:
+                        widths = [max(len(str(c)), max(len(str(r[i])) for r in rows)) for i, c in enumerate(cols)]
+                        header = ' | '.join(str(c).ljust(w) for c, w in zip(cols, widths))
+                        print(header)
+                        print('-+-'.join('-' * w for w in widths))
+                        for row in rows:
+                            print(' | '.join(str(v).ljust(w) for v, w in zip(row, widths)))
+                        print()
+                else:
+                    rc = cur.rowcount
+                    if rc >= 0:
+                        verb = stmt.split()[0].upper() if stmt.split() else ''
+                        if verb in ('INSERT', 'UPDATE', 'DELETE'):
+                            print(f"  {verb} {rc} rows", file=sys.stderr)
+            except Exception as e:
+                print(f"  ERROR: {e}", file=sys.stderr)
+                print(f"  Statement: {stmt[:100]}...", file=sys.stderr)
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==================== Helpers ====================
+
 def esc(s):
     return s.replace("'", "''")
+
+
+def generate_hexes_from_home(home_hex):
+    """Generate hex pools from a home hex using h3 library."""
+    res = h3.get_resolution(home_hex)
+    parent_res5 = h3.cell_to_parent(home_hex, ALL_RESOLUTION)
+    user_city_res6 = h3.cell_to_parent(home_hex, CITY_RESOLUTION)
+
+    neighbors = sorted(h3.grid_disk(parent_res5, 1))
+    other_province = [n for n in neighbors if n != parent_res5][0]
+
+    # Get hexes from user's own city (Res 6) first
+    user_city_hexes = sorted(h3.cell_to_children(user_city_res6, res))[:40]
+
+    # Get hexes from other cities in the same province
+    other_city_hexes = []
+    province_cities = sorted(h3.cell_to_children(parent_res5, CITY_RESOLUTION))
+    for city in province_cities:
+        if city == user_city_res6:
+            continue
+        children = sorted(h3.cell_to_children(city, res))[:7]
+        other_city_hexes.extend(children)
+        if len(other_city_hexes) >= 40:
+            break
+    other_city_hexes = other_city_hexes[:40]
+
+    same_hexes = user_city_hexes + other_city_hexes
+    other_hexes = sorted(h3.cell_to_children(other_province, res))[:80]
+
+    print(f"  Same province (Res {ALL_RESOLUTION}): {parent_res5} -> {len(same_hexes)} hexes ({len(user_city_hexes)} in user's city {user_city_res6})", file=sys.stderr)
+    print(f"  Other province (Res {ALL_RESOLUTION}): {other_province} -> {len(other_hexes)} hexes", file=sys.stderr)
+
+    return same_hexes, other_hexes
 
 
 def default_state():
     return {
         'last_day': 0,
         'seed': 42,
+        'home_hex': None,
+        'same_hexes': [],
+        'other_hexes': [],
         'users': [],
         'user_points': {},
         'user_stats': {},
         'hex_teams': {},
         'yesterday_flip_points': {},
+        'total_days': 0,
+        'real_user_id': None,
+        'real_user_team': None,
     }
 
 
@@ -143,7 +254,8 @@ def save_state(state):
         json.dump(state, f, indent=2)
 
 
-def generate_users(seed):
+def generate_users(seed, same_hexes, other_hexes):
+    """Generate 100 simulation users. First 50 in same province, last 50 in other."""
     random.seed(seed)
     users = []
     team_list = []
@@ -161,6 +273,13 @@ def generate_users(seed):
         suffix = str(i // len(FIRST_NAMES)) if i >= len(FIRST_NAMES) else ''
         name = f"{first}{last}{suffix}"
 
+        if i < 50:
+            home_hex = same_hexes[i % len(same_hexes)]
+            province = 'same'
+        else:
+            home_hex = other_hexes[(i - 50) % len(other_hexes)]
+            province = 'other'
+
         users.append({
             'id': uid,
             'name': name,
@@ -168,25 +287,33 @@ def generate_users(seed):
             'original_team': team_list[i],
             'avatar': AVATARS[i % len(AVATARS)],
             'archetype': archetype_names[i % len(archetype_names)],
-            'home_hex': ALL_HEXES[i % len(ALL_HEXES)],
+            'home_hex': home_hex,
+            'province': province,
+            'is_real_user': False,
+            'nationality': NATIONALITIES[i % len(NATIONALITIES)],
         })
 
     return users
 
 
-def generate_run_path(user_home_idx, num_hexes):
+def generate_run_path(user, same_hexes, other_hexes, num_hexes):
+    """Generate a run path. Users run 80% in their own province, 20% crossover."""
+    if user['province'] == 'same':
+        home_pool = same_hexes
+        away_pool = other_hexes
+    else:
+        home_pool = other_hexes
+        away_pool = same_hexes
+
     path = []
-    nearby = 30
     for _ in range(num_hexes):
-        if random.random() < 0.7:
-            offset = random.randint(-nearby // 2, nearby // 2)
-            idx = (user_home_idx + offset) % len(ALL_HEXES)
+        if random.random() < 0.8:
+            hid = random.choice(home_pool)
         else:
-            idx = random.randint(0, len(ALL_HEXES) - 1)
-        hid = ALL_HEXES[idx]
+            hid = random.choice(away_pool)
         if hid not in path:
             path.append(hid)
-    return path if path else [ALL_HEXES[user_home_idx]]
+    return path if path else [user['home_hex']]
 
 
 def calculate_buff(user, state, day):
@@ -248,7 +375,8 @@ def handle_defections(state, day):
         return []
     random.seed(state['seed'] + day + 9999)
     eligible = [u for u in state['users']
-                if u['team'] in ('red', 'blue') and u['original_team'] != 'purple']
+                if u['team'] in ('red', 'blue') and u['original_team'] != 'purple'
+                and not u.get('is_real_user', False)]
     if not eligible:
         return []
     count = min(DEFECTION_COUNT // len(DEFECTION_DAYS) + 1, len(eligible))
@@ -258,13 +386,15 @@ def handle_defections(state, day):
     return defectors
 
 
-def generate_day_data(state, day):
+def generate_day_data(state, day, total_days):
     random.seed(state['seed'] + day)
     users = state['users']
     hex_teams = dict(state.get('hex_teams', {}))
+    same_hexes = state['same_hexes']
+    other_hexes = state['other_hexes']
     runs = []
     day_flip_points = {}
-    run_date = SEASON_START + timedelta(days=day - 1)
+    run_date = run_date_for_day(day, total_days)
 
     for user in users:
         arch = ARCHETYPES[user['archetype']]
@@ -281,8 +411,7 @@ def generate_day_data(state, day):
         cv = round(random.uniform(c_min, c_max), 1)
 
         num_hexes = max(3, int(distance_km * 2.5))
-        home_idx = ALL_HEXES.index(user['home_hex']) if user['home_hex'] in ALL_HEXES else 0
-        hex_path = generate_run_path(home_idx, num_hexes)
+        hex_path = generate_run_path(user, same_hexes, other_hexes, num_hexes)
 
         team = user['team']
         flips = 0
@@ -294,9 +423,16 @@ def generate_day_data(state, day):
         buff = calculate_buff(user, state, day)
         points = flips * buff
 
-        hour = random.randint(5, 21)
+        # ~30% of runs in timezone-boundary window (15:00-21:59 UTC)
+        # These appear on different dates in KST (UTC+9) vs GMT+2
+        # e.g., 16:00 UTC = Feb 17 01:00 KST but Feb 16 18:00 GMT+2
+        if random.random() < 0.30:
+            hour = random.randint(15, 21)
+        else:
+            hour = random.randint(5, 14)
         minute = random.randint(0, 59)
-        start_time = run_date.replace(hour=hour, minute=minute, second=0)
+        run_date_dt = datetime(run_date.year, run_date.month, run_date.day, tzinfo=timezone.utc)
+        start_time = run_date_dt.replace(hour=hour, minute=minute, second=0)
         end_time = start_time + timedelta(seconds=duration_seconds)
 
         runs.append({
@@ -342,11 +478,17 @@ def update_state(state, day, runs, hex_teams, day_flip_points):
             stats['cv_count'] += 1
 
 
+# ==================== SQL Generation ====================
+
 def sql_auth_users_insert(users):
+    # Only insert simulation users (not real user)
+    sim_users = [u for u in users if not u.get('is_real_user', False)]
+    if not sim_users:
+        return "-- No auth users to insert"
     lines = []
     lines.append("INSERT INTO auth.users (id, instance_id, aud, role, encrypted_password, email_confirmed_at, created_at, updated_at, confirmation_token, email, raw_app_meta_data, raw_user_meta_data) VALUES")
     vals = []
-    for u in users:
+    for u in sim_users:
         email = f"sim_{u['id'][:8]}_{u['name'].lower()}@runstrict.test"
         vals.append(
             f"  ('{u['id']}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', "
@@ -359,21 +501,39 @@ def sql_auth_users_insert(users):
 
 
 def sql_users_insert(users):
-    lines = []
-    lines.append("INSERT INTO public.users (id, name, team, avatar, season_points, home_hex, season_home_hex, home_hex_end, total_distance_km, total_runs) VALUES")
-    vals = []
-    for u in users:
-        vals.append(
-            f"  ('{u['id']}', '{esc(u['name'])}', '{u['team']}', '{esc(u['avatar'])}', 0, "
-            f"'{u['home_hex']}', '{u['home_hex']}', '{u['home_hex']}', 0, 0)"
+    """Insert simulation users. Real user already exists — just update their home_hex."""
+    sim_users = [u for u in users if not u.get('is_real_user', False)]
+    real_users = [u for u in users if u.get('is_real_user', False)]
+    parts = []
+
+    if sim_users:
+        lines = []
+        lines.append("INSERT INTO public.users (id, name, team, avatar, season_points, home_hex, home_hex_start, home_hex_end, season_home_hex, total_distance_km, total_runs, nationality) VALUES")
+        vals = []
+        for u in sim_users:
+            nat = u.get('nationality', 'KR')
+            vals.append(
+                f"  ('{u['id']}', '{esc(u['name'])}', '{u['team']}', '{esc(u['avatar'])}', 0, "
+                f"'{u['home_hex']}', '{u['home_hex']}', '{u['home_hex']}', '{u['home_hex']}', 0, 0, '{nat}')"
+            )
+        lines.append(",\n".join(vals))
+        lines.append("ON CONFLICT (id) DO UPDATE SET")
+        lines.append("  name = EXCLUDED.name, team = EXCLUDED.team, avatar = EXCLUDED.avatar,")
+        lines.append("  season_points = 0, home_hex = EXCLUDED.home_hex,")
+        lines.append("  home_hex_start = EXCLUDED.home_hex_start, home_hex_end = EXCLUDED.home_hex_end,")
+        lines.append("  season_home_hex = EXCLUDED.season_home_hex,")
+        lines.append("  total_distance_km = 0, total_runs = 0, nationality = EXCLUDED.nationality;")
+        parts.append("\n".join(lines))
+
+    # For real user, just ensure season_home_hex is set
+    for u in real_users:
+        parts.append(
+            f"UPDATE public.users SET season_home_hex = '{u['home_hex']}', "
+            f"home_hex = '{u['home_hex']}', home_hex_end = '{u['home_hex']}' "
+            f"WHERE id = '{u['id']}';"
         )
-    lines.append(",\n".join(vals))
-    lines.append("ON CONFLICT (id) DO UPDATE SET")
-    lines.append("  name = EXCLUDED.name, team = EXCLUDED.team, avatar = EXCLUDED.avatar,")
-    lines.append("  season_points = 0, home_hex = EXCLUDED.home_hex,")
-    lines.append("  season_home_hex = EXCLUDED.season_home_hex, home_hex_end = EXCLUDED.home_hex_end,")
-    lines.append("  total_distance_km = 0, total_runs = 0;")
-    return "\n".join(lines)
+
+    return "\n".join(parts) if parts else "-- No user inserts"
 
 
 def sql_runs_insert(runs):
@@ -394,16 +554,111 @@ def sql_runs_insert(runs):
 
 
 def sql_hexes_upsert(hex_teams):
+    """Upsert hexes with parent_hex (Res 5 parent for spatial grouping)."""
     if not hex_teams:
         return "-- No hex updates"
     lines = []
-    lines.append("INSERT INTO public.hexes (id, last_runner_team) VALUES")
+    lines.append("INSERT INTO public.hexes (id, last_runner_team, parent_hex) VALUES")
     vals = []
     for hid, team in hex_teams.items():
-        vals.append(f"  ('{hid}', '{team}')")
+        parent_hex = h3.cell_to_parent(hid, ALL_RESOLUTION)
+        vals.append(f"  ('{hid}', '{team}', '{parent_hex}')")
     lines.append(",\n".join(vals))
-    lines.append("ON CONFLICT (id) DO UPDATE SET last_runner_team = EXCLUDED.last_runner_team;")
+    lines.append("ON CONFLICT (id) DO UPDATE SET last_runner_team = EXCLUDED.last_runner_team, parent_hex = EXCLUDED.parent_hex;")
     return "\n".join(lines)
+
+
+def sql_hex_snapshot_insert(hex_teams, run_date_str):
+    """Build hex_snapshot for this day's hex state."""
+    if not hex_teams:
+        return "-- No hex snapshot updates"
+    lines = []
+    lines.append("INSERT INTO public.hex_snapshot (hex_id, last_runner_team, snapshot_date, parent_hex) VALUES")
+    vals = []
+    for hid, team in hex_teams.items():
+        parent_hex = h3.cell_to_parent(hid, ALL_RESOLUTION)
+        vals.append(f"  ('{hid}', '{team}', '{run_date_str}'::date, '{parent_hex}')")
+    lines.append(",\n".join(vals))
+    lines.append("ON CONFLICT (hex_id, snapshot_date) DO UPDATE SET last_runner_team = EXCLUDED.last_runner_team;")
+    return "\n".join(lines)
+
+
+def sql_daily_buff_stats_insert(state, day, hex_teams, run_date_str):
+    """Write daily_buff_stats per (stat_date, city_hex)."""
+    if not hex_teams:
+        return "-- No buff stats"
+
+    yp = state.get('yesterday_flip_points', {})
+
+    # Group hexes by city_hex (Res 6 parent)
+    city_stats = {}
+    for hid, team in hex_teams.items():
+        city_hex = h3.cell_to_parent(hid, CITY_RESOLUTION)
+        if city_hex not in city_stats:
+            city_stats[city_hex] = {'red': 0, 'blue': 0, 'purple': 0}
+        city_stats[city_hex][team] += 1
+
+    # Red elite threshold (top 20%)
+    red_pts = sorted([
+        pts for u_id, pts in yp.items()
+        if any(u['id'] == u_id and u['team'] == 'red' for u in state['users'])
+        and pts > 0
+    ])
+    red_threshold = red_pts[int(len(red_pts) * 0.8)] if len(red_pts) > 1 else (red_pts[0] if red_pts else 0)
+
+    # Purple participation
+    purple_users = [u for u in state['users'] if u['team'] == 'purple']
+    purple_total = len(purple_users)
+    purple_active = len([
+        u_id for u_id, pts in yp.items()
+        if pts > 0 and any(u['id'] == u_id and u['team'] == 'purple' for u in state['users'])
+    ])
+    purple_rate = round(purple_active / purple_total, 2) if purple_total > 0 else 0
+
+    lines = []
+    lines.append("INSERT INTO public.daily_buff_stats (stat_date, city_hex, dominant_team, red_hex_count, blue_hex_count, purple_hex_count, red_elite_threshold_points, purple_total_users, purple_active_users, purple_participation_rate) VALUES")
+    vals = []
+    for city_hex, counts in city_stats.items():
+        dominant = max(counts, key=counts.get) if any(counts.values()) else None
+        vals.append(
+            f"  ('{run_date_str}'::date, '{city_hex}', "
+            f"'{dominant}', {counts['red']}, {counts['blue']}, {counts['purple']}, "
+            f"{red_threshold}, {purple_total}, {purple_active}, {purple_rate})"
+        )
+    lines.append(",\n".join(vals))
+    lines.append("ON CONFLICT (stat_date, city_hex) DO UPDATE SET")
+    lines.append("  dominant_team = EXCLUDED.dominant_team,")
+    lines.append("  red_hex_count = EXCLUDED.red_hex_count,")
+    lines.append("  blue_hex_count = EXCLUDED.blue_hex_count,")
+    lines.append("  purple_hex_count = EXCLUDED.purple_hex_count,")
+    lines.append("  red_elite_threshold_points = EXCLUDED.red_elite_threshold_points,")
+    lines.append("  purple_total_users = EXCLUDED.purple_total_users,")
+    lines.append("  purple_active_users = EXCLUDED.purple_active_users,")
+    lines.append("  purple_participation_rate = EXCLUDED.purple_participation_rate;")
+    return "\n".join(lines)
+
+
+def sql_daily_all_range_stats_insert(hex_teams, run_date_str):
+    """Write daily_all_range_stats (province-level hex counts per day)."""
+    if not hex_teams:
+        return "-- No all-range stats"
+
+    tc = {'red': 0, 'blue': 0, 'purple': 0}
+    for team in hex_teams.values():
+        if team in tc:
+            tc[team] += 1
+
+    dominant = max(tc, key=tc.get) if any(tc.values()) else None
+
+    return (
+        f"INSERT INTO public.daily_all_range_stats (stat_date, dominant_team, red_hex_count, blue_hex_count, purple_hex_count, created_at)\n"
+        f"VALUES ('{run_date_str}'::date, '{dominant}', {tc['red']}, {tc['blue']}, {tc['purple']}, NOW())\n"
+        f"ON CONFLICT (stat_date) DO UPDATE SET\n"
+        f"  dominant_team = EXCLUDED.dominant_team,\n"
+        f"  red_hex_count = EXCLUDED.red_hex_count,\n"
+        f"  blue_hex_count = EXCLUDED.blue_hex_count,\n"
+        f"  purple_hex_count = EXCLUDED.purple_hex_count;"
+    )
 
 
 def sql_user_points_update(state):
@@ -416,11 +671,13 @@ def sql_user_points_update(state):
         avg_pace = round(stats['sum_pace'] / tr, 2) if tr > 0 else 'NULL'
         cc = stats.get('cv_count', 0)
         avg_cv = round(stats['sum_cv'] / cc, 1) if cc > 0 else 'NULL'
+        cv_run_count = cc
         if pts > 0 or tr > 0:
             lines.append(
                 f"UPDATE public.users SET season_points = {pts}, "
                 f"total_distance_km = {td}, total_runs = {tr}, "
-                f"avg_pace_min_per_km = {avg_pace}, avg_cv = {avg_cv} "
+                f"avg_pace_min_per_km = {avg_pace}, avg_cv = {avg_cv}, "
+                f"cv_run_count = {cv_run_count} "
                 f"WHERE id = '{uid}';"
             )
     return "\n".join(lines) if lines else "-- No point updates"
@@ -435,9 +692,11 @@ def sql_defections(defectors):
     return "\n".join(lines)
 
 
-def sql_verify_queries(day):
+def sql_verify_queries(day, total_days):
+    run_date = run_date_for_day(day, total_days)
+    run_date_str = run_date.strftime('%Y-%m-%d')
     return f"""
-SELECT 'Day {day} Summary' as info;
+SELECT 'Day {day}/{total_days} ({run_date_str})' as info;
 
 SELECT team, count(*) as user_count, sum(season_points) as total_points
 FROM public.users WHERE id::text LIKE 'aaaaaaaa-%' GROUP BY team ORDER BY total_points DESC;
@@ -449,84 +708,68 @@ GROUP BY team ORDER BY hex_count DESC;
 SELECT u.name, u.team, u.season_points, u.total_distance_km, u.total_runs,
        CASE WHEN u.avg_cv IS NOT NULL THEN (100 - u.avg_cv)::INTEGER ELSE NULL END as stability
 FROM public.users u
-WHERE u.id::text LIKE 'aaaaaaaa-%' AND u.season_points > 0
-ORDER BY u.season_points DESC LIMIT 15;
+WHERE u.season_points > 0
+ORDER BY u.season_points DESC LIMIT 10;
 
-SELECT count(*) as total_runs_today
-FROM public.run_history WHERE run_date = '{(SEASON_START + timedelta(days=day - 1)).strftime('%Y-%m-%d')}';
+SELECT count(*) as runs_today FROM public.run_history WHERE run_date = '{run_date_str}';
+SELECT count(*) as hex_snapshot_count FROM public.hex_snapshot WHERE snapshot_date = '{run_date_str}';
+SELECT count(*) as all_range_stats FROM public.daily_all_range_stats WHERE stat_date = '{run_date_str}';
 """
 
 
-def generate_full_sql(state, day):
+# ==================== Full SQL Generation ====================
+
+def generate_full_sql(state, day, total_days):
     sections = []
-    run_date = SEASON_START + timedelta(days=day - 1)
-    sections.append(f"-- RunStrict Day {day} / 40 ({run_date.strftime('%Y-%m-%d')})")
-    sections.append(f"-- Generated by simulate_day.py")
+    run_date = run_date_for_day(day, total_days)
+    run_date_str = run_date.strftime('%Y-%m-%d')
+    sections.append(f"-- RunStrict Day {day} / {total_days} ({run_date_str})")
+    sections.append(f"-- Home hex: {state.get('home_hex', 'N/A')}")
+    sections.append(f"-- Yesterday GMT+2: {today_gmt2() - timedelta(days=1)}")
     sections.append("")
 
     if day == 1:
-        sections.append("-- === CREATE 100 SIMULATION AUTH ENTRIES ===")
         sections.append(sql_auth_users_insert(state['users']))
         sections.append("")
-        sections.append("-- === CREATE 100 SIMULATION USERS ===")
         sections.append(sql_users_insert(state['users']))
         sections.append("")
 
     defectors = handle_defections(state, day)
     if defectors:
-        sections.append(f"-- === DEFECTIONS: {len(defectors)} users join PURPLE ===")
         sections.append(sql_defections(defectors))
         sections.append("")
 
-    runs, hex_teams, day_flip_points = generate_day_data(state, day)
+    runs, hex_teams, day_flip_points = generate_day_data(state, day, total_days)
     update_state(state, day, runs, hex_teams, day_flip_points)
 
-    sections.append(f"-- === DAY {day} RUNS ({len(runs)} runs) ===")
     sections.append(sql_runs_insert(runs))
     sections.append("")
-
-    sections.append(f"-- === HEX MAP ({len(hex_teams)} hexes) ===")
     sections.append(sql_hexes_upsert(hex_teams))
     sections.append("")
-
-    sections.append(f"-- === UPDATE USER SEASON STATS ===")
+    sections.append(sql_hex_snapshot_insert(hex_teams, run_date_str))
+    sections.append("")
+    sections.append(sql_daily_buff_stats_insert(state, day, hex_teams, run_date_str))
+    sections.append("")
+    sections.append(sql_daily_all_range_stats_insert(hex_teams, run_date_str))
+    sections.append("")
     sections.append(sql_user_points_update(state))
     sections.append("")
-
-    sections.append(f"-- === VERIFICATION QUERIES ===")
-    sections.append(sql_verify_queries(day))
-    sections.append("")
-
-    tc = {'red': 0, 'blue': 0, 'purple': 0}
-    for t in hex_teams.values():
-        if t in tc:
-            tc[t] += 1
-    rp = sum(state['user_points'].get(u['id'], 0) for u in state['users'] if u['team'] == 'red')
-    bp = sum(state['user_points'].get(u['id'], 0) for u in state['users'] if u['team'] == 'blue')
-    pp = sum(state['user_points'].get(u['id'], 0) for u in state['users'] if u['team'] == 'purple')
-
-    sections.append(f"-- === DAY {day} STATS ===")
-    sections.append(f"-- Runs today: {len(runs)}")
-    sections.append(f"-- Flips today: {sum(r['flip_count'] for r in runs)}")
-    sections.append(f"-- Points earned today: {sum(r['flip_points'] for r in runs)}")
-    if defectors:
-        sections.append(f"-- Defectors: {', '.join(d['name'] for d in defectors)}")
-    sections.append(f"-- Cumulative Points: Red {rp:,} | Blue {bp:,} | Purple {pp:,}")
-    sections.append(f"-- Hex Control: Red {tc.get('red',0)} | Blue {tc.get('blue',0)} | Purple {tc.get('purple',0)}")
-    sections.append(f"-- Team sizes: Red {sum(1 for u in state['users'] if u['team']=='red')} | "
-                     f"Blue {sum(1 for u in state['users'] if u['team']=='blue')} | "
-                     f"Purple {sum(1 for u in state['users'] if u['team']=='purple')}")
+    sections.append(sql_verify_queries(day, total_days))
 
     return "\n".join(sections)
 
 
 def print_status(state):
     if state['last_day'] == 0:
-        print("No simulation data. Run --day 1 to start.", file=sys.stderr)
+        print("No simulation data. Run --days N --home-hex <your_hex> to start.", file=sys.stderr)
         return
 
-    print(f"Last simulated day: {state['last_day']}", file=sys.stderr)
-    print(f"Users: {len(state['users'])}", file=sys.stderr)
+    total_days = state.get('total_days', state['last_day'])
+    print(f"Day {state['last_day']}/{total_days} | Home: {state.get('home_hex', 'N/A')}", file=sys.stderr)
+    print(f"Hexes: {len(state.get('same_hexes', []))} same + {len(state.get('other_hexes', []))} other province", file=sys.stderr)
+
+    if state.get('real_user_id'):
+        print(f"Real user: {state['real_user_id']} ({state.get('real_user_team', '?')})", file=sys.stderr)
 
     tc = {'red': 0, 'blue': 0, 'purple': 0}
     for t in state.get('hex_teams', {}).values():
@@ -534,35 +777,40 @@ def print_status(state):
             tc[t] += 1
 
     team_pts = {'red': 0, 'blue': 0, 'purple': 0}
-    for u in state['users']:
-        pts = state['user_points'].get(u['id'], 0)
-        team_pts[u['team']] += pts
-
     team_sizes = {'red': 0, 'blue': 0, 'purple': 0}
     for u in state['users']:
+        team_pts[u['team']] += state['user_points'].get(u['id'], 0)
         team_sizes[u['team']] += 1
 
-    print(f"\nTeam Sizes: Red {team_sizes['red']} | Blue {team_sizes['blue']} | Purple {team_sizes['purple']}", file=sys.stderr)
-    print(f"Points:     Red {team_pts['red']:,} | Blue {team_pts['blue']:,} | Purple {team_pts['purple']:,}", file=sys.stderr)
-    print(f"Hexes:      Red {tc['red']} | Blue {tc['blue']} | Purple {tc['purple']}", file=sys.stderr)
+    print(f"Teams:  Red {team_sizes['red']} | Blue {team_sizes['blue']} | Purple {team_sizes['purple']}", file=sys.stderr)
+    print(f"Points: Red {team_pts['red']:,} | Blue {team_pts['blue']:,} | Purple {team_pts['purple']:,}", file=sys.stderr)
+    print(f"Hexes:  Red {tc['red']} | Blue {tc['blue']} | Purple {tc['purple']}", file=sys.stderr)
 
-    top = sorted(state['user_points'].items(), key=lambda x: x[1], reverse=True)[:10]
-    print(f"\nTop 10 Leaderboard:", file=sys.stderr)
+    # Date mapping
+    for d in range(1, state['last_day'] + 1):
+        rd = run_date_for_day(d, total_days)
+        label = " (yesterday)" if rd == today_gmt2() - timedelta(days=1) else ""
+        print(f"  Day {d} -> {rd}{label}", file=sys.stderr)
+
+    top = sorted(state['user_points'].items(), key=lambda x: x[1], reverse=True)[:5]
+    print(f"Top 5:", file=sys.stderr)
     for rank, (uid, pts) in enumerate(top, 1):
         user = next((u for u in state['users'] if u['id'] == uid), None)
         if user:
-            print(f"  #{rank:2d}  {user['name']:20s}  {user['team']:6s}  {pts:,} pts", file=sys.stderr)
-
-
-def generate_reset_sql():
-    return open(SCRIPT_DIR / 'reset_simulation.sql').read()
+            real_tag = " [YOU]" if user.get('is_real_user') else ""
+            print(f"  #{rank} {user['name']:18s} {user['team']:6s} {pts:,} pts{real_tag}", file=sys.stderr)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='RunStrict Day-by-Day Season Simulator')
-    parser.add_argument('--day', type=int, help='Day number to simulate (1-40)')
+    parser = argparse.ArgumentParser(description='RunStrict Day-by-Day Season Simulator v2')
+    parser.add_argument('--days', type=int, help='Number of days to simulate (batch mode)')
+    parser.add_argument('--day', type=int, help='Single day number to simulate (legacy)')
+    parser.add_argument('--home-hex', type=str, help='Your H3 Res 9 hex ID')
+    parser.add_argument('--user-id', type=str, help='Real user UUID to include in simulation')
+    parser.add_argument('--user-team', type=str, choices=['red', 'blue', 'purple'], help='Real user team')
+    parser.add_argument('--dry-run', action='store_true', help='Print SQL only, do not execute')
     parser.add_argument('--save', action='store_true', help='Save SQL to sql/day_NN.sql')
-    parser.add_argument('--reset', action='store_true', help='Output reset SQL and clear state')
+    parser.add_argument('--reset', action='store_true', help='Wipe all data and clear state')
     parser.add_argument('--status', action='store_true', help='Show current simulation state')
     parser.add_argument('--seed', type=int, default=42, help='Random seed (default: 42)')
     args = parser.parse_args()
@@ -572,47 +820,110 @@ def main():
         return
 
     if args.reset:
-        print(generate_reset_sql())
+        sql = open(SCRIPT_DIR / 'reset_simulation.sql').read()
+        if args.dry_run:
+            print(sql)
+        else:
+            print("Resetting all data...", file=sys.stderr)
+            execute_sql(sql, "Reset")
+            print("Done.", file=sys.stderr)
         if STATE_FILE.exists():
             STATE_FILE.unlink()
-        print("-- State file cleared.", file=sys.stderr)
+            print("State file cleared.", file=sys.stderr)
         return
 
-    if args.day is None:
-        parser.error("--day N is required (or use --reset / --status)")
+    # Determine total_days and which days to simulate
+    if args.days is not None:
+        total_days = args.days
+        days_to_simulate = list(range(1, total_days + 1))
+    elif args.day is not None:
+        # Legacy single-day mode
+        total_days = args.day  # Assume total = day number (backward compat)
+        days_to_simulate = [args.day]
+    else:
+        parser.error("--days N or --day N is required (or use --reset / --status)")
+        return
 
-    if args.day < 1 or args.day > 40:
-        parser.error("Day must be 1-40")
+    if any(d < 1 or d > 40 for d in days_to_simulate):
+        parser.error("Days must be 1-40")
 
-    state = load_state()
-    state['seed'] = args.seed
+    home_hex = args.home_hex or DEFAULT_HOME_HEX
+    if not args.home_hex:
+        print(f"No --home-hex provided, using default: {DEFAULT_HOME_HEX}", file=sys.stderr)
 
-    if args.day == 1:
+    try:
+        res = h3.get_resolution(home_hex)
+        if res != BASE_RESOLUTION:
+            print(f"WARNING: Home hex is resolution {res}, expected {BASE_RESOLUTION}.", file=sys.stderr)
+    except Exception as e:
+        parser.error(f"Invalid H3 hex ID '{home_hex}': {e}")
+
+    # Initialize state for batch mode (always fresh for --days)
+    if args.days is not None:
+        same_hexes, other_hexes = generate_hexes_from_home(home_hex)
+
         state = default_state()
         state['seed'] = args.seed
-        state['users'] = generate_users(args.seed)
+        state['home_hex'] = home_hex
+        state['same_hexes'] = same_hexes
+        state['other_hexes'] = other_hexes
+        state['total_days'] = total_days
+        state['users'] = generate_users(args.seed, same_hexes, other_hexes)
 
-    expected = args.day - 1
-    if state['last_day'] != expected:
-        if args.day == 1:
-            pass
-        else:
-            print(f"ERROR: Must run day {expected + 1} first. Last completed: day {state['last_day']}", file=sys.stderr)
-            print(f"Run: python3 simulate_day.py --day {state['last_day'] + 1}", file=sys.stderr)
-            sys.exit(1)
-
-    sql = generate_full_sql(state, args.day)
-
-    if args.save:
-        SQL_DIR.mkdir(exist_ok=True)
-        path = SQL_DIR / f'day_{args.day:02d}.sql'
-        path.write_text(sql)
-        print(f"Saved to {path}", file=sys.stderr)
+        # Add real user if specified
+        if args.user_id and args.user_team:
+            state['real_user_id'] = args.user_id
+            state['real_user_team'] = args.user_team
+            state['users'].append({
+                'id': args.user_id,
+                'name': 'You',  # Placeholder — real user's name is already in DB
+                'team': args.user_team,
+                'original_team': args.user_team,
+                'avatar': '\U0001f3c3',
+                'archetype': 'normal',  # Real user gets normal archetype (mid-range)
+                'home_hex': home_hex,
+                'province': 'same',
+                'is_real_user': True,
+            })
+            print(f"Real user {args.user_id} ({args.user_team}) added as 'normal' archetype", file=sys.stderr)
     else:
-        print(sql)
+        # Legacy single-day mode
+        state = load_state()
+        state['seed'] = args.seed
+        if not state.get('same_hexes'):
+            same_hexes, other_hexes = generate_hexes_from_home(home_hex)
+            state['home_hex'] = home_hex
+            state['same_hexes'] = same_hexes
+            state['other_hexes'] = other_hexes
+            state['users'] = generate_users(args.seed, same_hexes, other_hexes)
+        state['total_days'] = total_days
+
+    # Print date mapping
+    print(f"\nDate mapping (total_days={total_days}):", file=sys.stderr)
+    for d in days_to_simulate:
+        rd = run_date_for_day(d, total_days)
+        label = " <- yesterday GMT+2" if rd == today_gmt2() - timedelta(days=1) else ""
+        print(f"  Day {d} -> {rd}{label}", file=sys.stderr)
+    print("", file=sys.stderr)
+
+    # Generate and execute each day
+    for day in days_to_simulate:
+        print(f"Generating day {day}/{total_days}...", file=sys.stderr)
+        sql = generate_full_sql(state, day, total_days)
+
+        if args.save:
+            SQL_DIR.mkdir(exist_ok=True)
+            path = SQL_DIR / f'day_{day:02d}.sql'
+            path.write_text(sql)
+            print(f"Saved to {path}", file=sys.stderr)
+
+        if args.dry_run:
+            print(sql)
+        else:
+            print(f"Executing day {day} SQL...", file=sys.stderr)
+            execute_sql(sql, f"Day {day}")
 
     save_state(state)
-    print(f"\nDay {args.day} generated. State saved.", file=sys.stderr)
     print_status(state)
 
 

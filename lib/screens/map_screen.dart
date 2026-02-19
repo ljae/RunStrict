@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import '../models/location_point.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/hex_data_provider.dart';
 import '../providers/run_provider.dart';
+import '../services/ad_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/prefetch_service.dart';
 import '../services/hex_service.dart';
@@ -274,21 +276,23 @@ class _MapScreenState extends State<MapScreen> {
                 left: 16,
                 right: 16,
                 child: isLandscape
-                    ? Align(
-                        alignment: Alignment.bottomCenter,
-                        child: _ZoomLevelSelector(
-                          selectedIndex: _selectedScope.scopeIndex,
-                          onChanged: _onZoomChanged,
-                        ),
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const _NativeAdCard(),
+                          const SizedBox(height: 10),
+                          _ZoomLevelSelector(
+                            selectedIndex: _selectedScope.scopeIndex,
+                            onChanged: _onZoomChanged,
+                          ),
+                        ],
                       )
                     : Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // CTA card (only in ZONE view)
-                          if (_showUserLocation) ...[
-                            const _CallToActionCard(),
-                            const SizedBox(height: 10),
-                          ],
+                          // Ad banner (all views)
+                          const _NativeAdCard(),
+                          const SizedBox(height: 10),
                           // Zoom level selector (ZONE / CITY / ALL)
                           _ZoomLevelSelector(
                             selectedIndex: _selectedScope.scopeIndex,
@@ -604,131 +608,72 @@ class _ZoomLevelSelector extends StatelessWidget {
   }
 }
 
-class _CallToActionCard extends StatelessWidget {
-  const _CallToActionCard();
+/// Banner ad card positioned above the zoom selector.
+///
+/// Loads a Google AdMob banner ad. Shows nothing while loading / on failure.
+class _NativeAdCard extends StatefulWidget {
+  const _NativeAdCard();
+
+  @override
+  State<_NativeAdCard> createState() => _NativeAdCardState();
+}
+
+class _NativeAdCardState extends State<_NativeAdCard> {
+  BannerAd? _bannerAd;
+  bool _isAdLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAd();
+  }
+
+  void _loadAd() {
+    _bannerAd = BannerAd(
+      adUnitId: AdService.bannerAdUnitId,
+      size: AdSize.banner, // 320x50 standard banner
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (mounted) {
+            setState(() => _isAdLoaded = true);
+          }
+        },
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('BannerAd failed to load: ${error.message}');
+          ad.dispose();
+          _bannerAd = null;
+        },
+      ),
+      request: const AdRequest(),
+    );
+    _bannerAd!.load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        height: 80,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: const Color(0xFF111111),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.06)),
-        ),
-        child: Row(
-          children: [
-            // Product image
-            SizedBox(
-              width: 90,
-              height: 80,
-              child: Image.asset(
-                'assets/images/nike_air_zoom.png',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: const Color(0xFF1A1A1A),
-                    child: const Center(
-                      child: Icon(
-                        Icons.directions_run_rounded,
-                        color: Color(0xFF333333),
-                        size: 32,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 14),
-            // Ad content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'NIKE',
-                          style: GoogleFonts.sora(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.textSecondary,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Air Zoom G.T.',
-                          style: GoogleFonts.sora(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF4500).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '25% OFF',
-                            style: GoogleFonts.sora(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFFFF4500),
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Members Only',
-                          style: GoogleFonts.sora(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '350m away \u2022 Nike Gangnam',
-                      style: GoogleFonts.sora(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        color: AppTheme.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: Icon(
-                Icons.chevron_right_rounded,
-                color: AppTheme.textMuted,
-                size: 18,
-              ),
-            ),
-          ],
-        ),
+    if (!_isAdLoaded || _bannerAd == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      height: 50,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: _bannerAd!.size.width.toDouble(),
+        height: _bannerAd!.size.height.toDouble(),
+        child: AdWidget(ad: _bannerAd!),
       ),
     );
   }

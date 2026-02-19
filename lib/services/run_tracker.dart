@@ -23,6 +23,9 @@ typedef TierChangeCallback =
 /// Callback for run checkpoint (crash recovery)
 typedef RunCheckpointCallback = void Function(Map<String, dynamic> checkpoint);
 
+/// Callback when a 1km lap is completed
+typedef LapCompletedCallback = void Function(int lapNumber, double paceSecPerKm);
+
 /// Result of stopping a run, including data for "The Final Sync"
 class RunStopResult {
   final Run session;
@@ -70,6 +73,7 @@ class RunTracker {
   HexCaptureCallback? _onHexCapture;
   TierChangeCallback? _onTierChange;
   RunCheckpointCallback? _onCheckpoint;
+  LapCompletedCallback? _onLapCompleted;
   Team? _runnerTeam;
   ImpactTier _currentTier = ImpactTier.starter;
   int _maxImpactTierIndex = 0;
@@ -117,10 +121,12 @@ class RunTracker {
     HexCaptureCallback? onHexCapture,
     TierChangeCallback? onTierChange,
     RunCheckpointCallback? onCheckpoint,
+    LapCompletedCallback? onLapCompleted,
   }) {
     _onHexCapture = onHexCapture;
     _onTierChange = onTierChange;
     _onCheckpoint = onCheckpoint;
+    _onLapCompleted = onLapCompleted;
   }
 
   /// Set runner context for scoring
@@ -408,6 +414,8 @@ class RunTracker {
         'duration=${lapDurationSeconds.toStringAsFixed(1)}s',
       );
 
+      _onLapCompleted?.call(lap.lapNumber, lap.avgPaceSecPerKm);
+
       // Reset for next lap - start from current position
       _currentLapStartDistance = currentTotalDistance;
       _currentLapStartTimestampMs = currentTimestampMs;
@@ -460,6 +468,7 @@ class RunTracker {
     _currentLapStartDistance = 0;
     _currentLapStartTimestampMs = null;
     _onCheckpoint = null;
+    _onLapCompleted = null;
 
     // Stop accelerometer
     _accelerometerService.stopListening();

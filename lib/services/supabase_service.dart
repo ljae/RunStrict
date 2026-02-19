@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/h3_config.dart';
 import '../config/supabase_config.dart';
 import '../models/run.dart';
+import 'hex_service.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -74,6 +76,10 @@ class SupabaseService {
         'p_buff_multiplier': run.buffMultiplier,
         'p_cv': run.cv,
         'p_client_points': run.flipPoints,
+        'p_district_hex': run.hexPath.isNotEmpty
+            ? HexService().getParentHexId(
+                run.hexPath.last, H3Config.cityResolution)
+            : null,
       },
     );
     return result as Map<String, dynamic>;
@@ -83,19 +89,42 @@ class SupabaseService {
   ///
   /// Returns: { user, buff_multiplier, hexes_in_viewport }
   /// Called once on app launch to pre-patch all necessary data.
-  Future<Map<String, dynamic>> appLaunchSync(String userId) async {
+  Future<Map<String, dynamic>> appLaunchSync(
+    String userId, {
+    String? districtHex,
+  }) async {
     final result = await client.rpc(
       'app_launch_sync',
-      params: {'p_user_id': userId},
+      params: {
+        'p_user_id': userId,
+        'p_district_hex': districtHex,
+      },
     );
     return result as Map<String, dynamic>;
   }
 
+  /// Fetch user's run history from Supabase for local backfill.
+  /// Returns runs ordered by start_time ASC.
+  Future<List<Map<String, dynamic>>> fetchRunHistory(String userId) async {
+    final result = await client
+        .from('run_history')
+        .select()
+        .eq('user_id', userId)
+        .order('start_time', ascending: true);
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
   /// Get user's current buff multiplier based on team, performance, and city.
-  Future<Map<String, dynamic>> getUserBuff(String userId) async {
+  Future<Map<String, dynamic>> getUserBuff(
+    String userId, {
+    String? districtHex,
+  }) async {
     final result = await client.rpc(
       'get_user_buff',
-      params: {'p_user_id': userId},
+      params: {
+        'p_user_id': userId,
+        'p_district_hex': districtHex,
+      },
     );
     return result as Map<String, dynamic>? ??
         {
@@ -106,10 +135,15 @@ class SupabaseService {
         };
   }
 
-  Future<Map<String, dynamic>> getUserYesterdayStats(String userId) async {
+  Future<Map<String, dynamic>> getUserYesterdayStats(
+    String userId, {
+    String? date,
+  }) async {
+    final params = <String, dynamic>{'p_user_id': userId};
+    if (date != null) params['p_date'] = date;
     final result = await client.rpc(
       'get_user_yesterday_stats',
-      params: {'p_user_id': userId},
+      params: params,
     );
     return result as Map<String, dynamic>? ??
         {'has_data': false, 'run_count': 0};

@@ -139,20 +139,24 @@ class SeasonConfig {
 }
 
 /// Server-configurable buff system thresholds.
+///
+/// Uses District Win + Province Win model (not legacy City Leader model).
 class BuffConfig {
-  // RED team thresholds
-  final double redEliteThreshold;
-  final int redEliteCityLeaderBuff;
-  final int redEliteNonLeaderBuff;
-  final int redCommonCityLeaderBuff;
-  final int redCommonNonLeaderBuff;
+  // RED team
+  final double redEliteThreshold; // 0.20 (top 20%)
+  final int redEliteBase; // 2
+  final int redCommonBase; // 1
 
-  // BLUE team thresholds
-  final int blueUnionCityLeaderBuff;
-  final int blueUnionNonLeaderBuff;
+  // Territory bonuses (additive)
+  final int eliteDistrictWinBonus; // +1
+  final int eliteProvinceWinBonus; // +1
+  final int commonDistrictWinBonus; // +0 (Common gets NO district bonus)
+  final int commonProvinceWinBonus; // +1
 
-  // All Range bonus (additive)
-  final int allRangeBonus;
+  // BLUE team
+  final int blueUnionBase; // 1
+  final int blueDistrictWinBonus; // +1
+  final int blueProvinceWinBonus; // +1
 
   // PURPLE thresholds
   final double purpleHighTierThreshold;
@@ -163,13 +167,15 @@ class BuffConfig {
 
   const BuffConfig({
     this.redEliteThreshold = 0.20,
-    this.redEliteCityLeaderBuff = 3,
-    this.redEliteNonLeaderBuff = 2,
-    this.redCommonCityLeaderBuff = 1,
-    this.redCommonNonLeaderBuff = 1,
-    this.blueUnionCityLeaderBuff = 2,
-    this.blueUnionNonLeaderBuff = 1,
-    this.allRangeBonus = 1,
+    this.redEliteBase = 2,
+    this.redCommonBase = 1,
+    this.eliteDistrictWinBonus = 1,
+    this.eliteProvinceWinBonus = 1,
+    this.commonDistrictWinBonus = 0,
+    this.commonProvinceWinBonus = 1,
+    this.blueUnionBase = 1,
+    this.blueDistrictWinBonus = 1,
+    this.blueProvinceWinBonus = 1,
     this.purpleHighTierThreshold = 0.60,
     this.purpleMidTierThreshold = 0.30,
     this.purpleHighTierBuff = 3,
@@ -181,19 +187,21 @@ class BuffConfig {
 
   factory BuffConfig.fromJson(Map<String, dynamic> json) => BuffConfig(
     redEliteThreshold: (json['redEliteThreshold'] as num?)?.toDouble() ?? 0.20,
-    redEliteCityLeaderBuff:
-        (json['redEliteCityLeaderBuff'] as num?)?.toInt() ?? 3,
-    redEliteNonLeaderBuff:
-        (json['redEliteNonLeaderBuff'] as num?)?.toInt() ?? 2,
-    redCommonCityLeaderBuff:
-        (json['redCommonCityLeaderBuff'] as num?)?.toInt() ?? 1,
-    redCommonNonLeaderBuff:
-        (json['redCommonNonLeaderBuff'] as num?)?.toInt() ?? 1,
-    blueUnionCityLeaderBuff:
-        (json['blueUnionCityLeaderBuff'] as num?)?.toInt() ?? 2,
-    blueUnionNonLeaderBuff:
-        (json['blueUnionNonLeaderBuff'] as num?)?.toInt() ?? 1,
-    allRangeBonus: (json['allRangeBonus'] as num?)?.toInt() ?? 1,
+    redEliteBase: (json['redEliteBase'] as num?)?.toInt() ?? 2,
+    redCommonBase: (json['redCommonBase'] as num?)?.toInt() ?? 1,
+    eliteDistrictWinBonus:
+        (json['eliteDistrictWinBonus'] as num?)?.toInt() ?? 1,
+    eliteProvinceWinBonus:
+        (json['eliteProvinceWinBonus'] as num?)?.toInt() ?? 1,
+    commonDistrictWinBonus:
+        (json['commonDistrictWinBonus'] as num?)?.toInt() ?? 0,
+    commonProvinceWinBonus:
+        (json['commonProvinceWinBonus'] as num?)?.toInt() ?? 1,
+    blueUnionBase: (json['blueUnionBase'] as num?)?.toInt() ?? 1,
+    blueDistrictWinBonus:
+        (json['blueDistrictWinBonus'] as num?)?.toInt() ?? 1,
+    blueProvinceWinBonus:
+        (json['blueProvinceWinBonus'] as num?)?.toInt() ?? 1,
     purpleHighTierThreshold:
         (json['purpleHighTierThreshold'] as num?)?.toDouble() ?? 0.60,
     purpleMidTierThreshold:
@@ -205,13 +213,15 @@ class BuffConfig {
 
   Map<String, dynamic> toJson() => {
     'redEliteThreshold': redEliteThreshold,
-    'redEliteCityLeaderBuff': redEliteCityLeaderBuff,
-    'redEliteNonLeaderBuff': redEliteNonLeaderBuff,
-    'redCommonCityLeaderBuff': redCommonCityLeaderBuff,
-    'redCommonNonLeaderBuff': redCommonNonLeaderBuff,
-    'blueUnionCityLeaderBuff': blueUnionCityLeaderBuff,
-    'blueUnionNonLeaderBuff': blueUnionNonLeaderBuff,
-    'allRangeBonus': allRangeBonus,
+    'redEliteBase': redEliteBase,
+    'redCommonBase': redCommonBase,
+    'eliteDistrictWinBonus': eliteDistrictWinBonus,
+    'eliteProvinceWinBonus': eliteProvinceWinBonus,
+    'commonDistrictWinBonus': commonDistrictWinBonus,
+    'commonProvinceWinBonus': commonProvinceWinBonus,
+    'blueUnionBase': blueUnionBase,
+    'blueDistrictWinBonus': blueDistrictWinBonus,
+    'blueProvinceWinBonus': blueProvinceWinBonus,
     'purpleHighTierThreshold': purpleHighTierThreshold,
     'purpleMidTierThreshold': purpleMidTierThreshold,
     'purpleHighTierBuff': purpleHighTierBuff,
@@ -221,13 +231,15 @@ class BuffConfig {
 
   BuffConfig copyWith({
     double? redEliteThreshold,
-    int? redEliteCityLeaderBuff,
-    int? redEliteNonLeaderBuff,
-    int? redCommonCityLeaderBuff,
-    int? redCommonNonLeaderBuff,
-    int? blueUnionCityLeaderBuff,
-    int? blueUnionNonLeaderBuff,
-    int? allRangeBonus,
+    int? redEliteBase,
+    int? redCommonBase,
+    int? eliteDistrictWinBonus,
+    int? eliteProvinceWinBonus,
+    int? commonDistrictWinBonus,
+    int? commonProvinceWinBonus,
+    int? blueUnionBase,
+    int? blueDistrictWinBonus,
+    int? blueProvinceWinBonus,
     double? purpleHighTierThreshold,
     double? purpleMidTierThreshold,
     int? purpleHighTierBuff,
@@ -235,18 +247,21 @@ class BuffConfig {
     int? purpleLowTierBuff,
   }) => BuffConfig(
     redEliteThreshold: redEliteThreshold ?? this.redEliteThreshold,
-    redEliteCityLeaderBuff:
-        redEliteCityLeaderBuff ?? this.redEliteCityLeaderBuff,
-    redEliteNonLeaderBuff: redEliteNonLeaderBuff ?? this.redEliteNonLeaderBuff,
-    redCommonCityLeaderBuff:
-        redCommonCityLeaderBuff ?? this.redCommonCityLeaderBuff,
-    redCommonNonLeaderBuff:
-        redCommonNonLeaderBuff ?? this.redCommonNonLeaderBuff,
-    blueUnionCityLeaderBuff:
-        blueUnionCityLeaderBuff ?? this.blueUnionCityLeaderBuff,
-    blueUnionNonLeaderBuff:
-        blueUnionNonLeaderBuff ?? this.blueUnionNonLeaderBuff,
-    allRangeBonus: allRangeBonus ?? this.allRangeBonus,
+    redEliteBase: redEliteBase ?? this.redEliteBase,
+    redCommonBase: redCommonBase ?? this.redCommonBase,
+    eliteDistrictWinBonus:
+        eliteDistrictWinBonus ?? this.eliteDistrictWinBonus,
+    eliteProvinceWinBonus:
+        eliteProvinceWinBonus ?? this.eliteProvinceWinBonus,
+    commonDistrictWinBonus:
+        commonDistrictWinBonus ?? this.commonDistrictWinBonus,
+    commonProvinceWinBonus:
+        commonProvinceWinBonus ?? this.commonProvinceWinBonus,
+    blueUnionBase: blueUnionBase ?? this.blueUnionBase,
+    blueDistrictWinBonus:
+        blueDistrictWinBonus ?? this.blueDistrictWinBonus,
+    blueProvinceWinBonus:
+        blueProvinceWinBonus ?? this.blueProvinceWinBonus,
     purpleHighTierThreshold:
         purpleHighTierThreshold ?? this.purpleHighTierThreshold,
     purpleMidTierThreshold:

@@ -1,6 +1,171 @@
 {
-  "last_day": 1,
-  "seed": 100,
+  "last_day": 5,
+  "seed": 42,
+  "home_hex": "89283472a93ffff",
+  "same_hexes": [
+    "89283472803ffff",
+    "89283472807ffff",
+    "8928347280bffff",
+    "8928347280fffff",
+    "89283472813ffff",
+    "89283472817ffff",
+    "8928347281bffff",
+    "89283472823ffff",
+    "89283472827ffff",
+    "8928347282bffff",
+    "8928347282fffff",
+    "89283472833ffff",
+    "89283472837ffff",
+    "8928347283bffff",
+    "89283472843ffff",
+    "89283472847ffff",
+    "8928347284bffff",
+    "8928347284fffff",
+    "89283472853ffff",
+    "89283472857ffff",
+    "8928347285bffff",
+    "89283472863ffff",
+    "89283472867ffff",
+    "8928347286bffff",
+    "8928347286fffff",
+    "89283472873ffff",
+    "89283472877ffff",
+    "8928347287bffff",
+    "89283472883ffff",
+    "89283472887ffff",
+    "8928347288bffff",
+    "8928347288fffff",
+    "89283472893ffff",
+    "89283472897ffff",
+    "8928347289bffff",
+    "892834728a3ffff",
+    "892834728a7ffff",
+    "892834728abffff",
+    "892834728afffff",
+    "892834728b3ffff",
+    "89283470003ffff",
+    "89283470007ffff",
+    "8928347000bffff",
+    "8928347000fffff",
+    "89283470013ffff",
+    "89283470017ffff",
+    "8928347001bffff",
+    "89283470803ffff",
+    "89283470807ffff",
+    "8928347080bffff",
+    "8928347080fffff",
+    "89283470813ffff",
+    "89283470817ffff",
+    "8928347081bffff",
+    "89283471003ffff",
+    "89283471007ffff",
+    "8928347100bffff",
+    "8928347100fffff",
+    "89283471013ffff",
+    "89283471017ffff",
+    "8928347101bffff",
+    "89283471803ffff",
+    "89283471807ffff",
+    "8928347180bffff",
+    "8928347180fffff",
+    "89283471813ffff",
+    "89283471817ffff",
+    "8928347181bffff",
+    "89283472003ffff",
+    "89283472007ffff",
+    "8928347200bffff",
+    "8928347200fffff",
+    "89283472013ffff",
+    "89283472017ffff",
+    "8928347201bffff",
+    "89283473003ffff",
+    "89283473007ffff",
+    "8928347300bffff",
+    "8928347300fffff",
+    "89283473013ffff"
+  ],
+  "other_hexes": [
+    "89283408003ffff",
+    "89283408007ffff",
+    "8928340800bffff",
+    "8928340800fffff",
+    "89283408013ffff",
+    "89283408017ffff",
+    "8928340801bffff",
+    "89283408023ffff",
+    "89283408027ffff",
+    "8928340802bffff",
+    "8928340802fffff",
+    "89283408033ffff",
+    "89283408037ffff",
+    "8928340803bffff",
+    "89283408043ffff",
+    "89283408047ffff",
+    "8928340804bffff",
+    "8928340804fffff",
+    "89283408053ffff",
+    "89283408057ffff",
+    "8928340805bffff",
+    "89283408063ffff",
+    "89283408067ffff",
+    "8928340806bffff",
+    "8928340806fffff",
+    "89283408073ffff",
+    "89283408077ffff",
+    "8928340807bffff",
+    "89283408083ffff",
+    "89283408087ffff",
+    "8928340808bffff",
+    "8928340808fffff",
+    "89283408093ffff",
+    "89283408097ffff",
+    "8928340809bffff",
+    "892834080a3ffff",
+    "892834080a7ffff",
+    "892834080abffff",
+    "892834080afffff",
+    "892834080b3ffff",
+    "892834080b7ffff",
+    "892834080bbffff",
+    "892834080c3ffff",
+    "892834080c7ffff",
+    "892834080cbffff",
+    "892834080cfffff",
+    "892834080d3ffff",
+    "892834080d7ffff",
+    "892834080dbffff",
+    "89283408103ffff",
+    "89283408107ffff",
+    "8928340810bffff",
+    "8928340810fffff",
+    "89283408113ffff",
+    "89283408117ffff",
+    "8928340811bffff",
+    "89283408123ffff",
+    "89283408127ffff",
+    "8928340812bffff",
+    "8928340812fffff",
+    "89283408133ffff",
+    "89283408137ffff",
+    "8928340813bffff",
+    "89283408143ffff",
+    "89283408147ffff",
+    "8928340814bffff",
+    "8928340814fffff",
+    "89283408153ffff",
+    "89283408157ffff",
+    "8928340815bffff",
+    "89283408163ffff",
+    "89283408167ffff",
+    "8928340816bffff",
+    "8928340816fffff",
+    "89283408173ffff",
+    "89283408177ffff",
+    "8928340817bffff",
+    "89283408183ffff",
+    "89283408187ffff",
+    "8928340818bffff"
+  ],
   "users": [
     {
       "id": "aaaaaaaa-0000-0000-0000-000000000000",
@@ -8,8 +173,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3",
-      "archetype": "star",
-      "home_hex": "89283082803ffff"
+      "archetype": "elite",
+      "home_hex": "89283472803ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0001-0001-0001-000000000001",
@@ -17,8 +185,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "star",
-      "home_hex": "89283082807ffff"
+      "archetype": "elite",
+      "home_hex": "89283472807ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0002-0002-0002-000000000002",
@@ -26,8 +197,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "star",
-      "home_hex": "8928308280bffff"
+      "archetype": "elite",
+      "home_hex": "8928347280bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0003-0003-0003-000000000003",
@@ -35,8 +209,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83e\udd8a",
-      "archetype": "star",
-      "home_hex": "8928308280fffff"
+      "archetype": "elite",
+      "home_hex": "8928347280fffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0004-0004-0004-000000000004",
@@ -44,8 +221,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc3a",
-      "archetype": "star",
-      "home_hex": "89283082813ffff"
+      "archetype": "elite",
+      "home_hex": "89283472813ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0005-0005-0005-000000000005",
@@ -53,8 +233,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83e\udd85",
-      "archetype": "star",
-      "home_hex": "89283082817ffff"
+      "archetype": "elite",
+      "home_hex": "89283472817ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0006-0006-0006-000000000006",
@@ -62,8 +245,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc2c",
-      "archetype": "star",
-      "home_hex": "8928308281bffff"
+      "archetype": "elite",
+      "home_hex": "8928347281bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0007-0007-0007-000000000007",
@@ -71,8 +257,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udd25",
-      "archetype": "star",
-      "home_hex": "8928308281fffff"
+      "archetype": "elite",
+      "home_hex": "89283472823ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0008-0008-0008-000000000008",
@@ -80,8 +269,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udca8",
-      "archetype": "star",
-      "home_hex": "89283082823ffff"
+      "archetype": "elite",
+      "home_hex": "89283472827ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0009-0009-0009-000000000009",
@@ -89,8 +281,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\u26a1",
-      "archetype": "star",
-      "home_hex": "89283082827ffff"
+      "archetype": "elite",
+      "home_hex": "8928347282bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0010-0010-0010-000000000010",
@@ -98,8 +293,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udf0a",
-      "archetype": "regular",
-      "home_hex": "8928308282bffff"
+      "archetype": "elite",
+      "home_hex": "8928347282fffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "GB"
     },
     {
       "id": "aaaaaaaa-0011-0011-0011-000000000011",
@@ -107,8 +305,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udf2a\ufe0f",
-      "archetype": "regular",
-      "home_hex": "8928308282fffff"
+      "archetype": "elite",
+      "home_hex": "89283472833ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "DE"
     },
     {
       "id": "aaaaaaaa-0012-0012-0012-000000000012",
@@ -116,8 +317,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc8e",
-      "archetype": "regular",
-      "home_hex": "89283082833ffff"
+      "archetype": "elite",
+      "home_hex": "89283472837ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "FR"
     },
     {
       "id": "aaaaaaaa-0013-0013-0013-000000000013",
@@ -125,8 +329,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\ude80",
-      "archetype": "regular",
-      "home_hex": "89283082837ffff"
+      "archetype": "elite",
+      "home_hex": "8928347283bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "AU"
     },
     {
       "id": "aaaaaaaa-0014-0014-0014-000000000014",
@@ -134,8 +341,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udf1f",
-      "archetype": "regular",
-      "home_hex": "8928308283bffff"
+      "archetype": "elite",
+      "home_hex": "89283472843ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "CA"
     },
     {
       "id": "aaaaaaaa-0015-0015-0015-000000000015",
@@ -143,8 +353,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\u2728",
-      "archetype": "regular",
-      "home_hex": "8928308283fffff"
+      "archetype": "elite",
+      "home_hex": "89283472847ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "BR"
     },
     {
       "id": "aaaaaaaa-0016-0016-0016-000000000016",
@@ -152,8 +365,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3",
-      "archetype": "regular",
-      "home_hex": "89283082843ffff"
+      "archetype": "elite",
+      "home_hex": "8928347284bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "IN"
     },
     {
       "id": "aaaaaaaa-0017-0017-0017-000000000017",
@@ -161,8 +377,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "regular",
-      "home_hex": "89283082847ffff"
+      "archetype": "elite",
+      "home_hex": "8928347284fffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "MX"
     },
     {
       "id": "aaaaaaaa-0018-0018-0018-000000000018",
@@ -170,8 +389,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "regular",
-      "home_hex": "8928308284bffff"
+      "archetype": "elite",
+      "home_hex": "89283472853ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "IT"
     },
     {
       "id": "aaaaaaaa-0019-0019-0019-000000000019",
@@ -179,8 +401,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83e\udd8a",
-      "archetype": "regular",
-      "home_hex": "8928308284fffff"
+      "archetype": "elite",
+      "home_hex": "89283472857ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "ES"
     },
     {
       "id": "aaaaaaaa-0020-0020-0020-000000000020",
@@ -188,8 +413,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc3a",
-      "archetype": "regular",
-      "home_hex": "89283082853ffff"
+      "archetype": "normal",
+      "home_hex": "8928347285bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0021-0021-0021-000000000021",
@@ -197,8 +425,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83e\udd85",
-      "archetype": "regular",
-      "home_hex": "89283082857ffff"
+      "archetype": "normal",
+      "home_hex": "89283472863ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0022-0022-0022-000000000022",
@@ -206,8 +437,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc2c",
-      "archetype": "regular",
-      "home_hex": "8928308285bffff"
+      "archetype": "normal",
+      "home_hex": "89283472867ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0023-0023-0023-000000000023",
@@ -215,8 +449,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udd25",
-      "archetype": "regular",
-      "home_hex": "8928308285fffff"
+      "archetype": "normal",
+      "home_hex": "8928347286bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0024-0024-0024-000000000024",
@@ -224,8 +461,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udca8",
-      "archetype": "regular",
-      "home_hex": "89283082863ffff"
+      "archetype": "normal",
+      "home_hex": "8928347286fffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0025-0025-0025-000000000025",
@@ -233,8 +473,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\u26a1",
-      "archetype": "regular",
-      "home_hex": "89283082867ffff"
+      "archetype": "normal",
+      "home_hex": "89283472873ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0026-0026-0026-000000000026",
@@ -242,8 +485,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udf0a",
-      "archetype": "regular",
-      "home_hex": "8928308286bffff"
+      "archetype": "normal",
+      "home_hex": "89283472877ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0027-0027-0027-000000000027",
@@ -251,8 +497,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udf2a\ufe0f",
-      "archetype": "regular",
-      "home_hex": "8928308286fffff"
+      "archetype": "normal",
+      "home_hex": "8928347287bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0028-0028-0028-000000000028",
@@ -260,8 +509,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc8e",
-      "archetype": "regular",
-      "home_hex": "89283082873ffff"
+      "archetype": "normal",
+      "home_hex": "89283472883ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0029-0029-0029-000000000029",
@@ -269,8 +521,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\ude80",
-      "archetype": "regular",
-      "home_hex": "89283082877ffff"
+      "archetype": "normal",
+      "home_hex": "89283472887ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0030-0030-0030-000000000030",
@@ -278,8 +533,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udf1f",
-      "archetype": "regular",
-      "home_hex": "8928308287bffff"
+      "archetype": "normal",
+      "home_hex": "8928347288bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "GB"
     },
     {
       "id": "aaaaaaaa-0031-0031-0031-000000000031",
@@ -287,8 +545,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\u2728",
-      "archetype": "regular",
-      "home_hex": "8928308287fffff"
+      "archetype": "normal",
+      "home_hex": "8928347288fffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "DE"
     },
     {
       "id": "aaaaaaaa-0032-0032-0032-000000000032",
@@ -296,8 +557,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3",
-      "archetype": "regular",
-      "home_hex": "89283082883ffff"
+      "archetype": "normal",
+      "home_hex": "89283472893ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "FR"
     },
     {
       "id": "aaaaaaaa-0033-0033-0033-000000000033",
@@ -305,8 +569,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "regular",
-      "home_hex": "89283082887ffff"
+      "archetype": "normal",
+      "home_hex": "89283472897ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "AU"
     },
     {
       "id": "aaaaaaaa-0034-0034-0034-000000000034",
@@ -314,8 +581,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "regular",
-      "home_hex": "8928308288bffff"
+      "archetype": "normal",
+      "home_hex": "8928347289bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "CA"
     },
     {
       "id": "aaaaaaaa-0035-0035-0035-000000000035",
@@ -323,8 +593,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83e\udd8a",
-      "archetype": "regular",
-      "home_hex": "8928308288fffff"
+      "archetype": "normal",
+      "home_hex": "892834728a3ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "BR"
     },
     {
       "id": "aaaaaaaa-0036-0036-0036-000000000036",
@@ -332,8 +605,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc3a",
-      "archetype": "regular",
-      "home_hex": "89283082893ffff"
+      "archetype": "normal",
+      "home_hex": "892834728a7ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "IN"
     },
     {
       "id": "aaaaaaaa-0037-0037-0037-000000000037",
@@ -341,8 +617,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83e\udd85",
-      "archetype": "regular",
-      "home_hex": "89283082897ffff"
+      "archetype": "normal",
+      "home_hex": "892834728abffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "MX"
     },
     {
       "id": "aaaaaaaa-0038-0038-0038-000000000038",
@@ -350,8 +629,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udc2c",
-      "archetype": "regular",
-      "home_hex": "8928308289bffff"
+      "archetype": "normal",
+      "home_hex": "892834728afffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "IT"
     },
     {
       "id": "aaaaaaaa-0039-0039-0039-000000000039",
@@ -359,8 +641,11 @@
       "team": "red",
       "original_team": "red",
       "avatar": "\ud83d\udd25",
-      "archetype": "regular",
-      "home_hex": "8928308289fffff"
+      "archetype": "normal",
+      "home_hex": "892834728b3ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "ES"
     },
     {
       "id": "aaaaaaaa-0040-0040-0040-000000000040",
@@ -368,8 +653,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udca8",
-      "archetype": "regular",
-      "home_hex": "892830828a3ffff"
+      "archetype": "normal",
+      "home_hex": "89283470003ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0041-0041-0041-000000000041",
@@ -377,8 +665,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\u26a1",
-      "archetype": "regular",
-      "home_hex": "892830828a7ffff"
+      "archetype": "normal",
+      "home_hex": "89283470007ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0042-0042-0042-000000000042",
@@ -386,8 +677,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf0a",
-      "archetype": "regular",
-      "home_hex": "892830828abffff"
+      "archetype": "normal",
+      "home_hex": "8928347000bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0043-0043-0043-000000000043",
@@ -395,8 +689,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf2a\ufe0f",
-      "archetype": "regular",
-      "home_hex": "892830828afffff"
+      "archetype": "normal",
+      "home_hex": "8928347000fffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0044-0044-0044-000000000044",
@@ -404,8 +701,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc8e",
-      "archetype": "regular",
-      "home_hex": "892830828b3ffff"
+      "archetype": "normal",
+      "home_hex": "89283470013ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0045-0045-0045-000000000045",
@@ -413,8 +713,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\ude80",
-      "archetype": "regular",
-      "home_hex": "892830828b7ffff"
+      "archetype": "normal",
+      "home_hex": "89283470017ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0046-0046-0046-000000000046",
@@ -422,8 +725,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf1f",
-      "archetype": "regular",
-      "home_hex": "892830828bbffff"
+      "archetype": "normal",
+      "home_hex": "8928347001bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0047-0047-0047-000000000047",
@@ -431,8 +737,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\u2728",
-      "archetype": "regular",
-      "home_hex": "892830828bfffff"
+      "archetype": "normal",
+      "home_hex": "89283470803ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0048-0048-0048-000000000048",
@@ -440,8 +749,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udfc3",
-      "archetype": "regular",
-      "home_hex": "892830828c3ffff"
+      "archetype": "normal",
+      "home_hex": "89283470807ffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0049-0049-0049-000000000049",
@@ -449,8 +761,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "regular",
-      "home_hex": "892830828c7ffff"
+      "archetype": "normal",
+      "home_hex": "8928347080bffff",
+      "province": "same",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0050-0050-0050-000000000050",
@@ -458,8 +773,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "casual",
-      "home_hex": "892830828cbffff"
+      "archetype": "normal",
+      "home_hex": "89283408003ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "GB"
     },
     {
       "id": "aaaaaaaa-0051-0051-0051-000000000051",
@@ -467,8 +785,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83e\udd8a",
-      "archetype": "casual",
-      "home_hex": "892830828cfffff"
+      "archetype": "normal",
+      "home_hex": "89283408007ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "DE"
     },
     {
       "id": "aaaaaaaa-0052-0052-0052-000000000052",
@@ -476,8 +797,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc3a",
-      "archetype": "casual",
-      "home_hex": "892830828d3ffff"
+      "archetype": "normal",
+      "home_hex": "8928340800bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "FR"
     },
     {
       "id": "aaaaaaaa-0053-0053-0053-000000000053",
@@ -485,8 +809,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83e\udd85",
-      "archetype": "casual",
-      "home_hex": "892830828d7ffff"
+      "archetype": "normal",
+      "home_hex": "8928340800fffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "AU"
     },
     {
       "id": "aaaaaaaa-0054-0054-0054-000000000054",
@@ -494,8 +821,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc2c",
-      "archetype": "casual",
-      "home_hex": "892830828dbffff"
+      "archetype": "normal",
+      "home_hex": "89283408013ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "CA"
     },
     {
       "id": "aaaaaaaa-0055-0055-0055-000000000055",
@@ -503,8 +833,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udd25",
-      "archetype": "casual",
-      "home_hex": "892830828dfffff"
+      "archetype": "normal",
+      "home_hex": "89283408017ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "BR"
     },
     {
       "id": "aaaaaaaa-0056-0056-0056-000000000056",
@@ -512,8 +845,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udca8",
-      "archetype": "casual",
-      "home_hex": "892830828e3ffff"
+      "archetype": "normal",
+      "home_hex": "8928340801bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "IN"
     },
     {
       "id": "aaaaaaaa-0057-0057-0057-000000000057",
@@ -521,8 +857,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\u26a1",
-      "archetype": "casual",
-      "home_hex": "892830828e7ffff"
+      "archetype": "normal",
+      "home_hex": "89283408023ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "MX"
     },
     {
       "id": "aaaaaaaa-0058-0058-0058-000000000058",
@@ -530,8 +869,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf0a",
-      "archetype": "casual",
-      "home_hex": "892830828ebffff"
+      "archetype": "normal",
+      "home_hex": "89283408027ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "IT"
     },
     {
       "id": "aaaaaaaa-0059-0059-0059-000000000059",
@@ -539,8 +881,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf2a\ufe0f",
-      "archetype": "casual",
-      "home_hex": "892830828efffff"
+      "archetype": "normal",
+      "home_hex": "8928340802bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "ES"
     },
     {
       "id": "aaaaaaaa-0060-0060-0060-000000000060",
@@ -548,8 +893,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc8e",
-      "archetype": "casual",
-      "home_hex": "892830828f3ffff"
+      "archetype": "normal",
+      "home_hex": "8928340802fffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0061-0061-0061-000000000061",
@@ -557,8 +905,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\ude80",
-      "archetype": "casual",
-      "home_hex": "892830828f7ffff"
+      "archetype": "normal",
+      "home_hex": "89283408033ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0062-0062-0062-000000000062",
@@ -566,8 +917,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf1f",
-      "archetype": "casual",
-      "home_hex": "892830828fbffff"
+      "archetype": "normal",
+      "home_hex": "89283408037ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0063-0063-0063-000000000063",
@@ -575,8 +929,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\u2728",
-      "archetype": "casual",
-      "home_hex": "892830828ffffff"
+      "archetype": "normal",
+      "home_hex": "8928340803bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0064-0064-0064-000000000064",
@@ -584,8 +941,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udfc3",
-      "archetype": "casual",
-      "home_hex": "89283082903ffff"
+      "archetype": "normal",
+      "home_hex": "89283408043ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0065-0065-0065-000000000065",
@@ -593,8 +953,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "casual",
-      "home_hex": "89283082907ffff"
+      "archetype": "normal",
+      "home_hex": "89283408047ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0066-0066-0066-000000000066",
@@ -602,8 +965,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "casual",
-      "home_hex": "8928308290bffff"
+      "archetype": "normal",
+      "home_hex": "8928340804bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0067-0067-0067-000000000067",
@@ -611,8 +977,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83e\udd8a",
-      "archetype": "casual",
-      "home_hex": "8928308290fffff"
+      "archetype": "normal",
+      "home_hex": "8928340804fffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0068-0068-0068-000000000068",
@@ -620,8 +989,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc3a",
-      "archetype": "casual",
-      "home_hex": "89283082913ffff"
+      "archetype": "normal",
+      "home_hex": "89283408053ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0069-0069-0069-000000000069",
@@ -629,8 +1001,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83e\udd85",
-      "archetype": "casual",
-      "home_hex": "89283082917ffff"
+      "archetype": "normal",
+      "home_hex": "89283408057ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0070-0070-0070-000000000070",
@@ -638,8 +1013,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc2c",
-      "archetype": "casual",
-      "home_hex": "8928308291bffff"
+      "archetype": "normal",
+      "home_hex": "8928340805bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "GB"
     },
     {
       "id": "aaaaaaaa-0071-0071-0071-000000000071",
@@ -647,8 +1025,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udd25",
-      "archetype": "casual",
-      "home_hex": "8928308291fffff"
+      "archetype": "normal",
+      "home_hex": "89283408063ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "DE"
     },
     {
       "id": "aaaaaaaa-0072-0072-0072-000000000072",
@@ -656,8 +1037,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udca8",
-      "archetype": "casual",
-      "home_hex": "89283082923ffff"
+      "archetype": "normal",
+      "home_hex": "89283408067ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "FR"
     },
     {
       "id": "aaaaaaaa-0073-0073-0073-000000000073",
@@ -665,8 +1049,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\u26a1",
-      "archetype": "casual",
-      "home_hex": "89283082927ffff"
+      "archetype": "normal",
+      "home_hex": "8928340806bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "AU"
     },
     {
       "id": "aaaaaaaa-0074-0074-0074-000000000074",
@@ -674,8 +1061,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf0a",
-      "archetype": "casual",
-      "home_hex": "8928308292bffff"
+      "archetype": "normal",
+      "home_hex": "8928340806fffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "CA"
     },
     {
       "id": "aaaaaaaa-0075-0075-0075-000000000075",
@@ -683,8 +1073,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf2a\ufe0f",
-      "archetype": "casual",
-      "home_hex": "8928308292fffff"
+      "archetype": "normal",
+      "home_hex": "89283408073ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "BR"
     },
     {
       "id": "aaaaaaaa-0076-0076-0076-000000000076",
@@ -692,8 +1085,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\udc8e",
-      "archetype": "casual",
-      "home_hex": "89283082933ffff"
+      "archetype": "normal",
+      "home_hex": "89283408077ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "IN"
     },
     {
       "id": "aaaaaaaa-0077-0077-0077-000000000077",
@@ -701,8 +1097,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83d\ude80",
-      "archetype": "casual",
-      "home_hex": "89283082937ffff"
+      "archetype": "normal",
+      "home_hex": "8928340807bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "MX"
     },
     {
       "id": "aaaaaaaa-0078-0078-0078-000000000078",
@@ -710,8 +1109,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\ud83c\udf1f",
-      "archetype": "casual",
-      "home_hex": "8928308293bffff"
+      "archetype": "normal",
+      "home_hex": "89283408083ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "IT"
     },
     {
       "id": "aaaaaaaa-0079-0079-0079-000000000079",
@@ -719,8 +1121,11 @@
       "team": "blue",
       "original_team": "blue",
       "avatar": "\u2728",
-      "archetype": "casual",
-      "home_hex": "8928308293fffff"
+      "archetype": "normal",
+      "home_hex": "89283408087ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "ES"
     },
     {
       "id": "aaaaaaaa-0080-0080-0080-000000000080",
@@ -728,8 +1133,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udfc3",
-      "archetype": "casual",
-      "home_hex": "89283082943ffff"
+      "archetype": "normal",
+      "home_hex": "8928340808bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0081-0081-0081-000000000081",
@@ -737,8 +1145,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "casual",
-      "home_hex": "89283082947ffff"
+      "archetype": "normal",
+      "home_hex": "8928340808fffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0082-0082-0082-000000000082",
@@ -746,8 +1157,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "casual",
-      "home_hex": "8928308294bffff"
+      "archetype": "normal",
+      "home_hex": "89283408093ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0083-0083-0083-000000000083",
@@ -755,8 +1169,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83e\udd8a",
-      "archetype": "casual",
-      "home_hex": "8928308294fffff"
+      "archetype": "normal",
+      "home_hex": "89283408097ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0084-0084-0084-000000000084",
@@ -764,8 +1181,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83d\udc3a",
-      "archetype": "casual",
-      "home_hex": "89283082953ffff"
+      "archetype": "normal",
+      "home_hex": "8928340809bffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "KR"
     },
     {
       "id": "aaaaaaaa-0085-0085-0085-000000000085",
@@ -773,8 +1193,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83e\udd85",
-      "archetype": "ghost",
-      "home_hex": "89283082957ffff"
+      "archetype": "normal",
+      "home_hex": "892834080a3ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0086-0086-0086-000000000086",
@@ -782,8 +1205,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83d\udc2c",
-      "archetype": "ghost",
-      "home_hex": "8928308295bffff"
+      "archetype": "normal",
+      "home_hex": "892834080a7ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0087-0087-0087-000000000087",
@@ -791,8 +1217,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83d\udd25",
-      "archetype": "ghost",
-      "home_hex": "8928308295fffff"
+      "archetype": "normal",
+      "home_hex": "892834080abffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "US"
     },
     {
       "id": "aaaaaaaa-0088-0088-0088-000000000088",
@@ -800,8 +1229,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83d\udca8",
-      "archetype": "ghost",
-      "home_hex": "89283082963ffff"
+      "archetype": "normal",
+      "home_hex": "892834080afffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0089-0089-0089-000000000089",
@@ -809,8 +1241,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\u26a1",
-      "archetype": "ghost",
-      "home_hex": "89283082967ffff"
+      "archetype": "normal",
+      "home_hex": "892834080b3ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "JP"
     },
     {
       "id": "aaaaaaaa-0090-0090-0090-000000000090",
@@ -818,8 +1253,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udf0a",
-      "archetype": "ghost",
-      "home_hex": "8928308296bffff"
+      "archetype": "slow",
+      "home_hex": "892834080b7ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "GB"
     },
     {
       "id": "aaaaaaaa-0091-0091-0091-000000000091",
@@ -827,8 +1265,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udf2a\ufe0f",
-      "archetype": "ghost",
-      "home_hex": "8928308296fffff"
+      "archetype": "slow",
+      "home_hex": "892834080bbffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "DE"
     },
     {
       "id": "aaaaaaaa-0092-0092-0092-000000000092",
@@ -836,8 +1277,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83d\udc8e",
-      "archetype": "ghost",
-      "home_hex": "89283082973ffff"
+      "archetype": "slow",
+      "home_hex": "892834080c3ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "FR"
     },
     {
       "id": "aaaaaaaa-0093-0093-0093-000000000093",
@@ -845,8 +1289,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83d\ude80",
-      "archetype": "ghost",
-      "home_hex": "89283082977ffff"
+      "archetype": "slow",
+      "home_hex": "892834080c7ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "AU"
     },
     {
       "id": "aaaaaaaa-0094-0094-0094-000000000094",
@@ -854,8 +1301,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udf1f",
-      "archetype": "ghost",
-      "home_hex": "8928308297bffff"
+      "archetype": "slow",
+      "home_hex": "892834080cbffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "CA"
     },
     {
       "id": "aaaaaaaa-0095-0095-0095-000000000095",
@@ -863,8 +1313,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\u2728",
-      "archetype": "ghost",
-      "home_hex": "8928308297fffff"
+      "archetype": "slow",
+      "home_hex": "892834080cfffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "BR"
     },
     {
       "id": "aaaaaaaa-0096-0096-0096-000000000096",
@@ -872,8 +1325,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udfc3",
-      "archetype": "ghost",
-      "home_hex": "89283082983ffff"
+      "archetype": "slow",
+      "home_hex": "892834080d3ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "IN"
     },
     {
       "id": "aaaaaaaa-0097-0097-0097-000000000097",
@@ -881,8 +1337,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udfc3\u200d\u2642\ufe0f",
-      "archetype": "ghost",
-      "home_hex": "89283082987ffff"
+      "archetype": "slow",
+      "home_hex": "892834080d7ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "MX"
     },
     {
       "id": "aaaaaaaa-0098-0098-0098-000000000098",
@@ -890,8 +1349,11 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83c\udfc3\u200d\u2640\ufe0f",
-      "archetype": "ghost",
-      "home_hex": "8928308298bffff"
+      "archetype": "slow",
+      "home_hex": "892834080dbffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "IT"
     },
     {
       "id": "aaaaaaaa-0099-0099-0099-000000000099",
@@ -899,567 +1361,1063 @@
       "team": "purple",
       "original_team": "purple",
       "avatar": "\ud83e\udd8a",
-      "archetype": "ghost",
-      "home_hex": "8928308298fffff"
+      "archetype": "slow",
+      "home_hex": "89283408103ffff",
+      "province": "other",
+      "is_real_user": false,
+      "nationality": "ES"
+    },
+    {
+      "id": "ff09fc1d-7f75-42da-9279-13a379c0c407",
+      "name": "You",
+      "team": "red",
+      "original_team": "red",
+      "avatar": "\ud83c\udfc3",
+      "archetype": "normal",
+      "home_hex": "89283472a93ffff",
+      "province": "same",
+      "is_real_user": true
     }
   ],
   "user_points": {
-    "aaaaaaaa-0000-0000-0000-000000000000": 18,
-    "aaaaaaaa-0001-0001-0001-000000000001": 23,
-    "aaaaaaaa-0002-0002-0002-000000000002": 11,
-    "aaaaaaaa-0003-0003-0003-000000000003": 9,
-    "aaaaaaaa-0004-0004-0004-000000000004": 4,
-    "aaaaaaaa-0006-0006-0006-000000000006": 6,
-    "aaaaaaaa-0007-0007-0007-000000000007": 6,
-    "aaaaaaaa-0008-0008-0008-000000000008": 4,
-    "aaaaaaaa-0009-0009-0009-000000000009": 4,
-    "aaaaaaaa-0010-0010-0010-000000000010": 3,
-    "aaaaaaaa-0011-0011-0011-000000000011": 3,
-    "aaaaaaaa-0012-0012-0012-000000000012": 2,
-    "aaaaaaaa-0016-0016-0016-000000000016": 1,
-    "aaaaaaaa-0018-0018-0018-000000000018": 1,
-    "aaaaaaaa-0019-0019-0019-000000000019": 4,
-    "aaaaaaaa-0020-0020-0020-000000000020": 3,
-    "aaaaaaaa-0021-0021-0021-000000000021": 0,
-    "aaaaaaaa-0022-0022-0022-000000000022": 2,
-    "aaaaaaaa-0023-0023-0023-000000000023": 1,
-    "aaaaaaaa-0024-0024-0024-000000000024": 2,
-    "aaaaaaaa-0026-0026-0026-000000000026": 4,
-    "aaaaaaaa-0029-0029-0029-000000000029": 0,
-    "aaaaaaaa-0032-0032-0032-000000000032": 1,
-    "aaaaaaaa-0033-0033-0033-000000000033": 2,
-    "aaaaaaaa-0034-0034-0034-000000000034": 2,
+    "aaaaaaaa-0000-0000-0000-000000000000": 130,
+    "aaaaaaaa-0001-0001-0001-000000000001": 39,
+    "aaaaaaaa-0002-0002-0002-000000000002": 132,
+    "aaaaaaaa-0004-0004-0004-000000000004": 84,
+    "aaaaaaaa-0005-0005-0005-000000000005": 49,
+    "aaaaaaaa-0006-0006-0006-000000000006": 31,
+    "aaaaaaaa-0008-0008-0008-000000000008": 31,
+    "aaaaaaaa-0009-0009-0009-000000000009": 30,
+    "aaaaaaaa-0010-0010-0010-000000000010": 19,
+    "aaaaaaaa-0012-0012-0012-000000000012": 16,
+    "aaaaaaaa-0013-0013-0013-000000000013": 19,
+    "aaaaaaaa-0014-0014-0014-000000000014": 4,
+    "aaaaaaaa-0016-0016-0016-000000000016": 14,
+    "aaaaaaaa-0017-0017-0017-000000000017": 5,
+    "aaaaaaaa-0018-0018-0018-000000000018": 9,
+    "aaaaaaaa-0019-0019-0019-000000000019": 7,
+    "aaaaaaaa-0020-0020-0020-000000000020": 7,
+    "aaaaaaaa-0021-0021-0021-000000000021": 11,
+    "aaaaaaaa-0022-0022-0022-000000000022": 3,
+    "aaaaaaaa-0026-0026-0026-000000000026": 2,
+    "aaaaaaaa-0028-0028-0028-000000000028": 4,
+    "aaaaaaaa-0030-0030-0030-000000000030": 3,
+    "aaaaaaaa-0033-0033-0033-000000000033": 4,
     "aaaaaaaa-0035-0035-0035-000000000035": 2,
-    "aaaaaaaa-0036-0036-0036-000000000036": 2,
-    "aaaaaaaa-0037-0037-0037-000000000037": 2,
-    "aaaaaaaa-0039-0039-0039-000000000039": 1,
-    "aaaaaaaa-0041-0041-0041-000000000041": 13,
-    "aaaaaaaa-0042-0042-0042-000000000042": 11,
-    "aaaaaaaa-0043-0043-0043-000000000043": 15,
-    "aaaaaaaa-0045-0045-0045-000000000045": 9,
-    "aaaaaaaa-0047-0047-0047-000000000047": 3,
-    "aaaaaaaa-0048-0048-0048-000000000048": 4,
-    "aaaaaaaa-0054-0054-0054-000000000054": 7,
-    "aaaaaaaa-0055-0055-0055-000000000055": 2,
-    "aaaaaaaa-0061-0061-0061-000000000061": 3,
-    "aaaaaaaa-0065-0065-0065-000000000065": 2,
+    "aaaaaaaa-0036-0036-0036-000000000036": 4,
+    "aaaaaaaa-0038-0038-0038-000000000038": 4,
+    "aaaaaaaa-0040-0040-0040-000000000040": 65,
+    "aaaaaaaa-0041-0041-0041-000000000041": 19,
+    "aaaaaaaa-0042-0042-0042-000000000042": 10,
+    "aaaaaaaa-0043-0043-0043-000000000043": 61,
+    "aaaaaaaa-0044-0044-0044-000000000044": 45,
+    "aaaaaaaa-0046-0046-0046-000000000046": 30,
+    "aaaaaaaa-0047-0047-0047-000000000047": 31,
+    "aaaaaaaa-0048-0048-0048-000000000048": 19,
+    "aaaaaaaa-0049-0049-0049-000000000049": 8,
+    "aaaaaaaa-0051-0051-0051-000000000051": 25,
+    "aaaaaaaa-0052-0052-0052-000000000052": 24,
+    "aaaaaaaa-0053-0053-0053-000000000053": 30,
+    "aaaaaaaa-0056-0056-0056-000000000056": 22,
+    "aaaaaaaa-0057-0057-0057-000000000057": 20,
+    "aaaaaaaa-0059-0059-0059-000000000059": 18,
+    "aaaaaaaa-0060-0060-0060-000000000060": 10,
+    "aaaaaaaa-0062-0062-0062-000000000062": 17,
+    "aaaaaaaa-0063-0063-0063-000000000063": 3,
+    "aaaaaaaa-0064-0064-0064-000000000064": 7,
+    "aaaaaaaa-0066-0066-0066-000000000066": 8,
+    "aaaaaaaa-0068-0068-0068-000000000068": 8,
+    "aaaaaaaa-0069-0069-0069-000000000069": 6,
+    "aaaaaaaa-0070-0070-0070-000000000070": 5,
+    "aaaaaaaa-0071-0071-0071-000000000071": 4,
+    "aaaaaaaa-0072-0072-0072-000000000072": 9,
+    "aaaaaaaa-0073-0073-0073-000000000073": 12,
+    "aaaaaaaa-0077-0077-0077-000000000077": 0,
+    "aaaaaaaa-0078-0078-0078-000000000078": 2,
+    "aaaaaaaa-0080-0080-0080-000000000080": 91,
+    "aaaaaaaa-0081-0081-0081-000000000081": 18,
+    "aaaaaaaa-0082-0082-0082-000000000082": 100,
+    "aaaaaaaa-0083-0083-0083-000000000083": 60,
+    "aaaaaaaa-0085-0085-0085-000000000085": 109,
+    "aaaaaaaa-0086-0086-0086-000000000086": 73,
+    "aaaaaaaa-0087-0087-0087-000000000087": 36,
+    "aaaaaaaa-0090-0090-0090-000000000090": 9,
+    "aaaaaaaa-0092-0092-0092-000000000092": 23,
+    "aaaaaaaa-0095-0095-0095-000000000095": 33,
+    "aaaaaaaa-0098-0098-0098-000000000098": 10,
+    "aaaaaaaa-0003-0003-0003-000000000003": 66,
+    "aaaaaaaa-0007-0007-0007-000000000007": 22,
+    "aaaaaaaa-0011-0011-0011-000000000011": 20,
+    "aaaaaaaa-0015-0015-0015-000000000015": 11,
+    "aaaaaaaa-0024-0024-0024-000000000024": 0,
+    "aaaaaaaa-0025-0025-0025-000000000025": 3,
+    "aaaaaaaa-0031-0031-0031-000000000031": 2,
+    "aaaaaaaa-0032-0032-0032-000000000032": 3,
+    "aaaaaaaa-0034-0034-0034-000000000034": 1,
+    "aaaaaaaa-0045-0045-0045-000000000045": 21,
+    "aaaaaaaa-0050-0050-0050-000000000050": 25,
+    "aaaaaaaa-0054-0054-0054-000000000054": 29,
+    "aaaaaaaa-0055-0055-0055-000000000055": 16,
+    "aaaaaaaa-0074-0074-0074-000000000074": 4,
+    "aaaaaaaa-0075-0075-0075-000000000075": 5,
+    "aaaaaaaa-0079-0079-0079-000000000079": 2,
+    "aaaaaaaa-0084-0084-0084-000000000084": 82,
+    "aaaaaaaa-0094-0094-0094-000000000094": 34,
+    "aaaaaaaa-0099-0099-0099-000000000099": 4,
+    "aaaaaaaa-0023-0023-0023-000000000023": 2,
+    "aaaaaaaa-0029-0029-0029-000000000029": 1,
+    "aaaaaaaa-0058-0058-0058-000000000058": 19,
+    "aaaaaaaa-0061-0061-0061-000000000061": 4,
+    "aaaaaaaa-0065-0065-0065-000000000065": 6,
     "aaaaaaaa-0067-0067-0067-000000000067": 7,
-    "aaaaaaaa-0070-0070-0070-000000000070": 2,
-    "aaaaaaaa-0072-0072-0072-000000000072": 1,
-    "aaaaaaaa-0074-0074-0074-000000000074": 3,
-    "aaaaaaaa-0083-0083-0083-000000000083": 10,
-    "aaaaaaaa-0086-0086-0086-000000000086": 6
+    "aaaaaaaa-0088-0088-0088-000000000088": 21,
+    "aaaaaaaa-0089-0089-0089-000000000089": 30,
+    "aaaaaaaa-0097-0097-0097-000000000097": 6,
+    "ff09fc1d-7f75-42da-9279-13a379c0c407": 17,
+    "aaaaaaaa-0027-0027-0027-000000000027": 1,
+    "aaaaaaaa-0076-0076-0076-000000000076": 3,
+    "aaaaaaaa-0096-0096-0096-000000000096": 6,
+    "aaaaaaaa-0037-0037-0037-000000000037": 1,
+    "aaaaaaaa-0039-0039-0039-000000000039": 0,
+    "aaaaaaaa-0091-0091-0091-000000000091": 8,
+    "aaaaaaaa-0093-0093-0093-000000000093": 4
   },
   "user_stats": {
     "aaaaaaaa-0000-0000-0000-000000000000": {
-      "total_runs": 1,
-      "total_distance_km": 9.36,
-      "sum_pace": 5.47,
-      "sum_cv": 7.6,
-      "cv_count": 1
+      "total_runs": 4,
+      "total_distance_km": 44.94,
+      "sum_pace": 19.08,
+      "sum_cv": 13.4,
+      "cv_count": 4
     },
     "aaaaaaaa-0001-0001-0001-000000000001": {
-      "total_runs": 1,
-      "total_distance_km": 13.74,
-      "sum_pace": 5.49,
-      "sum_cv": 5.2,
-      "cv_count": 1
+      "total_runs": 2,
+      "total_distance_km": 22.37,
+      "sum_pace": 9.89,
+      "sum_cv": 8.0,
+      "cv_count": 2
     },
     "aaaaaaaa-0002-0002-0002-000000000002": {
-      "total_runs": 1,
-      "total_distance_km": 12.59,
-      "sum_pace": 4.54,
-      "sum_cv": 4.7,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0003-0003-0003-000000000003": {
-      "total_runs": 1,
-      "total_distance_km": 12.32,
-      "sum_pace": 4.64,
-      "sum_cv": 6.7,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 55.26,
+      "sum_pace": 23.689999999999998,
+      "sum_cv": 21.9,
+      "cv_count": 5
     },
     "aaaaaaaa-0004-0004-0004-000000000004": {
-      "total_runs": 1,
-      "total_distance_km": 11.72,
-      "sum_pace": 5.49,
-      "sum_cv": 4.5,
-      "cv_count": 1
+      "total_runs": 4,
+      "total_distance_km": 47.26,
+      "sum_pace": 18.990000000000002,
+      "sum_cv": 11.2,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0005-0005-0005-000000000005": {
+      "total_runs": 5,
+      "total_distance_km": 61.22,
+      "sum_pace": 23.250000000000004,
+      "sum_cv": 16.700000000000003,
+      "cv_count": 5
     },
     "aaaaaaaa-0006-0006-0006-000000000006": {
-      "total_runs": 1,
-      "total_distance_km": 14.42,
-      "sum_pace": 4.69,
-      "sum_cv": 6.4,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0007-0007-0007-000000000007": {
-      "total_runs": 1,
-      "total_distance_km": 11.92,
-      "sum_pace": 5.33,
-      "sum_cv": 3.6,
-      "cv_count": 1
+      "total_runs": 3,
+      "total_distance_km": 38.43,
+      "sum_pace": 14.399999999999999,
+      "sum_cv": 13.1,
+      "cv_count": 3
     },
     "aaaaaaaa-0008-0008-0008-000000000008": {
-      "total_runs": 1,
-      "total_distance_km": 10.9,
-      "sum_pace": 5.18,
-      "sum_cv": 7.4,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 52.65,
+      "sum_pace": 23.970000000000002,
+      "sum_cv": 18.6,
+      "cv_count": 5
     },
     "aaaaaaaa-0009-0009-0009-000000000009": {
-      "total_runs": 1,
-      "total_distance_km": 9.92,
-      "sum_pace": 4.72,
-      "sum_cv": 7.2,
-      "cv_count": 1
+      "total_runs": 4,
+      "total_distance_km": 49.09,
+      "sum_pace": 18.54,
+      "sum_cv": 13.2,
+      "cv_count": 4
     },
     "aaaaaaaa-0010-0010-0010-000000000010": {
-      "total_runs": 1,
-      "total_distance_km": 8.55,
-      "sum_pace": 5.6,
-      "sum_cv": 14.0,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0011-0011-0011-000000000011": {
-      "total_runs": 1,
-      "total_distance_km": 5.02,
-      "sum_pace": 5.99,
-      "sum_cv": 12.2,
-      "cv_count": 1
+      "total_runs": 4,
+      "total_distance_km": 44.91,
+      "sum_pace": 20.04,
+      "sum_cv": 14.2,
+      "cv_count": 4
     },
     "aaaaaaaa-0012-0012-0012-000000000012": {
+      "total_runs": 5,
+      "total_distance_km": 58.2,
+      "sum_pace": 24.03,
+      "sum_cv": 21.099999999999998,
+      "cv_count": 5
+    },
+    "aaaaaaaa-0013-0013-0013-000000000013": {
+      "total_runs": 5,
+      "total_distance_km": 53.96,
+      "sum_pace": 24.01,
+      "sum_cv": 21.099999999999998,
+      "cv_count": 5
+    },
+    "aaaaaaaa-0014-0014-0014-000000000014": {
       "total_runs": 1,
-      "total_distance_km": 8.25,
-      "sum_pace": 5.27,
-      "sum_cv": 11.7,
+      "total_distance_km": 10.25,
+      "sum_pace": 4.99,
+      "sum_cv": 3.7,
       "cv_count": 1
     },
     "aaaaaaaa-0016-0016-0016-000000000016": {
-      "total_runs": 1,
-      "total_distance_km": 6.38,
-      "sum_pace": 6.29,
-      "sum_cv": 7.9,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 56.85,
+      "sum_pace": 24.259999999999998,
+      "sum_cv": 20.0,
+      "cv_count": 5
+    },
+    "aaaaaaaa-0017-0017-0017-000000000017": {
+      "total_runs": 4,
+      "total_distance_km": 43.41,
+      "sum_pace": 19.58,
+      "sum_cv": 18.0,
+      "cv_count": 4
     },
     "aaaaaaaa-0018-0018-0018-000000000018": {
-      "total_runs": 1,
-      "total_distance_km": 6.88,
-      "sum_pace": 5.83,
-      "sum_cv": 10.4,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 65.37,
+      "sum_pace": 24.32,
+      "sum_cv": 19.2,
+      "cv_count": 5
     },
     "aaaaaaaa-0019-0019-0019-000000000019": {
-      "total_runs": 1,
-      "total_distance_km": 9.87,
-      "sum_pace": 6.27,
-      "sum_cv": 9.6,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 57.5,
+      "sum_pace": 24.05,
+      "sum_cv": 22.6,
+      "cv_count": 5
     },
     "aaaaaaaa-0020-0020-0020-000000000020": {
-      "total_runs": 1,
-      "total_distance_km": 9.17,
-      "sum_pace": 5.04,
-      "sum_cv": 9.3,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 27.44,
+      "sum_pace": 30.59,
+      "sum_cv": 61.60000000000001,
+      "cv_count": 5
     },
     "aaaaaaaa-0021-0021-0021-000000000021": {
-      "total_runs": 1,
-      "total_distance_km": 7.4,
-      "sum_pace": 6.02,
-      "sum_cv": 6.5,
-      "cv_count": 1
+      "total_runs": 4,
+      "total_distance_km": 27.91,
+      "sum_pace": 24.060000000000002,
+      "sum_cv": 38.2,
+      "cv_count": 4
     },
     "aaaaaaaa-0022-0022-0022-000000000022": {
-      "total_runs": 1,
-      "total_distance_km": 7.82,
-      "sum_pace": 5.1,
-      "sum_cv": 9.1,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0023-0023-0023-000000000023": {
-      "total_runs": 1,
-      "total_distance_km": 6.46,
-      "sum_pace": 5.11,
-      "sum_cv": 5.8,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0024-0024-0024-000000000024": {
-      "total_runs": 1,
-      "total_distance_km": 9.13,
-      "sum_pace": 5.14,
-      "sum_cv": 8.6,
-      "cv_count": 1
+      "total_runs": 2,
+      "total_distance_km": 12.47,
+      "sum_pace": 11.41,
+      "sum_cv": 21.9,
+      "cv_count": 2
     },
     "aaaaaaaa-0026-0026-0026-000000000026": {
-      "total_runs": 1,
-      "total_distance_km": 6.44,
-      "sum_pace": 6.0,
-      "sum_cv": 9.0,
-      "cv_count": 1
+      "total_runs": 3,
+      "total_distance_km": 24.67,
+      "sum_pace": 18.27,
+      "sum_cv": 35.3,
+      "cv_count": 3
     },
-    "aaaaaaaa-0029-0029-0029-000000000029": {
-      "total_runs": 1,
-      "total_distance_km": 6.33,
-      "sum_pace": 5.53,
-      "sum_cv": 14.2,
-      "cv_count": 1
+    "aaaaaaaa-0028-0028-0028-000000000028": {
+      "total_runs": 5,
+      "total_distance_km": 32.52,
+      "sum_pace": 29.9,
+      "sum_cv": 44.7,
+      "cv_count": 5
     },
-    "aaaaaaaa-0032-0032-0032-000000000032": {
-      "total_runs": 1,
-      "total_distance_km": 5.76,
-      "sum_pace": 5.81,
-      "sum_cv": 7.3,
-      "cv_count": 1
+    "aaaaaaaa-0030-0030-0030-000000000030": {
+      "total_runs": 3,
+      "total_distance_km": 18.02,
+      "sum_pace": 17.67,
+      "sum_cv": 29.299999999999997,
+      "cv_count": 3
     },
     "aaaaaaaa-0033-0033-0033-000000000033": {
-      "total_runs": 1,
-      "total_distance_km": 9.32,
-      "sum_pace": 5.17,
-      "sum_cv": 5.9,
-      "cv_count": 1
+      "total_runs": 5,
+      "total_distance_km": 33.12,
+      "sum_pace": 30.37,
+      "sum_cv": 49.300000000000004,
+      "cv_count": 5
     },
-    "aaaaaaaa-0034-0034-0034-000000000034": {
+    "aaaaaaaa-0035-0035-0035-000000000035": {
+      "total_runs": 3,
+      "total_distance_km": 19.68,
+      "sum_pace": 17.9,
+      "sum_cv": 27.0,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0036-0036-0036-000000000036": {
+      "total_runs": 3,
+      "total_distance_km": 21.59,
+      "sum_pace": 17.4,
+      "sum_cv": 30.0,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0038-0038-0038-000000000038": {
+      "total_runs": 3,
+      "total_distance_km": 21.91,
+      "sum_pace": 18.01,
+      "sum_cv": 39.0,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0040-0040-0040-000000000040": {
+      "total_runs": 4,
+      "total_distance_km": 29.26,
+      "sum_pace": 24.17,
+      "sum_cv": 43.0,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0041-0041-0041-000000000041": {
+      "total_runs": 2,
+      "total_distance_km": 8.99,
+      "sum_pace": 11.86,
+      "sum_cv": 21.6,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0042-0042-0042-000000000042": {
       "total_runs": 1,
-      "total_distance_km": 9.71,
-      "sum_pace": 5.5,
+      "total_distance_km": 4.83,
+      "sum_pace": 5.96,
       "sum_cv": 14.5,
       "cv_count": 1
     },
-    "aaaaaaaa-0035-0035-0035-000000000035": {
+    "aaaaaaaa-0043-0043-0043-000000000043": {
+      "total_runs": 5,
+      "total_distance_km": 34.43,
+      "sum_pace": 30.12,
+      "sum_cv": 52.900000000000006,
+      "cv_count": 5
+    },
+    "aaaaaaaa-0044-0044-0044-000000000044": {
+      "total_runs": 4,
+      "total_distance_km": 25.62,
+      "sum_pace": 23.720000000000002,
+      "sum_cv": 58.099999999999994,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0046-0046-0046-000000000046": {
+      "total_runs": 3,
+      "total_distance_km": 23.86,
+      "sum_pace": 17.28,
+      "sum_cv": 24.200000000000003,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0047-0047-0047-000000000047": {
+      "total_runs": 4,
+      "total_distance_km": 24.96,
+      "sum_pace": 23.810000000000002,
+      "sum_cv": 36.0,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0048-0048-0048-000000000048": {
+      "total_runs": 3,
+      "total_distance_km": 18.34,
+      "sum_pace": 18.630000000000003,
+      "sum_cv": 31.799999999999997,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0049-0049-0049-000000000049": {
       "total_runs": 1,
-      "total_distance_km": 7.83,
-      "sum_pace": 5.91,
-      "sum_cv": 12.2,
+      "total_distance_km": 8.29,
+      "sum_pace": 5.99,
+      "sum_cv": 6.8,
       "cv_count": 1
     },
-    "aaaaaaaa-0036-0036-0036-000000000036": {
+    "aaaaaaaa-0051-0051-0051-000000000051": {
+      "total_runs": 3,
+      "total_distance_km": 19.08,
+      "sum_pace": 17.97,
+      "sum_cv": 27.8,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0052-0052-0052-000000000052": {
+      "total_runs": 3,
+      "total_distance_km": 17.4,
+      "sum_pace": 17.49,
+      "sum_cv": 27.7,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0053-0053-0053-000000000053": {
+      "total_runs": 3,
+      "total_distance_km": 23.59,
+      "sum_pace": 17.72,
+      "sum_cv": 27.8,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0056-0056-0056-000000000056": {
+      "total_runs": 4,
+      "total_distance_km": 25.44,
+      "sum_pace": 24.709999999999997,
+      "sum_cv": 40.300000000000004,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0057-0057-0057-000000000057": {
+      "total_runs": 3,
+      "total_distance_km": 21.08,
+      "sum_pace": 18.12,
+      "sum_cv": 33.1,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0059-0059-0059-000000000059": {
+      "total_runs": 4,
+      "total_distance_km": 23.51,
+      "sum_pace": 23.300000000000004,
+      "sum_cv": 39.800000000000004,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0060-0060-0060-000000000060": {
+      "total_runs": 3,
+      "total_distance_km": 20.75,
+      "sum_pace": 18.18,
+      "sum_cv": 31.6,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0062-0062-0062-000000000062": {
+      "total_runs": 4,
+      "total_distance_km": 29.66,
+      "sum_pace": 23.380000000000003,
+      "sum_cv": 35.300000000000004,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0063-0063-0063-000000000063": {
+      "total_runs": 3,
+      "total_distance_km": 18.9,
+      "sum_pace": 18.450000000000003,
+      "sum_cv": 27.5,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0064-0064-0064-000000000064": {
+      "total_runs": 3,
+      "total_distance_km": 18.76,
+      "sum_pace": 18.43,
+      "sum_cv": 39.0,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0066-0066-0066-000000000066": {
+      "total_runs": 3,
+      "total_distance_km": 16.88,
+      "sum_pace": 18.34,
+      "sum_cv": 28.499999999999996,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0068-0068-0068-000000000068": {
+      "total_runs": 4,
+      "total_distance_km": 25.93,
+      "sum_pace": 24.76,
+      "sum_cv": 48.199999999999996,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0069-0069-0069-000000000069": {
+      "total_runs": 2,
+      "total_distance_km": 13.51,
+      "sum_pace": 11.77,
+      "sum_cv": 20.7,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0070-0070-0070-000000000070": {
+      "total_runs": 3,
+      "total_distance_km": 22.27,
+      "sum_pace": 17.75,
+      "sum_cv": 27.799999999999997,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0071-0071-0071-000000000071": {
+      "total_runs": 4,
+      "total_distance_km": 31.56,
+      "sum_pace": 24.3,
+      "sum_cv": 42.699999999999996,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0072-0072-0072-000000000072": {
+      "total_runs": 3,
+      "total_distance_km": 17.97,
+      "sum_pace": 18.009999999999998,
+      "sum_cv": 33.0,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0073-0073-0073-000000000073": {
+      "total_runs": 5,
+      "total_distance_km": 30.61,
+      "sum_pace": 30.940000000000005,
+      "sum_cv": 54.9,
+      "cv_count": 5
+    },
+    "aaaaaaaa-0077-0077-0077-000000000077": {
+      "total_runs": 2,
+      "total_distance_km": 11.42,
+      "sum_pace": 11.86,
+      "sum_cv": 16.4,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0078-0078-0078-000000000078": {
+      "total_runs": 2,
+      "total_distance_km": 13.89,
+      "sum_pace": 12.09,
+      "sum_cv": 21.2,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0080-0080-0080-000000000080": {
+      "total_runs": 3,
+      "total_distance_km": 18.88,
+      "sum_pace": 17.73,
+      "sum_cv": 33.7,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0081-0081-0081-000000000081": {
       "total_runs": 1,
-      "total_distance_km": 9.47,
-      "sum_pace": 5.53,
-      "sum_cv": 9.1,
+      "total_distance_km": 8.2,
+      "sum_pace": 5.8,
+      "sum_cv": 7.8,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0082-0082-0082-000000000082": {
+      "total_runs": 4,
+      "total_distance_km": 25.35,
+      "sum_pace": 24.380000000000003,
+      "sum_cv": 44.3,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0083-0083-0083-000000000083": {
+      "total_runs": 3,
+      "total_distance_km": 19.3,
+      "sum_pace": 18.19,
+      "sum_cv": 30.599999999999998,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0085-0085-0085-000000000085": {
+      "total_runs": 5,
+      "total_distance_km": 33.68,
+      "sum_pace": 30.52,
+      "sum_cv": 53.10000000000001,
+      "cv_count": 5
+    },
+    "aaaaaaaa-0086-0086-0086-000000000086": {
+      "total_runs": 4,
+      "total_distance_km": 25.47,
+      "sum_pace": 24.03,
+      "sum_cv": 44.3,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0087-0087-0087-000000000087": {
+      "total_runs": 2,
+      "total_distance_km": 12.92,
+      "sum_pace": 11.309999999999999,
+      "sum_cv": 20.200000000000003,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0090-0090-0090-000000000090": {
+      "total_runs": 2,
+      "total_distance_km": 7.78,
+      "sum_pace": 14.879999999999999,
+      "sum_cv": 35.1,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0092-0092-0092-000000000092": {
+      "total_runs": 3,
+      "total_distance_km": 11.3,
+      "sum_pace": 22.92,
+      "sum_cv": 51.2,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0095-0095-0095-000000000095": {
+      "total_runs": 4,
+      "total_distance_km": 16.69,
+      "sum_pace": 28.52,
+      "sum_cv": 67.4,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0098-0098-0098-000000000098": {
+      "total_runs": 3,
+      "total_distance_km": 11.85,
+      "sum_pace": 22.41,
+      "sum_cv": 60.2,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0003-0003-0003-000000000003": {
+      "total_runs": 3,
+      "total_distance_km": 35.34,
+      "sum_pace": 14.57,
+      "sum_cv": 11.5,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0007-0007-0007-000000000007": {
+      "total_runs": 4,
+      "total_distance_km": 41.16,
+      "sum_pace": 19.44,
+      "sum_cv": 16.0,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0011-0011-0011-000000000011": {
+      "total_runs": 4,
+      "total_distance_km": 40.73,
+      "sum_pace": 19.52,
+      "sum_cv": 13.000000000000002,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0015-0015-0015-000000000015": {
+      "total_runs": 3,
+      "total_distance_km": 35.34,
+      "sum_pace": 14.63,
+      "sum_cv": 9.7,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0024-0024-0024-000000000024": {
+      "total_runs": 3,
+      "total_distance_km": 19.23,
+      "sum_pace": 17.56,
+      "sum_cv": 29.200000000000003,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0025-0025-0025-000000000025": {
+      "total_runs": 4,
+      "total_distance_km": 25.48,
+      "sum_pace": 24.4,
+      "sum_cv": 36.9,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0031-0031-0031-000000000031": {
+      "total_runs": 4,
+      "total_distance_km": 26.52,
+      "sum_pace": 23.76,
+      "sum_cv": 43.1,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0032-0032-0032-000000000032": {
+      "total_runs": 4,
+      "total_distance_km": 26.09,
+      "sum_pace": 23.91,
+      "sum_cv": 48.699999999999996,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0034-0034-0034-000000000034": {
+      "total_runs": 3,
+      "total_distance_km": 17.02,
+      "sum_pace": 19.27,
+      "sum_cv": 33.3,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0045-0045-0045-000000000045": {
+      "total_runs": 2,
+      "total_distance_km": 11.82,
+      "sum_pace": 12.81,
+      "sum_cv": 22.1,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0050-0050-0050-000000000050": {
+      "total_runs": 2,
+      "total_distance_km": 15.25,
+      "sum_pace": 12.21,
+      "sum_cv": 14.3,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0054-0054-0054-000000000054": {
+      "total_runs": 4,
+      "total_distance_km": 25.54,
+      "sum_pace": 23.65,
+      "sum_cv": 36.4,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0055-0055-0055-000000000055": {
+      "total_runs": 2,
+      "total_distance_km": 14.1,
+      "sum_pace": 11.219999999999999,
+      "sum_cv": 26.700000000000003,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0074-0074-0074-000000000074": {
+      "total_runs": 2,
+      "total_distance_km": 17.51,
+      "sum_pace": 12.17,
+      "sum_cv": 19.7,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0075-0075-0075-000000000075": {
+      "total_runs": 3,
+      "total_distance_km": 22.95,
+      "sum_pace": 17.71,
+      "sum_cv": 35.400000000000006,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0079-0079-0079-000000000079": {
+      "total_runs": 2,
+      "total_distance_km": 10.88,
+      "sum_pace": 12.01,
+      "sum_cv": 26.7,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0084-0084-0084-000000000084": {
+      "total_runs": 3,
+      "total_distance_km": 21.41,
+      "sum_pace": 17.73,
+      "sum_cv": 22.5,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0094-0094-0094-000000000094": {
+      "total_runs": 4,
+      "total_distance_km": 16.54,
+      "sum_pace": 29.599999999999998,
+      "sum_cv": 78.4,
+      "cv_count": 4
+    },
+    "aaaaaaaa-0099-0099-0099-000000000099": {
+      "total_runs": 1,
+      "total_distance_km": 3.24,
+      "sum_pace": 7.34,
+      "sum_cv": 20.7,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0023-0023-0023-000000000023": {
+      "total_runs": 2,
+      "total_distance_km": 14.27,
+      "sum_pace": 11.489999999999998,
+      "sum_cv": 23.0,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0029-0029-0029-000000000029": {
+      "total_runs": 2,
+      "total_distance_km": 14.11,
+      "sum_pace": 11.72,
+      "sum_cv": 23.2,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0058-0058-0058-000000000058": {
+      "total_runs": 2,
+      "total_distance_km": 15.6,
+      "sum_pace": 12.34,
+      "sum_cv": 18.8,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0061-0061-0061-000000000061": {
+      "total_runs": 1,
+      "total_distance_km": 4.99,
+      "sum_pace": 5.78,
+      "sum_cv": 12.5,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0065-0065-0065-000000000065": {
+      "total_runs": 3,
+      "total_distance_km": 21.93,
+      "sum_pace": 17.08,
+      "sum_cv": 27.5,
+      "cv_count": 3
+    },
+    "aaaaaaaa-0067-0067-0067-000000000067": {
+      "total_runs": 2,
+      "total_distance_km": 13.82,
+      "sum_pace": 12.24,
+      "sum_cv": 20.2,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0088-0088-0088-000000000088": {
+      "total_runs": 1,
+      "total_distance_km": 4.59,
+      "sum_pace": 5.59,
+      "sum_cv": 12.1,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0089-0089-0089-000000000089": {
+      "total_runs": 1,
+      "total_distance_km": 6.38,
+      "sum_pace": 6.41,
+      "sum_cv": 9.2,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0097-0097-0097-000000000097": {
+      "total_runs": 1,
+      "total_distance_km": 3.25,
+      "sum_pace": 7.44,
+      "sum_cv": 24.7,
+      "cv_count": 1
+    },
+    "ff09fc1d-7f75-42da-9279-13a379c0c407": {
+      "total_runs": 2,
+      "total_distance_km": 8.91,
+      "sum_pace": 12.620000000000001,
+      "sum_cv": 18.5,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0027-0027-0027-000000000027": {
+      "total_runs": 1,
+      "total_distance_km": 7.16,
+      "sum_pace": 5.79,
+      "sum_cv": 10.4,
+      "cv_count": 1
+    },
+    "aaaaaaaa-0076-0076-0076-000000000076": {
+      "total_runs": 2,
+      "total_distance_km": 12.38,
+      "sum_pace": 12.39,
+      "sum_cv": 20.2,
+      "cv_count": 2
+    },
+    "aaaaaaaa-0096-0096-0096-000000000096": {
+      "total_runs": 1,
+      "total_distance_km": 3.38,
+      "sum_pace": 7.48,
+      "sum_cv": 12.2,
       "cv_count": 1
     },
     "aaaaaaaa-0037-0037-0037-000000000037": {
       "total_runs": 1,
-      "total_distance_km": 8.96,
-      "sum_pace": 5.84,
-      "sum_cv": 14.6,
+      "total_distance_km": 4.94,
+      "sum_pace": 6.29,
+      "sum_cv": 8.5,
       "cv_count": 1
     },
     "aaaaaaaa-0039-0039-0039-000000000039": {
       "total_runs": 1,
-      "total_distance_km": 8.66,
-      "sum_pace": 6.42,
-      "sum_cv": 8.0,
+      "total_distance_km": 8.84,
+      "sum_pace": 6.13,
+      "sum_cv": 10.1,
       "cv_count": 1
     },
-    "aaaaaaaa-0041-0041-0041-000000000041": {
+    "aaaaaaaa-0091-0091-0091-000000000091": {
       "total_runs": 1,
-      "total_distance_km": 5.77,
-      "sum_pace": 5.44,
-      "sum_cv": 5.2,
+      "total_distance_km": 2.87,
+      "sum_pace": 7.69,
+      "sum_cv": 23.4,
       "cv_count": 1
     },
-    "aaaaaaaa-0042-0042-0042-000000000042": {
+    "aaaaaaaa-0093-0093-0093-000000000093": {
       "total_runs": 1,
-      "total_distance_km": 6.54,
-      "sum_pace": 5.27,
-      "sum_cv": 11.9,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0043-0043-0043-000000000043": {
-      "total_runs": 1,
-      "total_distance_km": 9.26,
-      "sum_pace": 5.85,
-      "sum_cv": 6.0,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0045-0045-0045-000000000045": {
-      "total_runs": 1,
-      "total_distance_km": 8.43,
-      "sum_pace": 5.82,
-      "sum_cv": 6.3,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0047-0047-0047-000000000047": {
-      "total_runs": 1,
-      "total_distance_km": 6.95,
-      "sum_pace": 5.43,
-      "sum_cv": 14.5,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0048-0048-0048-000000000048": {
-      "total_runs": 1,
-      "total_distance_km": 6.9,
-      "sum_pace": 6.08,
-      "sum_cv": 12.6,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0054-0054-0054-000000000054": {
-      "total_runs": 1,
-      "total_distance_km": 5.9,
-      "sum_pace": 6.26,
-      "sum_cv": 13.5,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0055-0055-0055-000000000055": {
-      "total_runs": 1,
-      "total_distance_km": 5.77,
-      "sum_pace": 6.62,
-      "sum_cv": 18.6,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0061-0061-0061-000000000061": {
-      "total_runs": 1,
-      "total_distance_km": 2.41,
-      "sum_pace": 6.97,
-      "sum_cv": 21.5,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0065-0065-0065-000000000065": {
-      "total_runs": 1,
-      "total_distance_km": 5.4,
-      "sum_pace": 6.98,
-      "sum_cv": 10.4,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0067-0067-0067-000000000067": {
-      "total_runs": 1,
-      "total_distance_km": 5.81,
-      "sum_pace": 6.5,
-      "sum_cv": 23.1,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0070-0070-0070-000000000070": {
-      "total_runs": 1,
-      "total_distance_km": 3.45,
-      "sum_pace": 7.18,
-      "sum_cv": 24.8,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0072-0072-0072-000000000072": {
-      "total_runs": 1,
-      "total_distance_km": 2.58,
-      "sum_pace": 6.44,
-      "sum_cv": 21.1,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0074-0074-0074-000000000074": {
-      "total_runs": 1,
-      "total_distance_km": 3.16,
-      "sum_pace": 6.22,
-      "sum_cv": 21.7,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0083-0083-0083-000000000083": {
-      "total_runs": 1,
-      "total_distance_km": 5.06,
-      "sum_pace": 7.37,
-      "sum_cv": 22.6,
-      "cv_count": 1
-    },
-    "aaaaaaaa-0086-0086-0086-000000000086": {
-      "total_runs": 1,
-      "total_distance_km": 3.22,
-      "sum_pace": 7.56,
-      "sum_cv": 15.6,
+      "total_distance_km": 2.84,
+      "sum_pace": 7.14,
+      "sum_cv": 15.7,
       "cv_count": 1
     }
   },
   "hex_teams": {
-    "8928308281bffff": "red",
-    "89283082813ffff": "blue",
-    "89283082a5bffff": "blue",
-    "8928308282bffff": "blue",
-    "89283082a6fffff": "red",
-    "89283082a4fffff": "red",
-    "89283082977ffff": "blue",
-    "89283082817ffff": "red",
-    "892830829b3ffff": "red",
-    "89283082a6bffff": "red",
-    "8928308282fffff": "red",
-    "89283082a5fffff": "red",
-    "89283082837ffff": "blue",
-    "89283082823ffff": "red",
-    "89283082a37ffff": "red",
-    "892830828dfffff": "blue",
-    "89283082a63ffff": "red",
-    "8928308297bffff": "purple",
-    "8928308281fffff": "red",
-    "89283082973ffff": "purple",
-    "89283082a47ffff": "red",
-    "89283082807ffff": "blue",
-    "89283082a0bffff": "red",
-    "8928308280bffff": "purple",
-    "89283082a3bffff": "blue",
-    "89283082843ffff": "red",
-    "89283082a67ffff": "red",
-    "8928308287bffff": "blue",
-    "892830829d7ffff": "red",
-    "8928308288fffff": "blue",
-    "8928308283fffff": "red",
-    "89283082a33ffff": "red",
-    "8928308283bffff": "red",
-    "89283082853ffff": "red",
-    "8928308293fffff": "blue",
-    "89283082a43ffff": "red",
-    "8928308280fffff": "red",
-    "89283082a53ffff": "red",
-    "89283082833ffff": "red",
-    "89283082903ffff": "blue",
-    "89283082947ffff": "red",
-    "892830829e3ffff": "purple",
-    "89283082a57ffff": "red",
-    "89283082a4bffff": "red",
-    "892830828cfffff": "blue",
-    "89283082a0fffff": "red",
-    "892830828f7ffff": "blue",
-    "892830828d3ffff": "blue",
-    "892830828fbffff": "blue",
-    "892830829c3ffff": "blue",
-    "89283082827ffff": "red",
-    "892830829dfffff": "red",
-    "892830829cfffff": "blue",
-    "892830829abffff": "blue",
-    "892830828a3ffff": "blue",
-    "89283082847ffff": "red",
-    "892830828c7ffff": "blue",
-    "89283082a13ffff": "red",
-    "8928308286bffff": "red",
-    "89283082883ffff": "blue",
-    "89283082873ffff": "blue",
-    "89283082957ffff": "purple",
-    "8928308284bffff": "red",
-    "892830828c3ffff": "purple",
-    "8928308298bffff": "purple",
-    "892830829f7ffff": "red",
-    "89283082803ffff": "blue",
-    "89283082857ffff": "red",
-    "8928308298fffff": "red",
-    "89283082a27ffff": "red",
-    "89283082a1fffff": "red",
-    "892830828bfffff": "blue",
-    "892830828afffff": "blue",
-    "892830829a3ffff": "red",
-    "8928308284fffff": "red",
-    "8928308285bffff": "red",
-    "892830828bbffff": "blue",
-    "8928308296bffff": "red",
-    "8928308293bffff": "purple",
-    "892830828b3ffff": "blue",
-    "8928308285fffff": "blue",
-    "89283082863ffff": "red",
-    "89283082893ffff": "blue",
-    "892830828e7ffff": "blue",
-    "892830828cbffff": "blue",
-    "89283082867ffff": "red",
-    "892830829dbffff": "blue",
-    "8928308291fffff": "red",
-    "89283082a2fffff": "red",
-    "89283082953ffff": "purple",
-    "89283082907ffff": "blue",
-    "89283082887ffff": "blue",
-    "892830829cbffff": "red",
-    "8928308294bffff": "purple",
-    "8928308286fffff": "blue",
-    "8928308288bffff": "blue",
-    "892830829fbffff": "blue",
-    "892830829a7ffff": "red",
-    "8928308295fffff": "blue",
-    "89283082877ffff": "blue",
-    "8928308287fffff": "blue",
-    "89283082913ffff": "blue",
-    "8928308292fffff": "blue",
-    "8928308289bffff": "blue",
-    "8928308292bffff": "red",
-    "8928308289fffff": "blue",
-    "89283082a17ffff": "blue",
-    "892830828ebffff": "blue",
-    "89283082967ffff": "red",
-    "892830829bbffff": "blue",
-    "89283082897ffff": "blue",
-    "892830828a7ffff": "blue",
-    "892830828abffff": "blue",
-    "892830828b7ffff": "blue",
-    "892830828e3ffff": "blue",
-    "89283082917ffff": "blue",
-    "89283082997ffff": "red",
-    "8928308291bffff": "red",
-    "89283082963ffff": "purple",
-    "892830829d3ffff": "red",
-    "8928308290bffff": "blue",
-    "89283082a03ffff": "red",
-    "8928308299fffff": "blue",
-    "892830828d7ffff": "blue",
-    "892830828dbffff": "blue",
-    "892830829bfffff": "blue",
-    "8928308295bffff": "blue",
-    "8928308290fffff": "blue",
-    "89283082993ffff": "blue",
-    "89283082923ffff": "purple",
-    "892830828efffff": "blue",
-    "89283082983ffff": "purple",
-    "892830829e7ffff": "blue",
-    "892830829c7ffff": "blue",
-    "892830829b7ffff": "blue",
-    "8928308299bffff": "blue",
-    "892830828f3ffff": "blue",
-    "89283082987ffff": "blue",
-    "89283082927ffff": "purple",
-    "892830828ffffff": "blue",
-    "89283082933ffff": "blue",
-    "89283082943ffff": "blue",
-    "8928308294fffff": "blue",
-    "892830829f3ffff": "blue",
-    "89283082937ffff": "purple",
-    "89283082a23ffff": "purple"
+    "89283472837ffff": "blue",
+    "8928347180bffff": "red",
+    "89283471813ffff": "blue",
+    "89283470803ffff": "blue",
+    "8928347200bffff": "purple",
+    "8928340811bffff": "blue",
+    "89283472823ffff": "purple",
+    "89283408047ffff": "blue",
+    "8928347080bffff": "blue",
+    "8928347180fffff": "blue",
+    "8928347286bffff": "red",
+    "8928347281bffff": "blue",
+    "89283408063ffff": "purple",
+    "8928347282bffff": "red",
+    "8928347283bffff": "red",
+    "89283408173ffff": "purple",
+    "89283473013ffff": "blue",
+    "8928347000bffff": "blue",
+    "8928347100bffff": "blue",
+    "8928347282fffff": "purple",
+    "8928340809bffff": "blue",
+    "89283408163ffff": "purple",
+    "892834728afffff": "blue",
+    "89283472833ffff": "purple",
+    "89283408057ffff": "blue",
+    "892834728b3ffff": "purple",
+    "89283472003ffff": "blue",
+    "89283473003ffff": "blue",
+    "89283472803ffff": "purple",
+    "89283472847ffff": "red",
+    "8928347280bffff": "blue",
+    "892834080c7ffff": "purple",
+    "89283471013ffff": "purple",
+    "89283408103ffff": "purple",
+    "89283472813ffff": "purple",
+    "89283472877ffff": "purple",
+    "8928340810bffff": "purple",
+    "89283472017ffff": "red",
+    "89283473007ffff": "blue",
+    "89283470007ffff": "red",
+    "89283472867ffff": "purple",
+    "8928347286fffff": "blue",
+    "89283472883ffff": "red",
+    "8928347080fffff": "red",
+    "89283470807ffff": "blue",
+    "89283472807ffff": "blue",
+    "89283472843ffff": "red",
+    "89283472897ffff": "blue",
+    "89283472007ffff": "purple",
+    "8928347288fffff": "red",
+    "89283472817ffff": "purple",
+    "89283471803ffff": "blue",
+    "8928347289bffff": "blue",
+    "8928340802bffff": "purple",
+    "8928347000fffff": "purple",
+    "89283472857ffff": "blue",
+    "892834080b3ffff": "blue",
+    "89283471007ffff": "purple",
+    "8928347300fffff": "blue",
+    "8928347280fffff": "red",
+    "89283471017ffff": "purple",
+    "89283472827ffff": "blue",
+    "8928347001bffff": "blue",
+    "8928347100fffff": "purple",
+    "8928340808bffff": "purple",
+    "892834080abffff": "purple",
+    "892834080afffff": "purple",
+    "8928347181bffff": "blue",
+    "89283472893ffff": "blue",
+    "8928340803bffff": "purple",
+    "8928340814bffff": "purple",
+    "89283472853ffff": "red",
+    "892834080cfffff": "blue",
+    "8928347200fffff": "blue",
+    "8928340806bffff": "red",
+    "89283470017ffff": "red",
+    "89283408187ffff": "purple",
+    "89283408037ffff": "purple",
+    "89283472863ffff": "red",
+    "89283470817ffff": "purple",
+    "89283408147ffff": "purple",
+    "89283408107ffff": "purple",
+    "89283471817ffff": "blue",
+    "89283408013ffff": "purple",
+    "89283472873ffff": "red",
+    "8928340800bffff": "red",
+    "8928347201bffff": "purple",
+    "892834728a7ffff": "blue",
+    "89283471003ffff": "blue",
+    "8928347287bffff": "blue",
+    "8928347081bffff": "purple",
+    "89283472013ffff": "blue",
+    "89283470003ffff": "blue",
+    "8928340808fffff": "blue",
+    "89283408023ffff": "purple",
+    "8928347284bffff": "blue",
+    "89283472887ffff": "purple",
+    "89283471807ffff": "red",
+    "89283470013ffff": "blue",
+    "8928340816bffff": "purple",
+    "892834080cbffff": "blue",
+    "89283408123ffff": "purple",
+    "892834728abffff": "purple",
+    "8928347288bffff": "red",
+    "89283408087ffff": "blue",
+    "89283470813ffff": "blue",
+    "892834728a3ffff": "purple",
+    "89283408127ffff": "purple",
+    "8928347285bffff": "red",
+    "8928340805bffff": "purple",
+    "89283408067ffff": "purple",
+    "89283408073ffff": "purple",
+    "89283408043ffff": "blue",
+    "89283408053ffff": "blue",
+    "892834080a3ffff": "purple",
+    "8928347101bffff": "blue",
+    "89283408083ffff": "purple",
+    "892834080d3ffff": "blue",
+    "8928340812bffff": "purple",
+    "89283408183ffff": "purple",
+    "89283408097ffff": "purple",
+    "8928340800fffff": "purple",
+    "892834080c3ffff": "blue",
+    "89283408143ffff": "purple",
+    "892834080b7ffff": "purple",
+    "8928340802fffff": "purple",
+    "8928347300bffff": "purple",
+    "8928347284fffff": "blue",
+    "89283408153ffff": "purple",
+    "89283408157ffff": "purple",
+    "89283408077ffff": "purple",
+    "8928340806fffff": "red",
+    "89283408177ffff": "purple",
+    "8928340818bffff": "blue",
+    "89283408133ffff": "purple",
+    "89283408093ffff": "red",
+    "892834080dbffff": "purple",
+    "89283408137ffff": "purple",
+    "8928340817bffff": "blue",
+    "8928340812fffff": "blue",
+    "8928340815bffff": "blue",
+    "89283408027ffff": "blue",
+    "8928340816fffff": "purple",
+    "89283408117ffff": "purple",
+    "8928340810fffff": "purple",
+    "8928340804bffff": "purple",
+    "892834080a7ffff": "purple",
+    "892834080bbffff": "purple",
+    "89283408007ffff": "blue",
+    "8928340801bffff": "purple",
+    "8928340807bffff": "purple",
+    "8928340814fffff": "purple",
+    "892834080d7ffff": "purple",
+    "8928340813bffff": "purple",
+    "89283408017ffff": "blue",
+    "89283408033ffff": "purple",
+    "8928340804fffff": "purple",
+    "89283408167ffff": "purple",
+    "89283408113ffff": "blue",
+    "89283408003ffff": "purple"
   },
   "yesterday_flip_points": {
-    "aaaaaaaa-0000-0000-0000-000000000000": 18,
-    "aaaaaaaa-0001-0001-0001-000000000001": 23,
-    "aaaaaaaa-0002-0002-0002-000000000002": 11,
-    "aaaaaaaa-0003-0003-0003-000000000003": 9,
-    "aaaaaaaa-0004-0004-0004-000000000004": 4,
-    "aaaaaaaa-0006-0006-0006-000000000006": 6,
-    "aaaaaaaa-0007-0007-0007-000000000007": 6,
-    "aaaaaaaa-0008-0008-0008-000000000008": 4,
-    "aaaaaaaa-0009-0009-0009-000000000009": 4,
-    "aaaaaaaa-0010-0010-0010-000000000010": 3,
-    "aaaaaaaa-0011-0011-0011-000000000011": 3,
-    "aaaaaaaa-0012-0012-0012-000000000012": 2,
-    "aaaaaaaa-0016-0016-0016-000000000016": 1,
-    "aaaaaaaa-0018-0018-0018-000000000018": 1,
-    "aaaaaaaa-0019-0019-0019-000000000019": 4,
-    "aaaaaaaa-0020-0020-0020-000000000020": 3,
-    "aaaaaaaa-0021-0021-0021-000000000021": 0,
-    "aaaaaaaa-0022-0022-0022-000000000022": 2,
+    "aaaaaaaa-0000-0000-0000-000000000000": 23,
+    "aaaaaaaa-0002-0002-0002-000000000002": 20,
+    "aaaaaaaa-0004-0004-0004-000000000004": 21,
+    "aaaaaaaa-0005-0005-0005-000000000005": 13,
+    "aaaaaaaa-0007-0007-0007-000000000007": 7,
+    "aaaaaaaa-0008-0008-0008-000000000008": 10,
+    "aaaaaaaa-0009-0009-0009-000000000009": 8,
+    "aaaaaaaa-0010-0010-0010-000000000010": 5,
+    "aaaaaaaa-0011-0011-0011-000000000011": 6,
+    "aaaaaaaa-0012-0012-0012-000000000012": 6,
+    "aaaaaaaa-0013-0013-0013-000000000013": 5,
+    "aaaaaaaa-0015-0015-0015-000000000015": 3,
+    "aaaaaaaa-0016-0016-0016-000000000016": 3,
+    "aaaaaaaa-0017-0017-0017-000000000017": 1,
+    "aaaaaaaa-0018-0018-0018-000000000018": 2,
+    "aaaaaaaa-0019-0019-0019-000000000019": 1,
+    "aaaaaaaa-0020-0020-0020-000000000020": 1,
+    "aaaaaaaa-0021-0021-0021-000000000021": 3,
     "aaaaaaaa-0023-0023-0023-000000000023": 1,
-    "aaaaaaaa-0024-0024-0024-000000000024": 2,
-    "aaaaaaaa-0026-0026-0026-000000000026": 4,
-    "aaaaaaaa-0029-0029-0029-000000000029": 0,
+    "aaaaaaaa-0024-0024-0024-000000000024": 0,
+    "aaaaaaaa-0025-0025-0025-000000000025": 0,
+    "aaaaaaaa-0026-0026-0026-000000000026": 2,
+    "aaaaaaaa-0028-0028-0028-000000000028": 2,
+    "aaaaaaaa-0030-0030-0030-000000000030": 0,
+    "aaaaaaaa-0031-0031-0031-000000000031": 0,
     "aaaaaaaa-0032-0032-0032-000000000032": 1,
     "aaaaaaaa-0033-0033-0033-000000000033": 2,
-    "aaaaaaaa-0034-0034-0034-000000000034": 2,
-    "aaaaaaaa-0035-0035-0035-000000000035": 2,
-    "aaaaaaaa-0036-0036-0036-000000000036": 2,
-    "aaaaaaaa-0037-0037-0037-000000000037": 2,
-    "aaaaaaaa-0039-0039-0039-000000000039": 1,
-    "aaaaaaaa-0041-0041-0041-000000000041": 13,
-    "aaaaaaaa-0042-0042-0042-000000000042": 11,
-    "aaaaaaaa-0043-0043-0043-000000000043": 15,
-    "aaaaaaaa-0045-0045-0045-000000000045": 9,
-    "aaaaaaaa-0047-0047-0047-000000000047": 3,
-    "aaaaaaaa-0048-0048-0048-000000000048": 4,
-    "aaaaaaaa-0054-0054-0054-000000000054": 7,
-    "aaaaaaaa-0055-0055-0055-000000000055": 2,
-    "aaaaaaaa-0061-0061-0061-000000000061": 3,
-    "aaaaaaaa-0065-0065-0065-000000000065": 2,
-    "aaaaaaaa-0067-0067-0067-000000000067": 7,
-    "aaaaaaaa-0070-0070-0070-000000000070": 2,
-    "aaaaaaaa-0072-0072-0072-000000000072": 1,
-    "aaaaaaaa-0074-0074-0074-000000000074": 3,
-    "aaaaaaaa-0083-0083-0083-000000000083": 10,
-    "aaaaaaaa-0086-0086-0086-000000000086": 6
-  }
+    "aaaaaaaa-0034-0034-0034-000000000034": 0,
+    "aaaaaaaa-0037-0037-0037-000000000037": 1,
+    "aaaaaaaa-0038-0038-0038-000000000038": 0,
+    "aaaaaaaa-0039-0039-0039-000000000039": 0,
+    "aaaaaaaa-0040-0040-0040-000000000040": 17,
+    "aaaaaaaa-0043-0043-0043-000000000043": 9,
+    "aaaaaaaa-0044-0044-0044-000000000044": 11,
+    "aaaaaaaa-0045-0045-0045-000000000045": 12,
+    "aaaaaaaa-0047-0047-0047-000000000047": 5,
+    "aaaaaaaa-0048-0048-0048-000000000048": 6,
+    "aaaaaaaa-0050-0050-0050-000000000050": 9,
+    "aaaaaaaa-0051-0051-0051-000000000051": 7,
+    "aaaaaaaa-0054-0054-0054-000000000054": 9,
+    "aaaaaaaa-0057-0057-0057-000000000057": 11,
+    "aaaaaaaa-0058-0058-0058-000000000058": 9,
+    "aaaaaaaa-0059-0059-0059-000000000059": 3,
+    "aaaaaaaa-0062-0062-0062-000000000062": 6,
+    "aaaaaaaa-0064-0064-0064-000000000064": 3,
+    "aaaaaaaa-0065-0065-0065-000000000065": 4,
+    "aaaaaaaa-0066-0066-0066-000000000066": 3,
+    "aaaaaaaa-0068-0068-0068-000000000068": 2,
+    "aaaaaaaa-0071-0071-0071-000000000071": 1,
+    "aaaaaaaa-0073-0073-0073-000000000073": 1,
+    "aaaaaaaa-0076-0076-0076-000000000076": 3,
+    "aaaaaaaa-0078-0078-0078-000000000078": 1,
+    "aaaaaaaa-0082-0082-0082-000000000082": 36,
+    "aaaaaaaa-0083-0083-0083-000000000083": 16,
+    "aaaaaaaa-0084-0084-0084-000000000084": 28,
+    "aaaaaaaa-0085-0085-0085-000000000085": 18,
+    "aaaaaaaa-0087-0087-0087-000000000087": 30,
+    "aaaaaaaa-0091-0091-0091-000000000091": 8,
+    "aaaaaaaa-0093-0093-0093-000000000093": 4,
+    "aaaaaaaa-0094-0094-0094-000000000094": 6,
+    "aaaaaaaa-0095-0095-0095-000000000095": 10,
+    "ff09fc1d-7f75-42da-9279-13a379c0c407": 9
+  },
+  "total_days": 5,
+  "real_user_id": "ff09fc1d-7f75-42da-9279-13a379c0c407",
+  "real_user_team": "red"
 }

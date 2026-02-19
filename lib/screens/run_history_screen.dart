@@ -6,7 +6,11 @@ import 'package:provider/provider.dart';
 import '../models/run.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/run_provider.dart';
+import '../services/points_service.dart';
+import '../services/remote_config_service.dart';
+import '../services/timezone_preference_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/gmt2_date_utils.dart';
 import '../widgets/run_calendar.dart';
 
 enum HistoryPeriod { day, week, month, year }
@@ -26,10 +30,15 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   HistoryPeriod _selectedPeriod = HistoryPeriod.day;
   HistoryViewMode _viewMode = HistoryViewMode.list;
   DateTime? _selectedDate;
+  bool _useGmt2 = false;
 
   // Range-based navigation state
   DateTime _rangeStart = DateTime.now();
   DateTime _rangeEnd = DateTime.now();
+
+  /// Returns "now" in the selected display timezone.
+  DateTime get _now =>
+      _useGmt2 ? Gmt2DateUtils.todayGmt2 : DateTime.now();
 
   /// Get user's team color for highlights (supports red, blue, purple)
   Color get _teamColor {
@@ -37,8 +46,15 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     return appState.userTeam?.color ?? AppTheme.electricBlue;
   }
 
-  /// Convert a DateTime to local timezone for display
+  /// Convert a DateTime to the selected display timezone (local or GMT+2).
   DateTime _convertToDisplayTimezone(DateTime utcTime) {
+    if (_useGmt2) {
+      final offsetHours = RemoteConfigService()
+          .config
+          .seasonConfig
+          .serverTimezoneOffsetHours;
+      return utcTime.toUtc().add(Duration(hours: offsetHours));
+    }
     return utcTime.toLocal();
   }
 
@@ -67,7 +83,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         break;
       case HistoryPeriod.year:
         // YEAR mode: Last 5 years range (chart shows 5 years)
-        final currentYear = DateTime.now().year;
+        final currentYear = _now.year;
         _rangeStart = DateTime(currentYear - 4, 1, 1);
         _rangeEnd = DateTime(currentYear, 12, 31);
         break;
@@ -159,7 +175,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         return _rangeStart.year.toString();
       case HistoryPeriod.year:
         // YEAR mode shows 5-year range: "2021 - 2025"
-        final currentYear = DateTime.now().year;
+        final currentYear = _now.year;
         return '${currentYear - 4} - $currentYear';
     }
   }
@@ -170,6 +186,16 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     _selectedDate = DateTime.now();
     // Initialize range based on current date and default period
     _calculateRange(_selectedDate!, _selectedPeriod);
+    // Load persisted timezone preference
+    TimezonePreferenceService().load().then((tz) {
+      if (mounted && tz == DisplayTimezone.gmt2) {
+        setState(() {
+          _useGmt2 = true;
+          _selectedDate = _now;
+          _calculateRange(_selectedDate!, _selectedPeriod);
+        });
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RunProvider>().loadRunHistory();
     });
@@ -193,25 +219,18 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             final statsRuns = _filterRunsForStats(allRuns, _selectedPeriod);
 
             // Calculate OVERALL (all-time) Stats
-            final overallDistance = allRuns.fold(
-              0.0,
-              (sum, run) => sum + run.distanceKm,
-            );
-            final overallPoints = allRuns.fold(
-              0,
-              (sum, run) => sum + run.flipPoints,
-            );
-            final overallRunCount = allRuns.length;
-            double overallPace = 0.0;
-            if (overallDistance > 0) {
-              final overallSeconds = allRuns.fold(
-                0,
-                (sum, run) => sum + run.duration.inSeconds,
-              );
-              overallPace = (overallSeconds / 60.0) / overallDistance;
-            }
-            // Weighted avg stability (runs >= 1km only)
-            final overallStability = _calculateWeightedStability(allRuns);
+            // Server aggregates (UserModel) are the source of truth for ALL TIME.
+            // PointsService.totalSeasonPoints is the only hybrid value (server
+            // season_points + local unsynced today) — this ensures the header
+            // and ALL TIME points stay in sync and reflect live running.
+            // All other aggregates come from server (updated by finalize_run).
+            final user = context.read<AppStateProvider>().currentUser;
+            final pointsService = context.read<PointsService>();
+            final overallDistance = user?.totalDistanceKm ?? 0.0;
+            final overallPoints = pointsService.totalSeasonPoints;
+            final overallRunCount = user?.totalRuns ?? 0;
+            final overallPace = user?.avgPaceMinPerKm ?? 0.0;
+            final overallStability = user?.stabilityScore;
 
             // Calculate PERIOD Stats (from statsRuns - actual period)
             final totalDistance = statsRuns.fold(
@@ -579,7 +598,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   /// Build 5-year calendar view for YEAR period (with toggle)
   Widget _buildFiveYearCalendarWithToggle(List<Run> allRuns) {
-    final currentYear = DateTime.now().year;
+    final currentYear = _now.year;
     final years = List.generate(5, (i) => currentYear - 4 + i);
 
     return Container(
@@ -739,7 +758,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   setState(() {
                     _selectedPeriod = period;
                     // Recalculate range when period changes
-                    _calculateRange(_selectedDate ?? DateTime.now(), period);
+                    _calculateRange(_selectedDate ?? _now, period);
                   });
                 },
                 child: AnimatedContainer(
@@ -863,7 +882,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           // Stats in a row with separators
           Row(
             children: [
-              // Distance - primary highlight
+              // Points - primary highlight
               Expanded(
                 flex: 2,
                 child: FittedBox(
@@ -875,7 +894,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _formatCompact(distance),
+                        _formatCompactInt(flips),
                         style: GoogleFonts.sora(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
@@ -885,7 +904,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        'km',
+                        'pts',
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
@@ -911,16 +930,13 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       Flexible(
-                        child: _buildMiniStatSmall(_formatPace(pace), '/km'),
-                      ),
-                      Flexible(
                         child: _buildMiniStatSmall(
-                          _formatCompactInt(flips),
-                          'flips',
+                          _formatCompact(distance),
+                          'km',
                         ),
                       ),
                       Flexible(
-                        child: _buildMiniStatSmall(runs.toString(), 'runs'),
+                        child: _buildMiniStatSmall(_formatPace(pace), '/km'),
                       ),
                       Flexible(
                         child: stability != null
@@ -1022,21 +1038,27 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Overall label
-          Text(
-            'ALL TIME',
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.2),
-              letterSpacing: 2.0,
-            ),
+          // Overall label with timezone toggle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ALL TIME',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withOpacity(0.2),
+                  letterSpacing: 2.0,
+                ),
+              ),
+              _buildTimezoneToggle(),
+            ],
           ),
           const SizedBox(height: 12),
           // Stats in a row with separators
           Row(
             children: [
-              // Distance - primary highlight
+              // Points - primary highlight
               Expanded(
                 flex: 2,
                 child: FittedBox(
@@ -1048,7 +1070,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _formatCompact(distance),
+                        _formatCompactInt(flips),
                         style: GoogleFonts.sora(
                           fontSize: 32,
                           fontWeight: FontWeight.w700,
@@ -1058,7 +1080,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'km',
+                        'pts',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -1083,13 +1105,13 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      Flexible(child: _buildMiniStat(_formatPace(pace), '/km')),
                       Flexible(
                         child: _buildMiniStat(
-                          _formatCompactInt(flips),
-                          'flips',
+                          _formatCompact(distance),
+                          'km',
                         ),
                       ),
+                      Flexible(child: _buildMiniStat(_formatPace(pace), '/km')),
                       Flexible(
                         child: stability != null
                             ? _buildMiniStatColored(
@@ -1200,6 +1222,46 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             ),
           ),
           AspectRatio(aspectRatio: 1.8, child: _buildChart(runs, period)),
+        ],
+      ),
+    );
+  }
+
+  /// Timezone toggle: segmented control matching Graph/Calendar style
+  Widget _buildTimezoneToggle() {
+    void handleToggle(bool gmt2) {
+      if (_useGmt2 == gmt2) return;
+      // Fire-and-forget persistence — update UI immediately
+      TimezonePreferenceService().toggle();
+      setState(() {
+        _useGmt2 = gmt2;
+        _selectedDate = _now;
+        _calculateRange(_selectedDate!, _selectedPeriod);
+      });
+    }
+
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleOption(
+            icon: Icons.schedule_rounded,
+            label: 'Local',
+            isSelected: !_useGmt2,
+            onTap: () => handleToggle(false),
+          ),
+          _buildToggleOption(
+            icon: Icons.public_rounded,
+            label: 'GMT+2',
+            isSelected: _useGmt2,
+            onTap: () => handleToggle(true),
+          ),
         ],
       ),
     );
@@ -1344,7 +1406,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
       }
     } else {
       // YEAR period shows 5 years
-      final currentYear = DateTime.now().year;
+      final currentYear = _now.year;
       minX = currentYear - 4;
       maxX = currentYear;
       for (var run in runs) {
@@ -1827,11 +1889,11 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
 
   String _formatPace(double paceMinPerKm) {
     if (paceMinPerKm.isInfinite || paceMinPerKm.isNaN || paceMinPerKm == 0) {
-      return "-'--\"";
+      return "-'--";
     }
     final min = paceMinPerKm.floor();
     final sec = ((paceMinPerKm - min) * 60).round();
-    return "$min'${sec.toString().padLeft(2, '0')}\"";
+    return "$min'${sec.toString().padLeft(2, '0')}";
   }
 
   /// Format large numbers with K suffix (e.g., 10232 → "10.2K")
@@ -1954,7 +2016,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     List<Run> runs,
     HistoryPeriod period,
   ) {
-    final now = DateTime.now();
+    final now = _now;
     final today = DateTime(now.year, now.month, now.day);
 
     DateTime statsStart;

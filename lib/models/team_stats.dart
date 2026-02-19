@@ -22,17 +22,35 @@ class YesterdayStats {
     required this.date,
   });
 
-  factory YesterdayStats.fromJson(Map<String, dynamic> json) => YesterdayStats(
-    hasData: json['has_data'] as bool? ?? false,
-    distanceKm: (json['distance_km'] as num?)?.toDouble(),
-    avgPaceMinPerKm: (json['avg_pace_min_per_km'] as num?)?.toDouble(),
-    flipPoints: (json['flip_points'] as num?)?.toInt(),
-    stabilityScore: (json['stability_score'] as num?)?.toInt(),
-    runCount: (json['run_count'] as num?)?.toInt() ?? 0,
-    date:
-        DateTime.tryParse(json['date'] as String? ?? '') ??
-        DateTime.now().subtract(const Duration(days: 1)),
-  );
+  factory YesterdayStats.fromJson(Map<String, dynamic> json) {
+    final distanceKm = (json['distance_km'] as num?)?.toDouble();
+    final durationSeconds = (json['duration_seconds'] as num?)?.toDouble();
+    final avgCv = (json['avg_cv'] as num?)?.toDouble();
+
+    // Derive pace from distance and duration
+    double? avgPace;
+    if (distanceKm != null && distanceKm > 0 && durationSeconds != null) {
+      avgPace = (durationSeconds / 60) / distanceKm; // min/km
+    }
+
+    // Derive stability from CV
+    int? stability;
+    if (avgCv != null) {
+      stability = (100 - avgCv).round().clamp(0, 100);
+    }
+
+    return YesterdayStats(
+      hasData: json['has_data'] as bool? ?? false,
+      distanceKm: distanceKm,
+      avgPaceMinPerKm: avgPace,
+      flipPoints: (json['flip_points'] as num?)?.toInt(),
+      stabilityScore: stability,
+      runCount: (json['run_count'] as num?)?.toInt() ?? 0,
+      date:
+          DateTime.tryParse(json['date'] as String? ?? '') ??
+          DateTime.now().subtract(const Duration(days: 1)),
+    );
+  }
 
   factory YesterdayStats.empty() => YesterdayStats(
     hasData: false,
@@ -70,8 +88,6 @@ class TeamRankings {
   final int eliteThreshold;
   final String? cityHex;
   final List<RankingEntry> redEliteTop3;
-  final List<RankingEntry> redCommonTop3;
-  final List<RankingEntry> blueUnionTop3;
   final int redRunnerCountCity;
   final int eliteCutoffRank;
 
@@ -83,8 +99,6 @@ class TeamRankings {
     required this.eliteThreshold,
     this.cityHex,
     required this.redEliteTop3,
-    required this.redCommonTop3,
-    required this.blueUnionTop3,
     this.redRunnerCountCity = 0,
     this.eliteCutoffRank = 0,
   });
@@ -102,12 +116,10 @@ class TeamRankings {
       userIsElite: json['user_is_elite'] as bool? ?? false,
       userYesterdayPoints:
           (json['user_yesterday_points'] as num?)?.toInt() ?? 0,
-      userRank: (json['user_rank'] as num?)?.toInt() ?? 1,
+      userRank: (json['user_rank'] as num?)?.toInt() ?? 0,
       eliteThreshold: (json['elite_threshold'] as num?)?.toInt() ?? 0,
       cityHex: json['city_hex'] as String?,
       redEliteTop3: parseEntries(json['red_elite_top3']),
-      redCommonTop3: parseEntries(json['red_common_top3']),
-      blueUnionTop3: parseEntries(json['blue_union_top3']),
       redRunnerCountCity: (json['red_runner_count_city'] as num?)?.toInt() ?? 0,
       eliteCutoffRank: (json['elite_cutoff_rank'] as num?)?.toInt() ?? 0,
     );
@@ -117,11 +129,9 @@ class TeamRankings {
     userTeam: '',
     userIsElite: false,
     userYesterdayPoints: 0,
-    userRank: 1,
+    userRank: 0,
     eliteThreshold: 0,
     redEliteTop3: [],
-    redCommonTop3: [],
-    blueUnionTop3: [],
   );
 }
 
@@ -295,7 +305,8 @@ class TeamBuffComparison {
 
   // Delegate to BuffBreakdown (eliminates duplicate fields)
   int get allRangeBonus => breakdown.allRangeBonus;
-  int get cityLeaderBonus => breakdown.isCityLeader ? 1 : 0;
+  int get districtWinBonus => breakdown.hasDistrictWin ? 1 : 0;
+  int get provinceWinBonus => breakdown.hasProvinceWin ? 1 : 0;
   String get userTeam => breakdown.team;
   int get userTotalMultiplier => breakdown.multiplier;
 }

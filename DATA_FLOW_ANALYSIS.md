@@ -1,7 +1,7 @@
 # RunStrict Data Flow Analysis & Optimization Guide
 
 > Analysis of current data structures, field redundancy, and optimization opportunities.
-> Last updated: 2026-02-14
+> Last updated: 2026-02-18
 
 ---
 
@@ -20,7 +20,7 @@
 | `LocationPoint` | `location_point.dart` | 8 | 0 | High-fidelity GPS point (active run) |
 | `RoutePoint` | `route_point.dart` | 3 | 1 | Compact route point (cold storage) |
 | `LapModel` | `lap_model.dart` | 5 | 1 | Per-km lap data for CV calculation |
-| `Sponsor` | `sponsor.dart` | 7 | 0 | Sponsor display + `SponsorTier` enum |
+| `Sponsor` | `sponsor.dart` | 7 | 0 | Sponsor display + `SponsorTier` enum (replaced by AdMob) |
 
 ### 1.2 Provider/Service "Shadow Models" (defined inline, not in models/)
 
@@ -97,7 +97,12 @@
                      +--------+--------+
                               |
                      +--------v--------+
-                     | AppLifecycle    |  (6) OnResume handler setup
+                     | AdService       |  (6) Google AdMob SDK init
+                     | .initialize()   |
+                     +--------+--------+
+                              |
+                     +--------v--------+
+                     | AppLifecycle    |  (7) OnResume handler setup
                      | Manager         |
                      +--------+--------+
                               |
@@ -260,10 +265,10 @@
 |-------|:---:|:---:|:-------:|
 | multiplier / userTotalMultiplier | x | x | YES (different name) |
 | allRangeBonus | x | x | YES |
-| isCityLeader / cityLeaderBonus | x (bool) | x (int 0/1) | YES (different type) |
-| isElite | x | (in RedTeamBuff) | PARTIAL |
+| hasDistrictWin / districtWinBonus | x (bool) | x (int 0/1) | YES (different type) |
+| hasProvinceWin / provinceWinBonus | x (bool) | x (int 0/1) | YES (different type) |
+| isElite | x | (in RedTeamBuff) | PARTIAL | *(based on yesterday's flip_points, NOT flip_count)* |
 | team / userTeam | x | x | YES (different name) |
-| cityHex | x | - | NO |
 | baseBuff | x | - | NO |
 | reason | x | - | NO |
 | redBuff | - | x | NO |
@@ -343,7 +348,7 @@ double get avgPaceMinPerKm {
 
 ### 4.9 ~~MERGE: `BuffBreakdown` with `TeamBuffComparison`~~ DONE
 
-**Status**: Completed. `TeamBuffComparison` now holds a `BuffBreakdown breakdown` reference and delegates `allRangeBonus`, `cityLeaderBonus`, `userTeam`, `userTotalMultiplier` to it instead of duplicating. Removed 4 duplicated constructor parameters and 3 now-unused local variables from `_calculateBuffComparison()` in `team_stats_provider.dart`.
+**Status**: Completed. `TeamBuffComparison` now holds a `BuffBreakdown breakdown` reference and delegates `allRangeBonus`, `districtWinBonus`, `provinceWinBonus`, `userTeam`, `userTotalMultiplier` to it instead of duplicating. Removed 4 duplicated constructor parameters and 3 now-unused local variables from `_calculateBuffComparison()` in `team_stats_provider.dart`.
 
 **Fields eliminated**: 5 (4 duplicated params + 1 class wrapper simplified)
 
@@ -420,6 +425,7 @@ The codebase uses a 3-layer **Forwarding Provider-Repository** pattern:
 | Leaderboard | `LeaderboardRepository` | SQLite `leaderboard_cache` | `LeaderboardProvider`, `PrefetchService` |
 | Points | `PointsService` | `UserRepository` / SQLite `runs` | `RunProvider` (during run), `appLaunchSync` |
 | Game Config | `RemoteConfigService` | `config_cache.json` / Supabase `app_config` | `RemoteConfigService.initialize()` |
+| Ads | `AdService` | Google AdMob (BannerAd on MapScreen) | `AdService().initialize()` in main.dart |
 
 ### Provider -> Repository Delegation
 
@@ -446,18 +452,56 @@ LocationService (GPS 0.5Hz)
             -> SyncRetryService (retry on failure: launch, OnResume, next run)
 ```
 
+### Two Data Domains
+
+All app data belongs to exactly one of two domains:
+
+**Snapshot Domain (Server → Local, read-only until next midnight):**
+- Hex map base layer, leaderboard rankings + season record, team stats, buff multiplier, user aggregates
+- Downloaded on app launch/OnResume via prefetch
+- NEVER changes from running — frozen until next prefetch
+- Leaderboard: `get_leaderboard` RPC reads from `season_leaderboard_snapshot` table (NOT live `users`)
+- LeaderboardScreen Season Record uses snapshot `LeaderboardEntry`, NOT live `currentUser`
+- Used by: TeamScreen, LeaderboardScreen, ALL TIME aggregates (distance, pace, stability, run count)
+
+**Live Domain (Local creation → Upload):**
+- Header FlipPoints, run records, hex overlay (own runs only)
+- Created/updated by user's running actions
+- Uploaded to server via "The Final Sync"
+- Used by: FlipPointsWidget, RunHistoryScreen (recent runs, period stats)
+
+**The Only Hybrid Value:**
+`PointsService.totalSeasonPoints = server season_points + local unsynced today`
+This is used for both the header FlipPoints AND the ALL TIME points display, ensuring they always match.
+
+| Screen/Widget | Domain | Data Source |
+|--------------|--------|-------------|
+| Header FlipPoints | Live (hybrid) | `PointsService.totalSeasonPoints` |
+| Run History ALL TIME | Snapshot + hybrid points | `UserModel` aggregates + `totalSeasonPoints` |
+| Run History period stats | Live | Local SQLite runs (run-level granularity) |
+| TeamScreen | Snapshot | Server RPCs only |
+| LeaderboardScreen | Snapshot | `season_leaderboard_snapshot` via `get_leaderboard` RPC (NOT live `users` or `currentUser`) |
+| Hex Map | Snapshot + Live overlay | `hex_snapshot` + own local flips |
+
 ### Points Hybrid Model
 
 Points use a dual-source calculation:
 
 ```
-todayFlipPoints = ServerBaseline (synced runs) + LocalUnsynced (pending SQLite runs)
+totalSeasonPoints = UserRepository.seasonPoints + _localUnsyncedToday
+todayFlipPoints = _serverTodayBaseline + _localUnsyncedToday
 
-On run complete:
-  1. _localUnsyncedToday += points  (immediate UI update)
-  2. UserRepository.updateSeasonPoints()  (triggers notifyListeners)
-  3. finalizeRun() RPC -> server
-  4. On sync success: transfer from _localUnsyncedToday to _serverTodayBaseline
+During run:
+  1. addRunPoints() → _localUnsyncedToday += points (immediate header update)
+
+On run complete (The Final Sync):
+  2. finalizeRun() RPC → server updates season_points, user aggregates
+  3. onRunSynced() → transfer _localUnsyncedToday to server baseline
+     (decrement local BEFORE updating season to avoid transient spike)
+
+On app resume:
+  4. appLaunchSync → refresh server season_points (use max to prevent regression)
+  5. refreshFromLocalTotal → recalculate local unsynced from SQLite
 ```
 
 ### OnResume Data Refresh
@@ -469,7 +513,7 @@ When app returns to foreground, `AppLifecycleManager` triggers (throttled 30s):
 - Buff multiplier refresh (`BuffService`)
 - Today's points baseline refresh (`appLaunchSync` + `PointsService`)
 
-Skipped during active runs.
+Skipped during active runs (including during stopRun's Final Sync via `_isStopping` flag).
 
 ---
 

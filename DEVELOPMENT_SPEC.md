@@ -1,6 +1,6 @@
 # RunStrict Development Specification: "The 40-Day Journey"
 
-> **Last Updated**: 2026-02-16  
+> **Last Updated**: 2026-02-18
 > **App Name**: RunStrict (The 40-Day Journey)  
 > **Current Season Status**: Season 2 (Started 2026-02-11)
 
@@ -142,7 +142,7 @@ RED rewards **individual excellence** with territory bonuses.
 | District + Province win | 4x | 2x |
 
 **Definitions:**
-- **Elite**: Top 20% of yesterday's Flip Points among RED runners in the same District.
+- **Elite**: Top 20% of yesterday's **Flip Points** (points with multiplier applied, NOT raw flip count) among RED runners in the same District. Threshold stored in `daily_buff_stats.red_elite_threshold_points`, computed from `run_history.flip_points`.
 - **Common**: Bottom 80% of RED runners in the District.
 - **District Win**: RED controls the most hexes in this District (yesterday midnight snapshot).
 - **Province Win**: RED controls the most hexes server-wide (yesterday midnight snapshot).
@@ -243,11 +243,11 @@ PURPLE rewards **participation rate** within District scope.
 
 **Geographic Scope Resolutions (for MapScreen & Leaderboard):**
 
-| Scope | H3 Resolution | Avg Edge | Avg Area | Purpose |
-|-------|---------------|----------|----------|---------|
-| ZONE | 8 (Parent of 9) | ~461m | ~0.73 km² | Neighborhood leaderboard |
-| DISTRICT | 6 (Parent of 9) | ~3.2km | ~36 km² | District leaderboard |
-| PROVINCE | 4 (Parent of 9) | ~22.6km | ~1,770 km² | Metro/Regional leaderboard |
+| Scope | Enum | H3 Resolution | Avg Edge | Avg Area | Purpose |
+|-------|------|---------------|----------|----------|---------|
+| ZONE | `zone` | 8 (Parent of 9) | ~461m | ~0.73 km² | Neighborhood leaderboard |
+| DISTRICT | `district` | 6 (Parent of 9) | ~3.2km | ~36 km² | District leaderboard |
+| PROVINCE | `province` | 4 (Parent of 9) | ~22.6km | ~1,770 km² | Metro/Regional leaderboard |
 
 > H3 uses Aperture 7: each parent hex contains ~7 children. Scope filtering uses `cellToParent()` to group users by their parent hex at the scope resolution.
 
@@ -332,7 +332,7 @@ The buff multiplier is determined by team, performance tier, and territory domin
 **Advantages:**
 - **Server efficiency**: Buff calculated once per day via Edge Function.
 - **Predictability**: Users know their buff at the start of each day.
-- **Strategy**: Teams can coordinate city dominance and participation.
+- **Strategy**: Teams can coordinate district dominance and participation.
 - **Competition**: RED rewards individual excellence, BLUE rewards solidarity, PURPLE rewards district-wide consistency.
 
 #### 2.5.3 Hex Snapshot System
@@ -467,7 +467,7 @@ static double? calculateCV(List<LapModel> laps) {
 | Type | Season cumulative only (no daily/weekly) |
 | Ranking Metric | Individual accumulated Flip Points |
 | Team Buff Impact | Via team-based buff multipliers |
-| Display | Top rankings per geographic scope (Zone/District/Province) based on user's "home hex" |
+| Display | Top rankings (geographic scope removed for simplicity) based on user's "home hex" |
 | Stability Badge | Shows user's stability score on podium and rank tiles |
 
 #### 2.7.1 Home Hex System (Asymmetric Definition)
@@ -482,17 +482,17 @@ static double? calculateCV(List<LapModel> laps) {
 | **Other Users** | **LAST hexagon** of most recent run (end point) | Standard: Most recent location |
 
 - The Home Hex is updated at run completion (part of "The Final Sync").
-- Home Hex determines which ZONE/DISTRICT/PROVINCE scope the user belongs to for leaderboard filtering.
+- Home Hex determines which zone/district/province scope the user belongs to for leaderboard filtering.
 - **Privacy Rationale**: By using the START hex for yourself, your actual ending location (potentially your home) is not revealed to others viewing your ranking scope.
 - **Zero-hex run**: If `hex_path` is empty (GPS failed, indoor run, etc.), **home hex is NOT updated**. Previous home hex values are preserved.
 
 **Geographic Scope Filters (based on Home Hex):**
 
-| Scope | H3 Resolution | Definition | Display |
-|-------|---------------|-----------|---------|
-| **ZONE** | 8 (Parent of 9) | Users whose Home Hex shares the same Resolution 8 parent | Neighborhood rankings (~461m radius) |
-| **DISTRICT** | 6 (Parent of 9) | Users whose Home Hex shares the same Resolution 6 parent | District rankings (~3.2km radius) |
-| **PROVINCE** | — | All users server-wide | Regional/Global rankings |
+| Scope | Enum | H3 Resolution | Definition | Display |
+|-------|------|---------------|-----------|---------|
+| **ZONE** | `zone` | 8 (Parent of 9) | Users whose Home Hex shares the same Resolution 8 parent | Neighborhood rankings (~461m radius) |
+| **DISTRICT** | `district` | 6 (Parent of 9) | Users whose Home Hex shares the same Resolution 6 parent | District rankings (~3.2km radius) |
+| **PROVINCE** | `province` | — | All users server-wide | Regional/Global rankings |
 
 **Implementation:**
 ```dart
@@ -506,11 +506,11 @@ String getHomeHex(RunSummary run, {required bool isSelf}) {
 }
 
 // Get user's scope hex from their home hex
-String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
+String getHomeHexAtScope(String homeHex, GeographicScope scope) {
   return switch (scope) {
-    LeaderboardScope.zone => h3.cellToParent(homeHex, 8),
-    LeaderboardScope.district => h3.cellToParent(homeHex, 6),
-    LeaderboardScope.province => null, // No filtering
+    GeographicScope.zone => h3.cellToParent(homeHex, 8),
+    GeographicScope.district => h3.cellToParent(homeHex, 6),
+    GeographicScope.province => null, // No filtering
   };
 }
 ```
@@ -520,7 +520,7 @@ String getHomeHexAtScope(String homeHex, LeaderboardScope scope) {
 - **Current user's scope** is determined by their own FIRST hex (start point).
 - **Other users' scope** is determined by their LAST hex (end point).
 - Users outside top ranks see their own rank in a sticky footer.
-- Purple users have a distinct glowing border in the [PROVINCE] view.
+- Purple users have a distinct glowing border in the province view.
 - Team filter tabs: [ALL] / [RED] / [BLUE] / [PURPLE].
 - **Ranking snapshot**: Downloaded once on app launch, NOT polled in real-time.
 
@@ -621,8 +621,10 @@ App Entry
 | Navigation | Bottom tabs + horizontal swipe |
 
 **FlipPoints Widget Behavior:**
-- Animated flip counter showing current season points
-- On each flip: team-colored glow + scale bounce animation (current implementation)
+- Animated flip counter showing **season total points** (not today's points)
+- Airport departure board style flip animation for each digit
+- On each flip: team-colored glow + scale bounce animation
+- Uses `FittedBox` to prevent overflow with large numbers (3+ digits)
 - Designed for peripheral vision awareness during runs
 
 #### 3.2.3 Map Screen (The Void)
@@ -652,19 +654,19 @@ The map renders geographic scope boundaries using separate GeoJSON sources:
 
 | Layer | Source | Scope | Style |
 |-------|--------|-------|-------|
-| Province Boundary | `scope-boundary-source` | ALL only | White, 8px, 15% opacity, 4px blur, solid |
-| District Boundaries | `district-boundary-source` | ALL only | White, 3px, 12% opacity, 2px blur, dashed [4,3] |
+| Province Boundary | `scope-boundary-source` | PROVINCE only | White, 8px, 15% opacity, 4px blur, solid |
+| District Boundaries | `district-boundary-source` | PROVINCE only | White, 3px, 12% opacity, 2px blur, dashed [4,3] |
 
-**Province Boundary (ALL scope):**
+**Province Boundary (PROVINCE scope):**
 - Merged outer boundary of all ~7 district (Res 6) hexes — **irregular polygon** (NOT a single hexagon)
 - Algorithm: Collect all directed edges → remove shared internal edges (opposite-direction cancel) → chain remaining outer edges into closed polygon
 - Uses 7-decimal coordinate precision for edge matching (~1cm accuracy)
 
-**District Boundaries (ALL scope):**
+**District Boundaries (PROVINCE scope):**
 - Individual dashed outlines for each ~7 district hex
-- Hidden in CITY and ZONE scopes
+- Hidden in DISTRICT and ZONE scopes
 
-**CITY scope:** Single district hex boundary (solid, same style as province)
+**DISTRICT scope:** Single district hex boundary (solid, same style as province)
 **ZONE scope:** No boundaries shown
 
 #### 3.2.4 Running Screen
@@ -694,7 +696,7 @@ The map renders geographic scope boundaries using separate GeoJSON sources:
 **Important:** FlipPoints are shown in AppBar header ONLY (not duplicated in running screen).
 
 **Multiplier Display:**
-- Show buff multiplier (e.g., "2x Elite" for RED, "2x City Leader" for BLUE)
+- Show buff multiplier (e.g., "2x Elite" for RED, "2x District Leader" for BLUE)
 - New users without buff data: Show "1x" (default)
 
 #### 3.2.5 Leaderboard Screen
@@ -710,7 +712,7 @@ The map renders geographic scope boundaries using separate GeoJSON sources:
 | Per User | Avatar, Name, Flip Points, Stability Badge |
 
 **Removed Features:**
-- Geographic scope filter (Zone/City/All) - removed for simplicity
+- Geographic scope filter (Zone/District/Province) - removed for simplicity
 - Team filter tabs - all teams shown together
 
 #### 3.2.6 Run History Screen (Calendar)
@@ -719,8 +721,8 @@ The map renders geographic scope boundaries using separate GeoJSON sources:
 |---------|------|
 | Calendar View | Month/Week/Year view with distance indicators |
 | Day Indicators | Distance display per day (e.g., "5.2k") matching week view style |
-| ALL TIME Stats | Fixed panel at top with distance, pace, flips, runs |
-| Period Stats | Smaller panel (copies ALL TIME design) for WEEK/MONTH/YEAR period |
+| ALL TIME Stats | Fixed panel at top: points (primary), distance, pace, stability |
+| Period Stats | Smaller panel (copies ALL TIME design): points (primary), distance, pace, stability |
 | Period Toggle | TOTAL/WEEK/MONTH/YEAR selector (height 36, borderRadius 18) |
 | Range Navigation | Prev/Next arrows for period navigation |
 | **Timezone Selector** | Dropdown to select display timezone |
@@ -760,7 +762,7 @@ The map renders geographic scope boundaries using separate GeoJSON sources:
 | Birthday | User birthday, editable |
 | Team | Display only (cannot change mid-season) |
 | Season Stats | Total flips, distance, runs |
-| Buff Status | Current multiplier breakdown (Elite/City Leader/All Range) |
+| Buff Status | Current multiplier breakdown (Elite/District Leader/Province Range) |
 
 ### 3.3 Widget Library
 
@@ -800,6 +802,26 @@ The map renders geographic scope boundaries using separate GeoJSON sources:
 | Korean | Paperlogyfont | Regular | From freesentation.blog |
 
 > **Korean Font Source**: https://freesentation.blog/paperlogyfont
+
+#### UI Conventions
+
+**Stat Panel Display Order** (all screens follow this order):
+1. **Points** (primary/large display)
+2. **Distance** (secondary)
+3. **Pace** (secondary)
+4. **Rank or Stability** (secondary)
+
+Applies to: TeamScreen (yesterday stats), RunHistoryScreen (ALL TIME + period panels), LeaderboardScreen (season stats).
+
+**Pace Format**: Unified across all screens — `X'XX` (apostrophe separator, no trailing `"`).
+- Examples: `5'30`, `6'05`, `-'--` (for null/invalid)
+- Applied in: `run_provider.dart`, `team_screen.dart`, `run_history_screen.dart`, `leaderboard_screen.dart`
+
+**Google AdMob**: BannerAd displayed on MapScreen via `_NativeAdCard` widget.
+- Shows on all scope views (zone, district, province)
+- Shows in both portrait and landscape orientations
+- `AdService` singleton manages SDK initialization (`lib/services/ad_service.dart`)
+- Test ad unit IDs during development; replace with production IDs before release
 
 #### Animation Standards
 
@@ -1024,6 +1046,7 @@ CREATE TABLE users (
   manifesto TEXT CHECK (char_length(manifesto) <= 30),
   home_hex_start TEXT,                        -- First hex of last run (used for SELF leaderboard scope)
   home_hex_end TEXT,                          -- Last hex of last run (used for OTHERS leaderboard scope)
+  district_hex TEXT,                          -- Res 6 H3 parent hex, set by finalize_run() (used for buff district scoping)
   season_home_hex TEXT,                       -- Home hex at season start
   total_distance_km DOUBLE PRECISION NOT NULL DEFAULT 0,
   avg_pace_min_per_km DOUBLE PRECISION,
@@ -1041,18 +1064,21 @@ CREATE TABLE hexes (
   -- NO runner IDs (privacy)
 );
 
--- Daily buff stats (calculated at midnight GMT+2 via Edge Function)
+-- Daily buff stats: per-city stats (calculated at midnight GMT+2 via Edge Function)
+-- NOT per-user. get_user_buff() reads this + run_history to determine individual buff.
 CREATE TABLE daily_buff_stats (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id),
-  date DATE NOT NULL,
-  buff_multiplier INTEGER NOT NULL DEFAULT 1,
-  is_elite BOOLEAN NOT NULL DEFAULT false,        -- RED: Top 20%
-  is_district_leader BOOLEAN NOT NULL DEFAULT false,  -- Team has most hexes in district
-  has_province_range BOOLEAN NOT NULL DEFAULT false,   -- Team has most hexes server-wide
-  participation_rate DOUBLE PRECISION,            -- PURPLE: District participation %
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, date)
+  stat_date DATE NOT NULL,
+  city_hex TEXT,                                  -- District (Res 6) hex prefix
+  dominant_team TEXT,                             -- Team with most hexes in this district
+  red_hex_count INTEGER DEFAULT 0,
+  blue_hex_count INTEGER DEFAULT 0,
+  purple_hex_count INTEGER DEFAULT 0,
+  red_elite_threshold_points INTEGER DEFAULT 0,   -- Top 20% flip_points threshold (from run_history.flip_points, NOT flip_count)
+  purple_total_users INTEGER DEFAULT 0,
+  purple_active_users INTEGER DEFAULT 0,
+  purple_participation_rate DOUBLE PRECISION DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Daily province range stats (tracks server-wide hex dominance)
@@ -1120,15 +1146,37 @@ CREATE TABLE run_history (
   distance_km DOUBLE PRECISION NOT NULL,
   duration_seconds INTEGER NOT NULL,
   avg_pace_min_per_km DOUBLE PRECISION,
-  flip_count INTEGER NOT NULL DEFAULT 0,        -- Flips earned this run
-  points_earned INTEGER NOT NULL DEFAULT 0,     -- Points with multiplier
+  flip_count INTEGER NOT NULL DEFAULT 0,        -- Raw flips (hex color changes)
+  flip_points INTEGER NOT NULL DEFAULT 0,      -- Points with multiplier (flip_count × buff). Used for RED Elite threshold.
   team_at_run TEXT NOT NULL CHECK (team_at_run IN ('red', 'blue', 'purple')),
+  cv DOUBLE PRECISION,                         -- Pace consistency (Coefficient of Variation)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
 -- NOTE: run_history is PRESERVED across season resets (personal history)
 -- NOTE: daily_flips table REMOVED — no daily flip limit
+
+-- Season leaderboard snapshot: frozen at midnight, used by get_leaderboard RPC
+-- IMPORTANT: This is the Snapshot Domain source for leaderboard. Never use live `users` table.
+CREATE TABLE season_leaderboard_snapshot (
+  user_id UUID NOT NULL REFERENCES users(id),
+  season_number INTEGER NOT NULL,
+  rank INTEGER NOT NULL,
+  name TEXT,
+  team TEXT,
+  avatar TEXT,
+  season_points INTEGER NOT NULL DEFAULT 0,
+  total_distance_km DOUBLE PRECISION NOT NULL DEFAULT 0,
+  avg_pace_min_per_km DOUBLE PRECISION,
+  avg_cv DOUBLE PRECISION,
+  total_runs INTEGER DEFAULT 0,
+  home_hex TEXT,
+  home_hex_end TEXT,
+  manifesto TEXT,
+  nationality TEXT,
+  PRIMARY KEY (user_id, season_number)
+);
 ```
 
 #### Partition Management (pg_partman)
@@ -1204,16 +1252,34 @@ RETURNS INTEGER AS $$
   LIMIT 1;
 $$ LANGUAGE sql STABLE;
 
--- Leaderboard query (efficient with index on season_points)
+-- Leaderboard query (reads from season_leaderboard_snapshot — Snapshot Domain)
+-- IMPORTANT: Do NOT read from live `users` table — leaderboard is frozen at midnight.
 CREATE OR REPLACE FUNCTION get_leaderboard(p_limit INTEGER DEFAULT 20)
-RETURNS TABLE(user_id UUID, name TEXT, team TEXT, season_points INTEGER, rank BIGINT) AS $$
-  SELECT id, name, team, season_points,
-         ROW_NUMBER() OVER (ORDER BY season_points DESC) as rank
-  FROM users
-  WHERE season_points > 0
-  ORDER BY season_points DESC
+RETURNS TABLE(
+  id UUID, name TEXT, team TEXT, avatar TEXT,
+  season_points INT, total_distance_km FLOAT8,
+  avg_pace_min_per_km FLOAT8, avg_cv FLOAT8,
+  home_hex TEXT, home_hex_end TEXT, manifesto TEXT,
+  nationality TEXT, total_runs INT, rank BIGINT
+) AS $fn$
+  SELECT
+    s.user_id, s.name, s.team, s.avatar,
+    s.season_points, s.total_distance_km,
+    s.avg_pace_min_per_km, s.avg_cv,
+    s.home_hex,
+    COALESCE(s.home_hex_end, u.home_hex_end),
+    s.manifesto,
+    COALESCE(s.nationality, u.nationality),
+    COALESCE(s.total_runs, u.total_runs),
+    s.rank::BIGINT
+  FROM public.season_leaderboard_snapshot s
+  LEFT JOIN public.users u ON u.id = s.user_id
+  WHERE s.season_number = (
+    SELECT MAX(season_number) FROM public.season_leaderboard_snapshot
+  )
+  ORDER BY s.rank ASC
   LIMIT p_limit;
-$$ LANGUAGE sql STABLE;
+$fn$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- Finalize run: accept client flip points with cap validation ("The Final Sync")
 -- Snapshot-based: client counts flips against daily snapshot, server cap-validates only.
@@ -1229,7 +1295,8 @@ CREATE OR REPLACE FUNCTION finalize_run(
   p_cv DOUBLE PRECISION DEFAULT NULL,
   p_client_points INTEGER DEFAULT 0,
   p_home_region_flips INTEGER DEFAULT 0,
-  p_hex_parents TEXT[] DEFAULT NULL
+  p_hex_parents TEXT[] DEFAULT NULL,
+  p_district_hex TEXT DEFAULT NULL
 )
 RETURNS jsonb AS $$
 DECLARE
@@ -1285,6 +1352,7 @@ BEGIN
     season_points = season_points + v_points,
     home_hex_start = CASE WHEN array_length(p_hex_path, 1) > 0 THEN p_hex_path[1] ELSE home_hex_start END,
     home_hex_end = CASE WHEN array_length(p_hex_path, 1) > 0 THEN p_hex_path[array_length(p_hex_path, 1)] ELSE home_hex_end END,
+    district_hex = COALESCE(p_district_hex, district_hex),
     total_distance_km = total_distance_km + p_distance_km,
     total_runs = total_runs + 1,
     avg_pace_min_per_km = CASE 
@@ -1397,11 +1465,49 @@ COMMIT;
 - Firebase charges per-document for deletion (100万 docs = 100万 write ops = ~$0.18+)
 - Supabase/PostgreSQL: `TRUNCATE`/`DROP PARTITION` = **$0, instant, no performance impact**
 
+#### Two Data Domains (Critical Architecture Rule)
+
+All data in the app belongs to exactly one of two domains:
+
+**Domain 1: Snapshot (Server → Local, read-only until next midnight)**
+- Downloaded on app launch / OnResume via prefetch
+- Created by server at midnight GMT+2 from all runners' uploaded data
+- **NEVER changes from running** — frozen until next prefetch
+
+| Data | Source | Used By |
+|------|--------|---------|
+| Hex map (base layer) | `hex_snapshot` table | MapScreen |
+| Leaderboard rankings + season record | `get_leaderboard` RPC → `season_leaderboard_snapshot` (NOT live `users`) | LeaderboardScreen |
+| Team rankings / dominance | `get_team_rankings` / `get_hex_dominance` RPC | TeamScreen |
+| Buff multiplier | `get_user_buff` RPC (yesterday's data) | BuffService (frozen at run start) |
+| User aggregates | `app_launch_sync` → `UserModel` | ALL TIME stats, profile |
+
+**Domain 2: Live (Local creation → Upload to server)**
+- Created by user's running actions
+- Changes during/after each run
+- Uploaded to server via "The Final Sync"
+
+| Data | Source | Used By |
+|------|--------|---------|
+| Header FlipPoints | `PointsService` (server season_points + local unsynced) | FlipPointsWidget |
+| Run records | Local SQLite (created per run) | RunHistoryScreen (recent runs, period stats) |
+| Hex overlay (own runs) | Local SQLite + HexRepository | MapScreen (own flips on top of snapshot) |
+
+**Rules:**
+1. `PointsService.totalSeasonPoints` is the ONLY hybrid value (server + local unsynced)
+2. ALL TIME stats use server `UserModel` aggregates + `totalSeasonPoints` for points
+3. Period stats (DAY/WEEK/MONTH/YEAR) use local SQLite runs (run-level granularity)
+4. TeamScreen and LeaderboardScreen use ONLY snapshot domain — never compute from local runs
+6. LeaderboardScreen Season Record stats (points, distance, pace) come from snapshot `LeaderboardEntry`, NOT live `currentUser`
+7. `get_leaderboard` RPC reads from `season_leaderboard_snapshot` table, NOT from live `users` table
+5. Server processes all runners' uploads at midnight to create next day's snapshot
+
 #### Data Flow Summary
 
 ```
 [Client Prefetch — App Launch / OnResume]
   Download hex_snapshot WHERE snapshot_date = today (yesterday's midnight result)
+  Download leaderboard, team rankings, buff multiplier, user aggregates
   Apply local overlay: user's own today's flips (from local SQLite)
   Map shows: snapshot + own local flips (other users' today activity invisible)
 
@@ -1409,6 +1515,7 @@ COMMIT;
   Runner GPS → Client validates → Local hex_path list
   Flip counted against snapshot + local overlay (NOT live server state)
   flip_points = total_flips × buff_multiplier (frozen at run start)
+  Header FlipPoints updates live: PointsService.addRunPoints()
   NO server communication (battery + cost optimization)
 
 [Run Completion - "The Final Sync"]
@@ -1416,10 +1523,12 @@ COMMIT;
   Server RPC: finalize_run() →
     → Cap validate: flip_points ≤ len(hex_path) × buff_multiplier
     → Award capped points: season_points += flip_points
+    → Update user aggregates: total_distance_km, avg_pace, avg_cv, total_runs
     → Update live `hexes` table (for buff/dominance, NOT for flip counting)
     → INSERT INTO run_history (lightweight stats, preserved)
     → hex_snapshot NOT modified (immutable until midnight)
-  
+  PointsService.onRunSynced() transfers local unsynced → server baseline
+
 [Daily Maintenance — pg_cron (midnight GMT+2)]
   build_daily_hex_snapshot() →
     → Start from yesterday's hex_snapshot
@@ -1605,6 +1714,9 @@ sensors_plus: ^latest          # Accelerometer validation
 # Network
 connectivity_plus: ^6.1.0      # Network connectivity check before sync
 
+# Ads
+google_mobile_ads: ^5.3.0      # Google AdMob banner ads
+
 # UI
 google_fonts: ^6.2.1
 animated_text_kit: ^4.2.2
@@ -1663,6 +1775,7 @@ lib/
 │   ├── running_score_service.dart      # Pace validation for capture
 │   ├── app_lifecycle_manager.dart      # App foreground/background handling (uses RemoteConfigService)
 │   ├── sync_retry_service.dart        # Retry failed Final Syncs (uses connectivity_plus)
+│   ├── ad_service.dart                # Google AdMob initialization & ad unit IDs
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite implementation
@@ -1741,7 +1854,7 @@ lib/
 | The Final Sync (batch upload) | ⬜ | RPC: finalize_run() with conflict resolution |
 | Batch points calculation | ⬜ | RPC: finalize_run (no daily limit) |
 | Leaderboard (ALL scope) | ⬜ | SQL function: get_leaderboard() |
-| Leaderboard (City/Zone scope) | ⬜ | Based on visible hex count |
+| Leaderboard (District/Zone scope) | ⬜ | Based on visible hex count |
 | Hex path in RunSummary | ⬜ | hex_path column in runs table |
 | SQLite hex cache | ⬜ | Offline support |
 
@@ -1800,23 +1913,23 @@ lib/
 
 | Team | Scenario | Multiplier | Flip Points per Flip |
 |------|----------|------------|---------------------|
-| RED | Elite (Top 20%) + City Leader + All Range | 4x | 4 |
-| RED | Elite + City Leader (no All Range) | 3x | 3 |
-| RED | Elite (non-leader city) | 2x | 2 |
-| RED | Common (any city) | 1x | 1 |
-| BLUE | City Leader + All Range | 3x | 3 |
-| BLUE | City Leader (no All Range) | 2x | 2 |
-| BLUE | Non-leader city | 1x | 1 |
-| PURPLE | ≥60% city participation | 3x | 3 |
-| PURPLE | 30-59% city participation | 2x | 2 |
-| PURPLE | <30% city participation | 1x | 1 |
+| RED | Elite (Top 20%) + District Leader + Province Range | 4x | 4 |
+| RED | Elite + District Leader (no Province Range) | 3x | 3 |
+| RED | Elite (non-leader district) | 2x | 2 |
+| RED | Common (any district) | 1x | 1 |
+| BLUE | District Leader + Province Range | 3x | 3 |
+| BLUE | District Leader (no Province Range) | 2x | 2 |
+| BLUE | Non-leader district | 1x | 1 |
+| PURPLE | ≥60% district participation | 3x | 3 |
+| PURPLE | 30-59% district participation | 2x | 2 |
+| PURPLE | <30% district participation | 1x | 1 |
 | Any | New user (no yesterday data) | 1x | 1 |
 
 **Key Points:**
 - Multiplier is calculated at midnight (GMT+2), fixed for the entire day.
 - Buff is **frozen** when run starts — no changes mid-run.
 - Server calculates once per day via Edge Function.
-- City scope determined by user's home hex.
+- District scope determined by user's home hex.
 
 ### C. Leaderboard Geographic Scope
 
@@ -1827,8 +1940,8 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 | Scope | H3 Resolution | Map Zoom | Filter Logic |
 |-------|---------------|----------|--------------|
 | **ZONE** | 8 | 15.0 | `cellToParent(userHex, 8)` — Neighborhood (~461m) |
-| **CITY** | 6 | 12.0 | `cellToParent(userHex, 6)` — District (~3.2km) |
-| **ALL** | 4 | 10.0 | No filter — server-wide ranking |
+| **DISTRICT** | 6 | 12.0 | `cellToParent(userHex, 6)` — District (~3.2km) |
+| **PROVINCE** | 4 | 10.0 | No filter — server-wide ranking |
 
 **Client Flow:**
 1. Get user's current base hex (Resolution 9)
@@ -1837,8 +1950,8 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 
 **Approximate Coverage:**
 - ZONE (Res 8): ~7 base hexes, neighborhood-level competition
-- CITY (Res 6): ~343 base hexes, district-level competition
-- ALL (Res 4): ~16,807 base hexes, metro-wide competition
+- DISTRICT (Res 6): ~343 base hexes, district-level competition
+- PROVINCE (Res 4): ~16,807 base hexes, metro-wide competition
 
 ### D. Slogans
 
@@ -1856,6 +1969,16 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 
 | Date | Change |
 |------|--------|
+| 2026-02-17 | **AdMob, UI Unification, Scope Naming**: |
+| | — Google AdMob integration: `AdService` singleton, BannerAd on MapScreen (all scope views, portrait + landscape) |
+| | — Stat panel display order unified: points (primary) → distance → pace → rank/stability (TeamScreen, RunHistoryScreen, LeaderboardScreen) |
+| | — Pace format unified: `X'XX` (apostrophe, no trailing `"`). Applied to run_provider, team_screen, run_history_screen, leaderboard_screen |
+| | — FlipPoints header widget: shows season total points (not today's); `FittedBox` overflow prevention for 3+ digits |
+| | — Landscape layout fixes: ad in MapScreen landscape, leaderboard `CustomScrollView` for full scrollability |
+| | — Geographic scope category naming: zone/city/all → zone/district/province in all documentation |
+| | — New file: `lib/services/ad_service.dart` |
+| | — New dependency: `google_mobile_ads: ^5.3.0` |
+| | — Platform configs: iOS `GADApplicationIdentifier` in Info.plist, Android `APPLICATION_ID` in AndroidManifest.xml |
 | 2026-02-16 | **Province Boundary, Profile Redesign, Electric Manifesto**: |
 | | — Province boundary: merged outer polygon of ~7 district hexes (irregular shape, not a single hexagon) |
 | | — Added `_computeMergedOuterBoundary()` algorithm: directed edge collection → shared edge removal → polygon chaining |
@@ -2074,7 +2197,7 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 │  ─────────────────────────────────────────────────────────  │
 │  Returns:                                                   │
 │  1. hex_map[]        - Latest hexagon colors (visible area) │
-│  2. ranking_snapshot - Leaderboard data (ALL/City/Zone)     │
+│  2. ranking_snapshot - Leaderboard data (Province/District/Zone) │
 │  3. buff_multiplier  - Today's team-based buff (from daily) │
 │  4. user_stats       - Personal season points, home_hex     │
 │  5. app_config       - Server-configurable constants        │
@@ -2293,7 +2416,7 @@ class AppConfig {
 |----------|-----------|----------------|
 | **Season** | `durationDays`, `serverTimezoneOffsetHours` | 40, 2 |
 | **GPS** | `maxSpeedMps`, `minSpeedMps`, `maxAccuracyMeters`, `maxAltitudeChangeMps`, `maxJumpDistanceMeters`, `movingAvgWindowSeconds`, `maxCapturePaceMinPerKm`, `pollingRateHz`, `minTimeBetweenPointsMs` | 6.94, 0.3, 50.0, 5.0, 100, 20, 8.0, 0.5, 1500 |
-| **Hex** | `baseResolution`, `zoneResolution`, `cityResolution`, `allResolution`, `captureCheckDistanceMeters`, `maxCacheSize` | 9, 8, 6, 4, 20.0, 4000 |
+| **Hex** | `baseResolution`, `zoneResolution`, `districtResolution`, `provinceResolution`, `captureCheckDistanceMeters`, `maxCacheSize` | 9, 8, 6, 4, 20.0, 4000 |
 | **Timing** | `accelerometerSamplingPeriodMs`, `refreshThrottleSeconds` | 200, 30 |
 | **Buff** | `elitePercentile`, `participationRateHigh`, `participationRateMid` | 20, 60, 30 |
 
@@ -2398,7 +2521,7 @@ await RemoteConfigService().initialize();
 |------|--------|-------|
 | Supabase project provisioning | Needs setup | Choose region, plan tier |
 | pg_partman extension activation | Needs Supabase support | May require Pro plan or self-hosted |
-| Leaderboard City/Zone boundaries | Needs proposal | Based on H3 resolution (Res 8 = Zone, Res 6 = City) |
+| Leaderboard District/Zone boundaries | Needs proposal | Based on H3 resolution (Res 8 = Zone, Res 6 = District) |
 | Korean font (Paperlogyfont) integration | Needs package setup | Custom font from freesentation.blog |
 | Stats/Numbers font identification | Needs check | Use current RunningScreen km font |
 | Accelerometer threshold calibration | Needs testing | MVP must include but threshold TBD via testing |
@@ -2443,7 +2566,7 @@ await RemoteConfigService().initialize();
 
 | # | Change | Type | Description |
 |---|--------|------|-------------|
-| 1 | Removed geographic scope filter | **리팩토링/UI** | Removed Zone/City/All scope dropdown - now shows all users |
+| 1 | Removed geographic scope filter | **리팩토링/UI** | Removed Zone/District/Province scope dropdown - now shows all users |
 | 2 | Removed `_scopeFilter` state | **리팩토링** | No longer tracking geographic scope state |
 | 3 | Removed `_buildFilterBar` | **리팩토링** | Removed filter bar containing scope dropdown |
 | 4 | Removed `_buildScopeDropdown` | **리팩토링** | Removed scope dropdown widget |
@@ -2726,7 +2849,7 @@ await RemoteConfigService().initialize();
 **Updated: Pending Items**
 - Added `app_launch_sync` RPC function
 - Added Home Hex update logic
-- Updated Leaderboard boundaries note (H3 Res 8 = Zone, Res 6 = City)
+- Updated Leaderboard boundaries note (H3 Res 8 = Zone, Res 6 = District)
 
 **Updated: Next Steps**
 - Reprioritized: `app_launch_sync` RPC now Priority 1
@@ -2737,7 +2860,7 @@ await RemoteConfigService().initialize();
 **Major cost optimization updates:**
 - §2.5.2: Changed multiplier from "Simultaneous Runner" (real-time) to "Yesterday's Check-in" (daily batch)
 - §2.5.3: Added "The Final Sync" — no server communication during runs
-- §2.6: Added Home Hex System for ranking scope (ZONE/CITY/ALL)
+- §2.6: Added Home Hex System for ranking scope (ZONE/DISTRICT/PROVINCE)
 - §4.1: Updated RunSummary model with `endTime`, `buffMultiplier`
 - §9.1-9.3: Selected battery-first GPS settings
 - §9.6: Added Data Synchronization Strategy section

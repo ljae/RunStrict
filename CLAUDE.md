@@ -118,6 +118,7 @@ lib/
 │   ├── running_score_service.dart # Pace validation for capture
 │   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
 │   ├── sync_retry_service.dart  # Retry failed Final Syncs (uses connectivity_plus)
+│   ├── ad_service.dart          # Google AdMob initialization & ad unit IDs
 │   └── data_manager.dart        # Hot/Cold data separation
 ├── storage/
 │   └── local_storage.dart       # SQLite v12 (runs, routes, run_checkpoint)
@@ -174,6 +175,7 @@ class UserModel {
   String? nationality;     // ISO country code (e.g., 'KR', 'US')
   String? homeHex;         // H3 index of run start location (self only)
   String? homeHexEnd;      // H3 index of run end location (visible to others)
+  String? districtHex;     // Res 6 H3 parent hex, set by finalize_run()
   String? seasonHomeHex;   // Home hex for current season
   double totalDistanceKm;  // Running season aggregate
   double? avgPaceMinPerKm; // Weighted average pace
@@ -253,6 +255,9 @@ class RunSummary {
 Buff multipliers are calculated daily at midnight GMT+2 via Edge Function:
 
 **RED FLAME:**
+- **Elite** = Top 20% by yesterday's **Flip Points** (points with multiplier, NOT raw flip count) among RED runners in the same District
+- **Common** = Bottom 80%
+
 | Scenario | Elite (Top 20%) | Common |
 |----------|-----------------|--------|
 | Normal (no wins) | 2x | 1x |
@@ -273,6 +278,8 @@ Buff multipliers are calculated daily at midnight GMT+2 via Edge Function:
 - **New users** = 1x (default until yesterday's data exists)
 - Buff is **frozen** when run starts — no changes mid-run
 - Fetched on app launch via `get_user_buff()` RPC
+- Elite threshold stored in `daily_buff_stats.red_elite_threshold_points` (computed from `run_history.flip_points`)
+- District scoping uses `users.district_hex` (Res 6 H3 parent, set by `finalize_run()`)
 
 ### Purple Team (The Protocol of Chaos)
 - **Unlock**: Available **anytime** during season
@@ -328,6 +335,32 @@ Multiplier fetched on app launch via RPC: `get_user_buff()`
 - Midnight-crossing runs: `end_time` determines which day's snapshot they affect
 
 **Hybrid Points**: `PointsService` tracks `_serverTodayBaseline` + `_localUnsyncedToday`. On sync, `onRunSynced()` transfers points between baselines to prevent disappearing points.
+
+### Two Data Domains (Critical Architecture Rule)
+
+All app data belongs to exactly one of two domains. Mixing them causes bugs.
+
+**Snapshot Domain** (Server → Local, read-only until next midnight):
+- Hex map base, leaderboard rankings + season record, team stats, buff multiplier, user aggregates
+- Downloaded on app launch/OnResume. NEVER changes from running.
+- Leaderboard: `get_leaderboard` reads from `season_leaderboard_snapshot` table (NOT live `users`)
+- Season Record on LeaderboardScreen uses snapshot `LeaderboardEntry`, NOT live `currentUser`
+- Used by: TeamScreen, LeaderboardScreen, ALL TIME stats (distance, pace, stability, run count)
+
+**Live Domain** (Local creation → Upload):
+- Header FlipPoints, run records, hex overlay (own runs only)
+- Created/updated by running actions. Uploaded via Final Sync.
+- Used by: FlipPointsWidget, RunHistoryScreen (recent runs, period stats)
+
+**The Only Hybrid Value**: `PointsService.totalSeasonPoints` = server `season_points` + local unsynced today. Used for BOTH header FlipPoints AND ALL TIME points (ensures they match).
+
+| Screen | Domain | Never compute from local SQLite |
+|--------|--------|---------------------------------|
+| TeamScreen | Snapshot only | All values from server RPCs |
+| LeaderboardScreen | Snapshot only | Rankings AND Season Record from `season_leaderboard_snapshot` (NOT live `UserModel`) |
+| Run History ALL TIME | Snapshot + hybrid points | Use `UserModel` aggregates + `totalSeasonPoints` |
+| Run History period stats | Live | Local SQLite runs (DAY/WEEK/MONTH/YEAR) |
+| Header FlipPoints | Live (hybrid) | `PointsService.totalSeasonPoints` |
 
 ---
 
@@ -411,24 +444,29 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 ```sql
 users            -- id, name, team, avatar, season_points, manifesto,
                  -- sex, birthday, nationality,
-                 -- home_hex, home_hex_end, season_home_hex,
+                 -- home_hex, home_hex_end, season_home_hex, district_hex,
                  -- total_distance_km, avg_pace_min_per_km,
                  -- avg_cv, total_runs, cv_run_count
 hexes            -- id (H3 index), last_runner_team, last_flipped_at (live state for buff/dominance only)
 hex_snapshot     -- hex_id, last_runner_team, snapshot_date, parent_hex (frozen daily snapshot for flip counting)
 runs             -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
-run_history      -- id, user_id, run_date, distance_km, duration_seconds, cv (preserved across seasons)
+run_history      -- id, user_id, run_date, distance_km, duration_seconds, flip_count, flip_points, cv
+                 -- (preserved across seasons. flip_points = flip_count × buff, used for RED Elite threshold)
 daily_stats      -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
-daily_buff_stats -- user_id, date, buff_multiplier, is_elite, is_district_leader, has_province_range
+daily_buff_stats -- stat_date, city_hex, dominant_team, red/blue/purple_hex_count,
+                 -- red_elite_threshold_points (from run_history.flip_points), purple_participation_rate
+season_leaderboard_snapshot -- user_id, season_number, rank, name, team, avatar, season_points,
+                 -- total_distance_km, avg_pace_min_per_km, avg_cv, total_runs,
+                 -- home_hex, home_hex_end, manifesto, nationality (frozen at midnight)
 ```
 
 **Key RPC Functions:**
-- `finalize_run(...)` → accept client flip_points with cap validation, update live hexes for buff/dominance
+- `finalize_run(...)` → accept client flip_points with cap validation, update live hexes for buff/dominance, store district_hex
 - `get_user_buff(user_id)` → get user's current buff multiplier
 - `calculate_daily_buffs()` → daily cron to compute all buffs at midnight GMT+2
 - `build_daily_hex_snapshot()` → daily cron to build tomorrow's hex snapshot at midnight GMT+2
 - `get_hex_snapshot(parent_hex, snapshot_date)` → download hex snapshot for prefetch
-- `get_leaderboard(limit)` → ranked users by season_points with CV aggregates
+- `get_leaderboard(limit)` → ranked users from `season_leaderboard_snapshot` (Snapshot Domain, frozen at midnight)
 - `app_launch_sync(...)` → pre-patch data on launch with CV fields
 
 ---
@@ -445,6 +483,7 @@ daily_buff_stats -- user_id, date, buff_multiplier, is_elite, is_district_leader
 | `sqflite` | Local SQLite storage |
 | `sensors_plus` | Accelerometer (anti-spoofing) |
 | `connectivity_plus` | Network connectivity check before sync |
+| `google_mobile_ads` | Google AdMob banner ads |
 
 ---
 
@@ -514,14 +553,14 @@ await mapboxMap.style.setStyleLayerProperty(
 The `hexagon_map.dart` widget renders geographic scope boundaries using two additional GeoJSON sources:
 
 **Province Boundary** (`scope-boundary-source` / `scope-boundary-line`):
-- **ALL scope**: Merged outer boundary of all ~7 district (Res 6) hexes — irregular polygon, NOT a single hexagon
-- **CITY scope**: Single district hex boundary
+- **PROVINCE scope**: Merged outer boundary of all ~7 district (Res 6) hexes — irregular polygon, NOT a single hexagon
+- **DISTRICT scope**: Single district hex boundary
 - **ZONE scope**: Hidden (no boundary)
 - Styling: white, 8px width, 15% opacity, 4px blur, solid
 
 **District Boundaries** (`district-boundary-source` / `district-boundary-line`):
-- **ALL scope**: Individual dashed outlines for each ~7 district hex
-- **CITY/ZONE scope**: Hidden
+- **PROVINCE scope**: Individual dashed outlines for each ~7 district hex
+- **DISTRICT/ZONE scope**: Hidden
 - Styling: white, 3px width, 12% opacity, 2px blur, dashed [4,3]
 
 **Merged Outer Boundary Algorithm** (`_computeMergedOuterBoundary`):
@@ -596,6 +635,59 @@ Skipped during active runs. Throttled to max once per 30 seconds.
 - `PrefetchService.getCachedHex()` delegates to `HexRepository().getHex()`
 - `HexDataProvider.getHex()` reads directly from `HexRepository`
 - No duplicate caches — PrefetchService downloads into HexRepository, does not maintain its own cache
+
+---
+
+## UI Conventions
+
+### Geographic Scope Categories
+The app uses three geographic scope levels. Code enum is `GeographicScope`:
+
+| Scope | Enum Value | H3 Resolution | Description |
+|-------|------------|---------------|-------------|
+| **ZONE** | `zone` | 8 | Neighborhood (~461m) |
+| **DISTRICT** | `district` | 6 | District (~3.2km) |
+| **PROVINCE** | `province` | 4 | Metro/Regional (server-wide) |
+
+**Note**: Legacy code references `city` (now `district`) and `all` (now `province`). All UI labels and documentation use zone/district/province.
+
+### Stat Panel Display Order
+All stat panels across screens use a consistent display order:
+1. **Points** (primary/large, flip points)
+2. **Distance** (secondary)
+3. **Pace** (secondary)
+4. **Rank or Stability** (secondary)
+
+Applies to: TeamScreen, RunHistoryScreen (ALL TIME & period panels), LeaderboardScreen (season stats).
+
+### Pace Format
+Unified pace format across the entire app: `X'XX` (apostrophe separator, no trailing `"`).
+
+```dart
+// Standard pace formatting
+String formatPace(double paceMinPerKm) {
+  final min = paceMinPerKm.floor();
+  final sec = ((paceMinPerKm - min) * 60).round();
+  return "$min'${sec.toString().padLeft(2, '0')}";
+}
+// Examples: 5'30, 6'05, -'-- (for null/invalid)
+```
+
+### FlipPoints Header Widget
+- Shows **season total points** (not today's points)
+- Uses `FittedBox` to prevent overflow with large numbers (3+ digits)
+- Airport departure board style flip animation for each digit
+
+### Google AdMob Integration
+- `AdService` singleton in `lib/services/ad_service.dart` manages AdMob SDK
+- BannerAd displayed on MapScreen (all scope views: zone, district, province)
+- Shows in both portrait and landscape orientations
+- Test ad unit IDs used during development (replace with production IDs before release)
+- Platform configs: iOS `GADApplicationIdentifier` in Info.plist, Android `APPLICATION_ID` in AndroidManifest.xml
+
+### Landscape Layout
+- MapScreen: Ad + zoom selector shown in landscape column layout
+- LeaderboardScreen: All content (stats, toggle, navigation, rankings) in single `CustomScrollView` for landscape scrolling
 
 **Snapshot Model**:
 - **Base layer**: `hex_snapshot` table (frozen daily at midnight GMT+2). Downloaded on app launch/OnResume.

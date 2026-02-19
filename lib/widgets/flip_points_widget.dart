@@ -54,7 +54,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   @override
   void initState() {
     super.initState();
-    _displayedPoints = widget.pointsService.todayFlipPoints;
+    _displayedPoints = widget.pointsService.totalSeasonPoints;
     _targetPoints = _displayedPoints;
 
     // Initialize digit controllers (6 digits max)
@@ -115,7 +115,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   }
 
   void _checkPendingPoints() {
-    final newPoints = widget.pointsService.todayFlipPoints;
+    final newPoints = widget.pointsService.totalSeasonPoints;
     if (newPoints != _displayedPoints) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
@@ -126,7 +126,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
   }
 
   void _onPointsChanged() {
-    final newPoints = widget.pointsService.todayFlipPoints;
+    final newPoints = widget.pointsService.totalSeasonPoints;
     if (newPoints != _displayedPoints) {
       _targetPoints = newPoints;
       if (!_isAnimating) {
@@ -179,7 +179,7 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
         });
 
         // Check if more points arrived during animation (via _onPointsChanged updating _targetPoints)
-        final latestPoints = widget.pointsService.todayFlipPoints;
+        final latestPoints = widget.pointsService.totalSeasonPoints;
         if (latestPoints != _displayedPoints) {
           _targetPoints = latestPoints;
           Future.delayed(const Duration(milliseconds: 100), () {
@@ -233,7 +233,10 @@ class _FlipPointsWidgetState extends State<FlipPointsWidget>
               vertical: widget.compact ? 0 : 6,
             ),
             // Removed outer decoration for minimal look
-            child: child,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: child,
+            ),
           ),
         );
       },
