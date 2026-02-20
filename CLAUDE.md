@@ -30,7 +30,18 @@
 | Weekly battles | Long-term relationships |
 | "Win at all costs" | "We ran together" |
 
-**Tech Stack**: Flutter 3.10+, Dart, Provider (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
+**Tech Stack**: Flutter 3.10+, Dart, Riverpod 3.0 (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
+
+### Riverpod 3.0 Coding Rules
+- **MUST** follow all patterns and best practices defined in [`riverpod_rule.md`](./riverpod_rule.md)
+- Use manual provider definitions (NO code generation / build_runner)
+- Use `Notifier<T>` / `AsyncNotifier<T>` class-based providers (NOT legacy `StateNotifier` or function-based providers)
+- Use unified `Ref` (no type parameters), `ConsumerWidget` / `ConsumerStatefulWidget` for widgets
+- Always check `ref.mounted` after async ops in notifiers, `context.mounted` in widgets
+- Use `ref.onDispose()` for resource cleanup (subscriptions, timers, cancel tokens)
+- Use `ref.watch()` for reactive state, `ref.read()` for one-off actions
+- Use `select()` for selective rebuilds to minimize unnecessary widget rebuilds
+- Use exhaustive `switch` pattern matching on `AsyncValue` states
 
 ---
 
@@ -98,7 +109,7 @@ lib/
 │   ├── running_screen.dart      # Pre-run & active run tracking
 │   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, sex, birthday, nationality, stats (no avatar)
+│   └── profile_screen.dart      # Manifesto, sex, birthday, nationality, stats, dual-location card
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
 │   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
@@ -343,6 +354,7 @@ All app data belongs to exactly one of two domains. Mixing them causes bugs.
 **Snapshot Domain** (Server → Local, read-only until next midnight):
 - Hex map base, leaderboard rankings + season record, team stats, buff multiplier, user aggregates
 - Downloaded on app launch/OnResume. NEVER changes from running.
+- **Always anchored to home hex** — `PrefetchService` downloads hex snapshot and leaderboard using `homeHex`/`homeHexAll`
 - Leaderboard: `get_leaderboard` reads from `season_leaderboard_snapshot` table (NOT live `users`)
 - Season Record on LeaderboardScreen uses snapshot `LeaderboardEntry`, NOT live `currentUser`
 - Used by: TeamScreen, LeaderboardScreen, ALL TIME stats (distance, pace, stability, run count)
@@ -356,11 +368,35 @@ All app data belongs to exactly one of two domains. Mixing them causes bugs.
 
 | Screen | Domain | Never compute from local SQLite |
 |--------|--------|---------------------------------|
-| TeamScreen | Snapshot only | All values from server RPCs |
+| TeamScreen | Snapshot only | All values from server RPCs (home hex anchored) |
 | LeaderboardScreen | Snapshot only | Rankings AND Season Record from `season_leaderboard_snapshot` (NOT live `UserModel`) |
+| MapScreen display | Snapshot + GPS | GPS hex for camera/territory when outside province; home hex otherwise |
 | Run History ALL TIME | Snapshot + hybrid points | Use `UserModel` aggregates + `totalSeasonPoints` |
 | Run History period stats | Live | Local SQLite runs (DAY/WEEK/MONTH/YEAR) |
 | Header FlipPoints | Live (hybrid) | `PointsService.totalSeasonPoints` |
+
+### Location Domain Separation (Home vs GPS)
+
+Server data and map display use different location anchors:
+
+| Concern | Location Anchor | Source |
+|---------|----------------|--------|
+| Hex snapshot download | **Home hex** | `PrefetchService.homeHex` / `homeHexAll` |
+| Leaderboard filtering | **Home hex** | `LeaderboardProvider.filterByScope()` uses `homeHex` |
+| TeamScreen territory | **Home hex** | `PrefetchService.homeHexCity` / `homeHex` |
+| Season register | **Home hex** | `PrefetchService.homeHex` |
+| MapScreen camera/territory | **GPS hex** (when outside province) | `PrefetchService.gpsHex` via `isOutsideHomeProvince` |
+| HexagonMap anchor | **GPS hex** (when outside province) | `PrefetchService.gpsHex` via `isOutsideHomeProvince` |
+| Hex capture | **Disabled** when outside province | Floating banner on MapScreen |
+
+**PrefetchService getters**:
+- `homeHex`, `homeHexCity`, `homeHexAll` — registered home location (server data anchor)
+- `gpsHex`, `getGpsHexAtScope()` — current GPS position (map display only)
+- `isOutsideHomeProvince` — true when GPS province ≠ home province
+
+**MapScreen outside-province UX**: `_OutsideProvinceBanner` (glassmorphism floating card) appears when GPS is outside home province, directing user to update location in Profile.
+
+**ProfileScreen dual-location**: `_LocationCard` shows both registered home and GPS location when outside province, with "UPDATE TO CURRENT" button and FROM→TO confirmation dialog.
 
 ---
 

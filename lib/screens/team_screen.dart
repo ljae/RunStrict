@@ -6,6 +6,7 @@ import '../providers/app_state_provider.dart';
 import '../providers/team_stats_provider.dart';
 import '../config/h3_config.dart';
 import '../services/hex_service.dart';
+import '../services/prefetch_service.dart';
 import '../services/season_service.dart';
 import '../theme/app_theme.dart';
 import 'traitor_gate_screen.dart';
@@ -30,13 +31,8 @@ class _TeamScreenState extends State<TeamScreen> {
     final appState = context.read<AppStateProvider>();
     final userId = appState.currentUser?.id;
     final userTeam = appState.userTeam?.name;
-    final homeHex =
-        appState.currentUser?.seasonHomeHex ??
-        appState.currentUser?.homeHex ??
-        appState.currentUser?.homeHexEnd;
-    final cityHex = homeHex != null && homeHex.length >= 10
-        ? HexService().getParentHexId(homeHex, H3Config.cityResolution)
-        : null;
+    // Server data always uses home hex (Snapshot Domain)
+    final cityHex = PrefetchService().homeHexCity;
     if (userId != null) {
       await _statsProvider.loadTeamData(
         userId,
@@ -298,11 +294,8 @@ class _TeamScreenState extends State<TeamScreen> {
 
   Widget _buildTerritorySection() {
     final dominance = _statsProvider.dominance;
-    final appState = context.read<AppStateProvider>();
-    final homeHex =
-        appState.currentUser?.seasonHomeHex ??
-        appState.currentUser?.homeHex ??
-        appState.currentUser?.homeHexEnd;
+    // Server data always uses home hex (Snapshot Domain)
+    final homeHex = PrefetchService().homeHex;
 
     // Use deterministic hex-based naming (consistent across all users/seasons)
     final territoryName = homeHex != null

@@ -8,8 +8,8 @@ import '../models/team.dart';
 import '../providers/leaderboard_provider.dart';
 import '../repositories/hex_repository.dart';
 import '../storage/local_storage.dart';
+import 'buff_service.dart';
 import 'hex_service.dart';
-import 'season_service.dart';
 import 'supabase_service.dart';
 
 /// Status of the prefetch operation
@@ -32,7 +32,14 @@ enum PrefetchStatus {
 /// ## Home-Anchored Scope System
 ///
 /// Geographic scopes (ZONE/CITY/ALL) are anchored to the user's **home hex**,
-/// which is set once on first GPS fix and never updated after.
+/// which is set on first GPS fix and changeable via Profile screen.
+///
+/// ### Home Hex Rules (Single Source of Truth)
+///
+/// 1. First launch: GPS → set as home → save locally + sync to server
+/// 2. Subsequent launches: load from local storage (never auto-overwrite)
+/// 3. Change: only via explicit `updateHomeHex()` from Profile screen
+/// 4. Province check: GPS taken during init, compared with stored home
 ///
 /// ### Scope Display Behavior
 ///
@@ -47,13 +54,6 @@ enum PrefetchStatus {
 /// On app launch, downloads hex colors for the ALL range (2,401 hexes).
 /// This is the maximum data boundary - ZONE view uses this cached data.
 /// If user runs outside ALL range (rare), on-demand fetch is needed.
-///
-/// ### Usage
-/// ```dart
-/// await PrefetchService().initialize();
-/// final homeHex = PrefetchService().homeHex;
-/// final isInScope = PrefetchService().isHexInScope(hexId, GeographicScope.city);
-/// ```
 class PrefetchService {
   static final PrefetchService _instance = PrefetchService._internal();
   factory PrefetchService() => _instance;
@@ -65,8 +65,7 @@ class PrefetchService {
 
   PrefetchStatus _status = PrefetchStatus.notStarted;
   String? _homeHex;
-  String? _seasonHomeHex;
-  String? _storedSeasonStartDate;
+  String? _gpsBaseHex; // Current GPS position hex (Res 9), set during init
   DateTime? _lastPrefetchTime;
   String? _errorMessage;
 
@@ -78,8 +77,9 @@ class PrefetchService {
   String? _homeHexCity; // Res 6 parent
   String? _homeHexAll; // Res 5 parent
 
-  // Pre-computed parent hex for season home (used for leaderboard/multiplier)
-  String? _seasonHomeHexAll; // Res 5 parent of seasonHomeHex
+  /// Whether current GPS position is in a different province than stored home.
+  /// Set during initialize(), read synchronously by HomeScreen.
+  bool _isOutsideHomeProvince = false;
 
   // ---------------------------------------------------------------------------
   // GETTERS
@@ -87,13 +87,16 @@ class PrefetchService {
 
   PrefetchStatus get status => _status;
   String? get homeHex => _homeHex;
-  String? get seasonHomeHex => _seasonHomeHex;
-  String? get seasonHomeHexAll => _seasonHomeHexAll;
+  String? get gpsHex => _gpsBaseHex;
+  String? get homeHexCity => _homeHexCity;
   String? get errorMessage => _errorMessage;
   DateTime? get lastPrefetchTime => _lastPrefetchTime;
   bool get isInitialized => _status == PrefetchStatus.completed;
   bool get hasHomeHex => _homeHex != null;
-  bool get hasSeasonHomeHex => _seasonHomeHex != null;
+
+  /// Whether user's current GPS is outside their stored home province.
+  /// Computed once during initialize() — no async needed by consumers.
+  bool get isOutsideHomeProvince => _isOutsideHomeProvince;
 
   /// Get parent hex at specific scope level
   String? getHomeHexAtScope(GeographicScope scope) {
@@ -103,6 +106,12 @@ class PrefetchService {
       GeographicScope.city => _homeHexCity,
       GeographicScope.all => _homeHexAll,
     };
+  }
+
+  /// Get GPS hex parent at a specific scope level
+  String? getGpsHexAtScope(GeographicScope scope) {
+    if (_gpsBaseHex == null) return null;
+    return _hexService.getScopeHexId(_gpsBaseHex!, scope);
   }
 
   /// Get cached hex data (delegates to HexRepository)
@@ -116,11 +125,14 @@ class PrefetchService {
   // INITIALIZATION
   // ---------------------------------------------------------------------------
 
-  /// Initialize prefetch service
+  /// Initialize prefetch service.
   ///
-  /// If home hex already exists (from previous session), skip GPS fix.
-  /// If no home hex, get GPS position and set home hex.
-  /// Then download all data for the "All" scope range.
+  /// Flow:
+  /// 1. Get current GPS position (always — needed for province check)
+  /// 2. Load stored home hex from SQLite
+  /// 3. If no stored hex: first-time setup (adopt GPS as home, sync server)
+  /// 4. If stored hex exists: compare GPS province vs stored province
+  /// 5. Download hex snapshot + leaderboard for home province
   Future<void> initialize({bool forceRefresh = false}) async {
     if (_status == PrefetchStatus.inProgress) {
       debugPrint('PrefetchService: Already in progress');
@@ -134,39 +146,65 @@ class PrefetchService {
 
     _status = PrefetchStatus.inProgress;
     _errorMessage = null;
+    _isOutsideHomeProvince = false;
     debugPrint('PrefetchService: Starting initialization...');
 
     try {
-      // Step 1: Get or set home hex
+      // Step 1: Always get GPS (needed for first-time setup OR province check)
+      final position = await _getGPSPosition();
+      final gpsLatLng = LatLng(position.latitude, position.longitude);
+      final gpsBaseHex = _hexService.getBaseHexId(gpsLatLng);
+      _gpsBaseHex = gpsBaseHex;
+      final gpsProvince =
+          _hexService.getScopeHexId(gpsBaseHex, GeographicScope.all);
+
+      // Step 2: Try to restore stored home hex
       if (_homeHex == null) {
-        await _setHomeHexFromGPS();
+        await _loadHomeHex();
+      }
+
+      // Step 3: First-time vs returning user
+      if (_homeHex == null) {
+        // First-time user: adopt GPS as home
+        _homeHex = gpsBaseHex;
+        _computeParentHexes();
+        await _saveHomeHex(_homeHex!);
+        await _syncHomeToServer();
+        _isOutsideHomeProvince = false;
+        debugPrint(
+          'PrefetchService: First-time home set to $_homeHex '
+          '(${position.latitude}, ${position.longitude})',
+        );
+      } else {
+        // Returning user: keep stored home, check province mismatch
+        _computeParentHexes();
+        _isOutsideHomeProvince = gpsProvince != _homeHexAll;
+        if (_isOutsideHomeProvince) {
+          debugPrint(
+            'PrefetchService: OUTSIDE home province! '
+            'GPS province: $gpsProvince, Home province: $_homeHexAll',
+          );
+        }
       }
 
       if (_homeHex == null) {
         throw Exception('Failed to determine home hex');
       }
 
-      // Compute parent hexes for each scope
-      _computeParentHexes();
-
-      // Step 1b: Handle season home hex (for leaderboard/multiplier)
-      await _handleSeasonHomeHex();
-
-      // Step 2: Download hex data for All range
+      // Step 4: Download hex data for home province
       await _downloadHexData();
 
-      // Step 3: Download leaderboard data
+      // Step 5: Download leaderboard data
       await _downloadLeaderboardData();
 
       _lastPrefetchTime = DateTime.now();
       _status = PrefetchStatus.completed;
       debugPrint('PrefetchService: Initialization completed');
       debugPrint('  Home hex: $_homeHex');
-      debugPrint('  Season home hex: $_seasonHomeHex');
       debugPrint('  Zone parent: $_homeHexZone');
       debugPrint('  City parent: $_homeHexCity');
       debugPrint('  All parent: $_homeHexAll');
-      debugPrint('  Season All parent: $_seasonHomeHexAll');
+      debugPrint('  Outside province: $_isOutsideHomeProvince');
       debugPrint('  Cached hexes: ${HexRepository().cacheStats['size']}');
       debugPrint('  Cached leaderboard entries: ${_leaderboardCache.length}');
     } catch (e) {
@@ -176,11 +214,21 @@ class PrefetchService {
     }
   }
 
-  /// Set home hex from current GPS position
-  Future<void> _setHomeHexFromGPS() async {
-    debugPrint('PrefetchService: Getting GPS position for home hex...');
+  /// Sync home hex to server (home_hex + district_hex).
+  Future<void> _syncHomeToServer() async {
+    try {
+      final userId = _supabase.client.auth.currentUser?.id;
+      if (userId != null && _homeHexCity != null) {
+        await _supabase.updateHomeLocation(userId, _homeHex!, _homeHexCity!);
+        debugPrint('PrefetchService: Home hex synced to server');
+      }
+    } catch (e) {
+      debugPrint('PrefetchService: Failed to sync home hex to server - $e');
+    }
+  }
 
-    // Check permissions
+  /// Get current GPS position with permission checks
+  Future<Position> _getGPSPosition() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -193,21 +241,11 @@ class PrefetchService {
       throw Exception('Location permission permanently denied');
     }
 
-    // Get current position
-    final position = await Geolocator.getCurrentPosition(
+    return Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
         timeLimit: Duration(seconds: 15),
       ),
-    );
-
-    // Convert to H3 hex at base resolution (Res 9)
-    final latLng = LatLng(position.latitude, position.longitude);
-    _homeHex = _hexService.getBaseHexId(latLng);
-
-    debugPrint(
-      'PrefetchService: Home hex set to $_homeHex '
-      '(${position.latitude}, ${position.longitude})',
     );
   }
 
@@ -220,42 +258,53 @@ class PrefetchService {
     _homeHexAll = _hexService.getScopeHexId(_homeHex!, GeographicScope.all);
   }
 
-  /// Handle season home hex logic for leaderboard/multiplier anchoring
-  Future<void> _handleSeasonHomeHex() async {
-    final seasonService = SeasonService();
-    final currentSeasonStart = seasonService.seasonStartDate
-        .toIso8601String()
-        .split('T')[0];
+  // ---------------------------------------------------------------------------
+  // HOME LOCATION UPDATE (Profile screen)
+  // ---------------------------------------------------------------------------
 
-    _storedSeasonStartDate = await _loadStoredSeasonStart();
+  /// Update home location from GPS via Profile screen.
+  ///
+  /// 1. Gets current GPS position
+  /// 2. Computes new home_hex and parent hexes
+  /// 3. Saves locally and syncs to server
+  /// 4. Re-downloads hex snapshot and leaderboard for new province
+  /// 5. Refreshes buff for new district
+  /// 6. Clears province mismatch flag
+  Future<void> updateHomeHex(String userId) async {
+    debugPrint('PrefetchService: Updating home hex from GPS...');
 
-    final isNewSeason =
-        _storedSeasonStartDate == null ||
-        _storedSeasonStartDate != currentSeasonStart;
+    final position = await _getGPSPosition();
+    final latLng = LatLng(position.latitude, position.longitude);
 
-    if (isNewSeason) {
-      _seasonHomeHex = _homeHex;
-      _seasonHomeHexAll = _hexService.getScopeHexId(
-        _seasonHomeHex!,
-        GeographicScope.all,
-      );
-      await _saveSeasonHomeHex(_seasonHomeHex!);
-      await _saveStoredSeasonStart(currentSeasonStart);
-      debugPrint(
-        'PrefetchService: New season detected - set seasonHomeHex: $_seasonHomeHex',
-      );
-    } else {
-      _seasonHomeHex = await _loadSeasonHomeHex();
-      if (_seasonHomeHex != null) {
-        _seasonHomeHexAll = _hexService.getScopeHexId(
-          _seasonHomeHex!,
-          GeographicScope.all,
-        );
-      }
-      debugPrint(
-        'PrefetchService: Same season - loaded seasonHomeHex: $_seasonHomeHex',
-      );
+    // 1. Compute new home_hex from GPS
+    _homeHex = _hexService.getBaseHexId(latLng);
+
+    // 2. Recompute parent hexes (zone, city, province)
+    _computeParentHexes();
+
+    // 3. Save locally
+    await _saveHomeHex(_homeHex!);
+
+    // 4. Update server (home_hex + district_hex)
+    if (_homeHexCity != null) {
+      await _supabase.updateHomeLocation(userId, _homeHex!, _homeHexCity!);
     }
+
+    // 5. Re-download hex snapshot for new province
+    HexRepository().clearAll();
+    await _downloadHexData();
+    await _downloadLeaderboardData();
+
+    // 6. Refresh buff for new district
+    await BuffService().refresh(userId, districtHex: _homeHexCity);
+
+    // 7. Clear province mismatch (user just adopted current GPS as home)
+    _isOutsideHomeProvince = false;
+
+    debugPrint(
+      'PrefetchService: Home hex updated to $_homeHex '
+      '(${position.latitude}, ${position.longitude})',
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -268,13 +317,15 @@ class PrefetchService {
   /// the snapshot is immutable for the day.
   /// After loading, applies local overlay (user's own today's flips from SQLite).
   Future<void> _downloadHexData() async {
-    if (_homeHexAll == null) return;
+    // Always download for home province (server data = home-anchored)
+    final provinceHex = _homeHexAll;
+    if (provinceHex == null) return;
 
     final repo = HexRepository();
 
     try {
       // Download today's snapshot (deterministic for all users)
-      final hexes = await _supabase.getHexSnapshot(_homeHexAll!);
+      final hexes = await _supabase.getHexSnapshot(provinceHex);
 
       if (hexes.isNotEmpty) {
         repo.bulkLoadFromSnapshot(hexes);
@@ -284,7 +335,7 @@ class PrefetchService {
         debugPrint(
           'PrefetchService: Snapshot empty, falling back to live hexes',
         );
-        final liveHexes = await _supabase.getHexesDelta(_homeHexAll!);
+        final liveHexes = await _supabase.getHexesDelta(provinceHex);
         repo.bulkLoadFromServer(liveHexes);
         debugPrint(
           'PrefetchService: Live hexes loaded - ${liveHexes.length} hexes',
@@ -300,7 +351,7 @@ class PrefetchService {
       debugPrint('PrefetchService: Failed to download hex data - $e');
       // Fallback: try legacy delta sync
       try {
-        final hexes = await _supabase.getHexesDelta(_homeHexAll!);
+        final hexes = await _supabase.getHexesDelta(provinceHex);
         repo.bulkLoadFromServer(hexes);
         await _applyLocalOverlay(repo);
         _lastPrefetchTime = DateTime.now();
@@ -403,13 +454,11 @@ class PrefetchService {
   }
 
   /// Check if a hex is within the user's home region (Res 5 parent).
-  ///
-  /// Check if hex is within the user's home region (Res 5 parent cell).
   bool isInHomeRegion(String hexId) {
-    if (_seasonHomeHexAll == null) return true;
+    if (_homeHexAll == null) return true;
 
     final hexParent = _hexService.getScopeHexId(hexId, GeographicScope.all);
-    return hexParent == _seasonHomeHexAll;
+    return hexParent == _homeHexAll;
   }
 
   // ---------------------------------------------------------------------------
@@ -471,13 +520,10 @@ class PrefetchService {
   }
 
   // ---------------------------------------------------------------------------
-  // PERSISTENCE
+  // PERSISTENCE (private — only called internally)
   // ---------------------------------------------------------------------------
 
-  /// Save home hex to persistent storage
-  ///
-  /// Called after initial GPS fix to persist home hex across app restarts.
-  Future<void> saveHomeHex(String homeHex) async {
+  Future<void> _saveHomeHex(String homeHex) async {
     _homeHex = homeHex;
     _computeParentHexes();
     try {
@@ -488,10 +534,7 @@ class PrefetchService {
     }
   }
 
-  /// Load home hex from persistent storage
-  ///
-  /// Called on app startup to restore home hex without GPS.
-  Future<void> loadHomeHex() async {
+  Future<void> _loadHomeHex() async {
     debugPrint('PrefetchService: Loading home hex from storage...');
     try {
       final storedHomeHex = await _localStorage.getHomeHex();
@@ -507,42 +550,6 @@ class PrefetchService {
     }
   }
 
-  Future<void> _saveSeasonHomeHex(String seasonHomeHex) async {
-    try {
-      await _localStorage.savePrefetchMeta('season_home_hex', seasonHomeHex);
-      debugPrint('PrefetchService: Saved seasonHomeHex: $seasonHomeHex');
-    } catch (e) {
-      debugPrint('PrefetchService: Failed to save seasonHomeHex - $e');
-    }
-  }
-
-  Future<String?> _loadSeasonHomeHex() async {
-    try {
-      return await _localStorage.getPrefetchMeta('season_home_hex');
-    } catch (e) {
-      debugPrint('PrefetchService: Failed to load seasonHomeHex - $e');
-      return null;
-    }
-  }
-
-  Future<void> _saveStoredSeasonStart(String seasonStart) async {
-    try {
-      await _localStorage.savePrefetchMeta('season_start_date', seasonStart);
-      debugPrint('PrefetchService: Saved season start: $seasonStart');
-    } catch (e) {
-      debugPrint('PrefetchService: Failed to save season start - $e');
-    }
-  }
-
-  Future<String?> _loadStoredSeasonStart() async {
-    try {
-      return await _localStorage.getPrefetchMeta('season_start_date');
-    } catch (e) {
-      debugPrint('PrefetchService: Failed to load season start - $e');
-      return null;
-    }
-  }
-
   Future<void> _saveLastPrefetchTime(DateTime time) async {
     try {
       await _localStorage.savePrefetchMeta(
@@ -554,17 +561,9 @@ class PrefetchService {
     }
   }
 
-  // ignore: unused_element
-  Future<DateTime?> _loadLastPrefetchTime() async {
-    try {
-      final value = await _localStorage.getPrefetchMeta('last_prefetch_time');
-      if (value == null) return null;
-      return DateTime.parse(value);
-    } catch (e) {
-      debugPrint('PrefetchService: Failed to load prefetch time - $e');
-      return null;
-    }
-  }
+  // Keep public for backward compat (used by tests and profile update)
+  Future<void> saveHomeHex(String homeHex) => _saveHomeHex(homeHex);
+  Future<void> loadHomeHex() => _loadHomeHex();
 
   // ---------------------------------------------------------------------------
   // TESTING
@@ -574,14 +573,13 @@ class PrefetchService {
   void reset() {
     _status = PrefetchStatus.notStarted;
     _homeHex = null;
-    _seasonHomeHex = null;
-    _seasonHomeHexAll = null;
-    _storedSeasonStartDate = null;
+    _gpsBaseHex = null;
     _homeHexZone = null;
     _homeHexCity = null;
     _homeHexAll = null;
     _lastPrefetchTime = null;
     _errorMessage = null;
+    _isOutsideHomeProvince = false;
     _leaderboardCache.clear();
   }
 
@@ -590,14 +588,5 @@ class PrefetchService {
     _homeHex = homeHex;
     _computeParentHexes();
     _status = PrefetchStatus.completed;
-  }
-
-  @visibleForTesting
-  void setSeasonHomeHexForTesting(String seasonHomeHex) {
-    _seasonHomeHex = seasonHomeHex;
-    _seasonHomeHexAll = _hexService.getScopeHexId(
-      seasonHomeHex,
-      GeographicScope.all,
-    );
   }
 }

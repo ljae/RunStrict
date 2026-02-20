@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_state_provider.dart';
 import '../models/team.dart';
+import '../services/hex_service.dart';
+import '../services/prefetch_service.dart';
 import '../services/season_service.dart';
 import '../models/user_model.dart';
 import '../utils/country_utils.dart';
@@ -29,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _manifestoController;
   bool _isEditingManifesto = false;
   bool _isEditingDetails = false;
+  bool _isUpdatingLocation = false;
 
   // Staging state for edits
   String? _selectedSex;
@@ -52,6 +55,135 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _manifestoController.dispose();
     super.dispose();
+  }
+
+  Future<void> _updateLocation(String userId) async {
+    final appState = context.read<AppStateProvider>();
+    final prefetch = PrefetchService();
+    final hexService = HexService();
+
+    // Build FROM/TO location strings
+    final fromHex = prefetch.homeHex;
+    final toHex = prefetch.gpsHex;
+    final fromName = fromHex != null
+        ? '${hexService.getTerritoryName(fromHex)} \u00b7 ${hexService.getCityDisplayName(fromHex)}'
+        : 'Unknown';
+    final toName = toHex != null
+        ? '${hexService.getTerritoryName(toHex)} \u00b7 ${hexService.getCityDisplayName(toHex)}'
+        : 'Current GPS';
+
+    final teamColor = _teamColor(appState.userTeam ?? Team.red);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: Text(
+          'Update Location?',
+          style: GoogleFonts.sora(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FROM
+            Row(
+              children: [
+                Text(
+                  'From: ',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppTheme.textMuted,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    fromName,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // TO
+            Row(
+              children: [
+                Text(
+                  '  To: ',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppTheme.textMuted,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    toName,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: teamColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Your buff will reset to 1x\n(no yesterday data in new district).',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Update',
+              style: TextStyle(color: teamColor),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isUpdatingLocation = true);
+
+    try {
+      await PrefetchService().updateHomeHex(userId);
+
+      if (mounted) {
+        final prefetch = PrefetchService();
+        final newHomeHex = prefetch.homeHex;
+        if (newHomeHex != null) {
+          appState.setUser(
+            appState.currentUser!.copyWith(homeHex: newHomeHex),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('ProfileScreen: Failed to update location - $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingLocation = false);
+      }
+    }
   }
 
   Color _teamColor(Team team) {
@@ -201,6 +333,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   setState(() => _selectedNationality = val),
                             ),
                             const SizedBox(height: AppTheme.spacingL),
+                            _LocationCard(
+                              registeredHex: PrefetchService().homeHex ?? user.homeHex,
+                              gpsHex: PrefetchService().isOutsideHomeProvince
+                                  ? PrefetchService().gpsHex
+                                  : null,
+                              teamColor: teamColor,
+                              isUpdating: _isUpdatingLocation,
+                              isOutsideProvince: PrefetchService().isOutsideHomeProvince,
+                              onUpdateLocation: () =>
+                                  _updateLocation(user.id),
+                            ),
+                            const SizedBox(height: AppTheme.spacingL),
                             _StatsCard(
                               user: user,
                               seasonService: _seasonService,
@@ -270,6 +414,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             setState(() => _selectedBirthday = val),
                         onNationalityChanged: (val) =>
                             setState(() => _selectedNationality = val),
+                      ),
+                      const SizedBox(height: AppTheme.spacingL),
+                      _LocationCard(
+                        registeredHex: PrefetchService().homeHex ?? user.homeHex,
+                        gpsHex: PrefetchService().isOutsideHomeProvince
+                            ? PrefetchService().gpsHex
+                            : null,
+                        teamColor: teamColor,
+                        isUpdating: _isUpdatingLocation,
+                        isOutsideProvince: PrefetchService().isOutsideHomeProvince,
+                        onUpdateLocation: () => _updateLocation(user.id),
                       ),
                       const SizedBox(height: AppTheme.spacingL),
                       _StatsCard(
@@ -903,6 +1058,254 @@ class _VoiceMuteToggle extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LocationCard extends StatelessWidget {
+  final String? registeredHex;
+  final String? gpsHex;
+  final Color teamColor;
+  final bool isUpdating;
+  final bool isOutsideProvince;
+  final VoidCallback onUpdateLocation;
+
+  const _LocationCard({
+    required this.registeredHex,
+    this.gpsHex,
+    required this.teamColor,
+    required this.isUpdating,
+    this.isOutsideProvince = false,
+    required this.onUpdateLocation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hexService = HexService();
+    final regTerritory = registeredHex != null
+        ? hexService.getTerritoryName(registeredHex!)
+        : 'Not set';
+    final regDistrict = registeredHex != null
+        ? hexService.getCityDisplayName(registeredHex!)
+        : '';
+
+    // Dual-location layout when outside province
+    if (isOutsideProvince && gpsHex != null) {
+      final gpsTerritory = hexService.getTerritoryName(gpsHex!);
+      final gpsDistrict = hexService.getCityDisplayName(gpsHex!);
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppTheme.spacingM),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Registered location
+            Row(
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  color: AppTheme.textMuted,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Registered',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textMuted,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Text(
+                '$regTerritory \u00b7 $regDistrict',
+                style: GoogleFonts.sora(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Dashed divider
+            Row(
+              children: List.generate(
+                20,
+                (i) => Expanded(
+                  child: Container(
+                    height: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // GPS location
+            Row(
+              children: [
+                Icon(
+                  Icons.gps_fixed,
+                  color: teamColor,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Current GPS',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: teamColor.withValues(alpha: 0.7),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Text(
+                '$gpsTerritory \u00b7 $gpsDistrict',
+                style: GoogleFonts.sora(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            // Update button (centered)
+            Center(
+              child: GestureDetector(
+                onTap: isUpdating ? null : onUpdateLocation,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: teamColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: teamColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: isUpdating
+                      ? SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(teamColor),
+                          ),
+                        )
+                      : Text(
+                          'UPDATE TO CURRENT',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: teamColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Single location layout (at home)
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppTheme.spacingM),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.location_on_outlined,
+            color: teamColor,
+            size: 20,
+          ),
+          const SizedBox(width: AppTheme.spacingS),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Home territory',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textMuted,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  regTerritory,
+                  style: GoogleFonts.sora(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                if (regDistrict.isNotEmpty)
+                  Text(
+                    regDistrict,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: isUpdating ? null : onUpdateLocation,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: teamColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: teamColor.withValues(alpha: 0.3)),
+              ),
+              child: isUpdating
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(teamColor),
+                      ),
+                    )
+                  : Text(
+                      'UPDATE',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: teamColor,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
             ),
           ),
         ],

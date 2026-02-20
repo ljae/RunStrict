@@ -233,11 +233,11 @@ class LeaderboardProvider with ChangeNotifier {
     // All scope means no geographic filtering
     if (scope == GeographicScope.all) return entries;
 
-    final referenceHex =
-        _prefetchService.seasonHomeHex ?? _prefetchService.homeHex;
+    // Server data always uses home hex (Snapshot Domain)
+    final referenceHex = _prefetchService.homeHex;
     if (referenceHex == null) {
       debugPrint(
-        'LeaderboardProvider: No season/home hex set, returning all entries',
+        'LeaderboardProvider: No active hex set, returning all entries',
       );
       return entries;
     }

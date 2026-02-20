@@ -24,7 +24,6 @@ import 'services/remote_config_service.dart';
 import 'services/prefetch_service.dart';
 import 'services/app_lifecycle_manager.dart';
 import 'services/buff_service.dart';
-import 'config/h3_config.dart';
 import 'services/ad_service.dart';
 import 'services/sync_retry_service.dart';
 import 'storage/local_storage.dart';
@@ -177,12 +176,8 @@ class _AppInitializerState extends State<_AppInitializer> {
 
     try {
       final supabase = SupabaseService();
-      final launchHomeHex = appState.currentUser?.seasonHomeHex ??
-          appState.currentUser?.homeHex ??
-          appState.currentUser?.homeHexEnd;
-      final launchCityHex = launchHomeHex != null && launchHomeHex.length >= 10
-          ? HexService().getParentHexId(launchHomeHex, H3Config.cityResolution)
-          : null;
+      // Use PrefetchService as single source of truth for home hex
+      final launchCityHex = PrefetchService().homeHexCity;
       final result = await supabase.appLaunchSync(
         appState.currentUser!.id,
         districtHex: launchCityHex,
@@ -296,12 +291,8 @@ class _AppInitializerState extends State<_AppInitializer> {
     }
 
     // Refresh buff multiplier (may have changed at midnight)
-    final homeHex = appState.currentUser?.seasonHomeHex ??
-        appState.currentUser?.homeHex ??
-        appState.currentUser?.homeHexEnd;
-    final cityHex = homeHex != null && homeHex.length >= 10
-        ? HexService().getParentHexId(homeHex, H3Config.cityResolution)
-        : null;
+    // Use PrefetchService as single source of truth for home hex
+    final cityHex = PrefetchService().homeHexCity;
     await BuffService().refresh(userId, districtHex: cityHex);
 
     // Refresh season points from server + today's points from local

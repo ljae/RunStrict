@@ -12,11 +12,13 @@ import '../services/season_service.dart';
 import '../services/points_service.dart';
 import '../services/buff_service.dart';
 import '../services/app_lifecycle_manager.dart';
+import '../services/prefetch_service.dart';
 import 'map_screen.dart';
 import 'running_screen.dart';
 import 'team_screen.dart';
 import 'run_history_screen.dart';
 import 'leaderboard_screen.dart';
+import 'profile_screen.dart';
 
 /// Main home screen with premium icon-driven navigation
 class HomeScreen extends StatefulWidget {
@@ -28,6 +30,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _provinceCheckDone = false;
 
   // Season service for D-day countdown
   late final SeasonService _seasonService;
@@ -52,7 +55,95 @@ class _HomeScreenState extends State<HomeScreen> {
     // Initialize app lifecycle manager for OnResume data refresh
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeLifecycleManager();
+      _checkProvinceOnce();
     });
+  }
+
+  /// Check once per session if user is outside their home province.
+  /// Reads a synchronous boolean set during PrefetchService.initialize().
+  void _checkProvinceOnce() {
+    if (_provinceCheckDone) return;
+    _provinceCheckDone = true;
+
+    if (PrefetchService().isOutsideHomeProvince) {
+      _showProvinceNotification();
+    }
+  }
+
+  void _showProvinceNotification() {
+    final teamColor =
+        context.read<AppStateProvider>().userTeam?.color ??
+        AppTheme.electricBlue;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: GestureDetector(
+          onTap: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ProfileScreen(),
+              ),
+            );
+          },
+          child: Row(
+            children: [
+              Icon(
+                Icons.location_on_outlined,
+                color: teamColor,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Outside your province',
+                  style: GoogleFonts.sora(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: teamColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: teamColor.withValues(alpha: 0.4),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  'Update in Profile',
+                  style: GoogleFonts.sora(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: teamColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        backgroundColor: AppTheme.surfaceColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: teamColor.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+        duration: const Duration(seconds: 6),
+        dismissDirection: DismissDirection.horizontal,
+      ),
+    );
   }
 
   void _initializeLifecycleManager() {

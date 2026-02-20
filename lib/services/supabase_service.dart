@@ -186,6 +186,25 @@ class SupabaseService {
   ///
   /// Downloads the daily snapshot (frozen at midnight GMT+2).
   /// Returns list of {hex_id, last_runner_team, last_run_end_time}.
+  /// Update user's home location (home_hex + district_hex).
+  ///
+  /// Called from Profile screen when user changes location via GPS.
+  Future<Map<String, dynamic>> updateHomeLocation(
+    String userId,
+    String homeHex,
+    String districtHex,
+  ) async {
+    final result = await client.rpc(
+      'update_home_location',
+      params: {
+        'p_user_id': userId,
+        'p_home_hex': homeHex,
+        'p_district_hex': districtHex,
+      },
+    );
+    return result as Map<String, dynamic>;
+  }
+
   Future<List<Map<String, dynamic>>> getHexSnapshot(
     String parentHex, {
     String? snapshotDate,

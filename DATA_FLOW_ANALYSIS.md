@@ -460,6 +460,7 @@ All app data belongs to exactly one of two domains:
 - Hex map base layer, leaderboard rankings + season record, team stats, buff multiplier, user aggregates
 - Downloaded on app launch/OnResume via prefetch
 - NEVER changes from running — frozen until next prefetch
+- **Always anchored to home hex** — `PrefetchService` downloads using `homeHex`/`homeHexAll` (never GPS)
 - Leaderboard: `get_leaderboard` RPC reads from `season_leaderboard_snapshot` table (NOT live `users`)
 - LeaderboardScreen Season Record uses snapshot `LeaderboardEntry`, NOT live `currentUser`
 - Used by: TeamScreen, LeaderboardScreen, ALL TIME aggregates (distance, pace, stability, run count)
@@ -479,9 +480,35 @@ This is used for both the header FlipPoints AND the ALL TIME points display, ens
 | Header FlipPoints | Live (hybrid) | `PointsService.totalSeasonPoints` |
 | Run History ALL TIME | Snapshot + hybrid points | `UserModel` aggregates + `totalSeasonPoints` |
 | Run History period stats | Live | Local SQLite runs (run-level granularity) |
-| TeamScreen | Snapshot | Server RPCs only |
+| TeamScreen | Snapshot | Server RPCs only (home hex anchored) |
 | LeaderboardScreen | Snapshot | `season_leaderboard_snapshot` via `get_leaderboard` RPC (NOT live `users` or `currentUser`) |
+| MapScreen display | Snapshot + GPS | GPS hex for camera/territory when outside province; home hex otherwise |
 | Hex Map | Snapshot + Live overlay | `hex_snapshot` + own local flips |
+
+### Location Domain Separation (Home vs GPS)
+
+Server data and map display use different location anchors to prevent server data from changing when the user travels.
+
+| Concern | Location Anchor | Implementation |
+|---------|----------------|----------------|
+| Hex snapshot download | **Home hex** | `PrefetchService._homeHexAll` in `_downloadHexData()` |
+| Leaderboard filtering | **Home hex** | `LeaderboardProvider.filterByScope()` reads `homeHex` |
+| TeamScreen territory | **Home hex** | `PrefetchService().homeHexCity` / `homeHex` |
+| Season register | **Home hex** | `PrefetchService().homeHex` |
+| MapScreen camera/overlay | **GPS hex** (outside province) | `PrefetchService().gpsHex` via `isOutsideHomeProvince` |
+| HexagonMap anchor | **GPS hex** (outside province) | `_updateHexagons()` uses `gpsHex` |
+| Hex capture | **Disabled** outside province | `_OutsideProvinceBanner` on MapScreen |
+
+**PrefetchService getters** (no `activeHex*` — removed to prevent domain conflation):
+- `homeHex`, `homeHexCity`, `homeHexAll` — registered home (server data anchor)
+- `gpsHex`, `getGpsHexAtScope()` — current GPS (map display only)
+- `isOutsideHomeProvince` — GPS province ≠ home province
+
+**Outside-province UX flow**:
+1. MapScreen shows `_OutsideProvinceBanner` (glassmorphism card) directing user to Profile
+2. ProfileScreen `_LocationCard` shows both registered home and GPS locations
+3. "UPDATE TO CURRENT" button triggers FROM→TO confirmation dialog with buff reset warning
+4. After update: all screens realign to new home location, banner disappears
 
 ### Points Hybrid Model
 

@@ -101,7 +101,7 @@ lib/
 │   ├── running_screen.dart      # Pre-run & active run tracking
 │   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
 │   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, sex, birthday, stats (no avatar)
+│   └── profile_screen.dart      # Manifesto, sex, birthday, stats, dual-location card
 ├── services/
 │   ├── supabase_service.dart    # Supabase client init & RPC wrappers
 │   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
@@ -414,6 +414,7 @@ All app data belongs to exactly one of two domains. **Never mix them.**
 **Snapshot Domain** (Server → Local, read-only until next midnight):
 - Hex map base, leaderboard rankings + season record, team stats, buff, user aggregates (`UserModel`)
 - Downloaded on app launch/OnResume. NEVER changes from running.
+- **Always anchored to home hex** — downloads use `PrefetchService.homeHex`/`homeHexAll` (never GPS)
 - Leaderboard: `get_leaderboard` RPC reads from `season_leaderboard_snapshot` (NOT live `users` table)
 - LeaderboardScreen Season Record uses snapshot `LeaderboardEntry`, NOT live `currentUser`
 - Used by: TeamScreen, LeaderboardScreen, ALL TIME stats (distance, pace, stability, run count)
@@ -427,11 +428,22 @@ All app data belongs to exactly one of two domains. **Never mix them.**
 
 | Screen | Domain | Rule |
 |--------|--------|------|
-| TeamScreen | Snapshot | Server RPCs only |
+| TeamScreen | Snapshot | Server RPCs only (home hex anchored) |
 | LeaderboardScreen | Snapshot | `season_leaderboard_snapshot` via RPC (NOT live `users` or `currentUser`) |
+| MapScreen display | Snapshot + GPS | GPS hex for camera/territory when outside province |
 | ALL TIME stats | Snapshot + hybrid points | `UserModel` + `totalSeasonPoints` |
 | Period stats | Live | Local SQLite runs |
 | Header FlipPoints | Live (hybrid) | `totalSeasonPoints` |
+
+### Location Domain Separation (Home vs GPS)
+
+Server data and map display use different location anchors:
+- **Server data** (TeamScreen, Leaderboard, hex snapshot, season register) → always **home hex**
+- **MapScreen** district/province views → **GPS hex** when outside province, home hex otherwise
+- **Hex capture** → **disabled** when outside province (floating banner on MapScreen)
+- **ProfileScreen** → shows BOTH registered home and GPS location when outside province
+
+`PrefetchService` getters: `homeHex`/`homeHexCity`/`homeHexAll` (server anchor), `gpsHex`/`getGpsHexAtScope()` (map display), `isOutsideHomeProvince` (detection). No `activeHex*` getters (removed to prevent domain conflation).
 
 ### OnResume Data Refresh
 When app returns to foreground, `AppLifecycleManager` triggers:

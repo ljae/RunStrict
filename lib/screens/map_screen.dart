@@ -17,6 +17,7 @@ import '../services/ad_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/prefetch_service.dart';
 import '../services/hex_service.dart';
+import 'profile_screen.dart';
 
 /// Premium dark-themed map screen with hex territory visualization
 class MapScreen extends StatefulWidget {
@@ -180,10 +181,13 @@ class _MapScreenState extends State<MapScreen> {
         debugPrint('Failed to get current location for ZONE: $e');
       }
     } else {
-      // CITY/ALL: Center on home hex
-      final homeHex = PrefetchService().homeHex;
-      if (homeHex != null) {
-        final homeCenter = HexService().getHexCenter(homeHex);
+      // CITY/ALL: Center on GPS hex when outside province, home hex otherwise
+      final prefetch = PrefetchService();
+      final anchorHex = prefetch.isOutsideHomeProvince
+          ? prefetch.gpsHex
+          : prefetch.homeHex;
+      if (anchorHex != null) {
+        final homeCenter = HexService().getHexCenter(anchorHex);
         centerPoint = mapbox.Point(
           coordinates: mapbox.Position(
             homeCenter.longitude,
@@ -248,6 +252,28 @@ class _MapScreenState extends State<MapScreen> {
                   child: _TeamStatsOverlay(
                     stats: _hexStats!,
                     scope: _selectedScope,
+                  ),
+                ),
+
+              // Floating banner when outside home province (CITY/ALL views)
+              if (!_showUserLocation && PrefetchService().isOutsideHomeProvince)
+                Positioned(
+                  top: isLandscape
+                      ? (_hexStats != null ? 100 : 16)
+                      : MediaQuery.of(context).padding.top +
+                            (_hexStats != null ? 170 : 76),
+                  left: 16,
+                  right: isLandscape ? null : 16,
+                  width: isLandscape ? 350 : null,
+                  child: _OutsideProvinceBanner(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
 
@@ -359,17 +385,20 @@ class _TeamStatsOverlay extends StatelessWidget {
     final bluePercent = (stats.blueCount / total * 100).round();
     final purplePercent = (stats.purpleCount / total * 100).round();
 
-    // Get territory/district name from user's home hex (via PrefetchService)
-    final homeHex = PrefetchService().homeHex;
+    // MapScreen displays GPS-based territory when outside province
+    final prefetch = PrefetchService();
+    final displayHex = prefetch.isOutsideHomeProvince
+        ? prefetch.gpsHex
+        : prefetch.homeHex;
 
     String scopeLabel;
-    if (scope == GeographicScope.city && homeHex != null) {
+    if (scope == GeographicScope.city && displayHex != null) {
       // CITY -> "District N"
-      final districtNum = HexService().getCityNumber(homeHex);
+      final districtNum = HexService().getCityNumber(displayHex);
       scopeLabel = 'DISTRICT $districtNum';
-    } else if (scope == GeographicScope.all && homeHex != null) {
+    } else if (scope == GeographicScope.all && displayHex != null) {
       // ALL -> Territory name (e.g., "Amber Ridge")
-      scopeLabel = HexService().getTerritoryName(homeHex).toUpperCase();
+      scopeLabel = HexService().getTerritoryName(displayHex).toUpperCase();
     } else {
       scopeLabel = scope.label.toUpperCase();
     }
@@ -544,6 +573,79 @@ class _TeamStatsOverlay extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Floating banner shown when user is outside their home province.
+/// Prompts them to update location in Profile.
+class _OutsideProvinceBanner extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _OutsideProvinceBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final teamColor =
+        context.read<AppStateProvider>().userTeam?.color ?? AppTheme.electricBlue;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: teamColor.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  color: teamColor,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Outside home province',
+                        style: GoogleFonts.sora(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                      Text(
+                        'Update location in Profile to run here',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.white.withValues(alpha: 0.4),
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

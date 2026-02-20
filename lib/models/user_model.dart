@@ -79,10 +79,8 @@ class UserModel {
       homeHex: stats['home_hex'] as String?,
       homeHexEnd: stats['home_hex_end'] as String?,
       seasonHomeHex: stats['season_home_hex'] as String?,
-      totalDistanceKm:
-          (stats['total_distance_km'] as num?)?.toDouble() ?? 0,
-      avgPaceMinPerKm:
-          (stats['avg_pace_min_per_km'] as num?)?.toDouble(),
+      totalDistanceKm: (stats['total_distance_km'] as num?)?.toDouble() ?? 0,
+      avgPaceMinPerKm: (stats['avg_pace_min_per_km'] as num?)?.toDouble(),
       avgCv: (stats['avg_cv'] as num?)?.toDouble(),
       totalRuns: (stats['total_runs'] as num?)?.toInt() ?? 0,
     );
@@ -187,8 +185,6 @@ class UserModel {
     'birthday': birthday.toIso8601String().substring(0, 10),
     'nationality': nationality,
     'home_hex': homeHex,
-    'home_hex_end': homeHexEnd,
-    'season_home_hex': seasonHomeHex,
     'total_distance_km': totalDistanceKm,
     'avg_pace_min_per_km': avgPaceMinPerKm,
     'avg_cv': avgCv,

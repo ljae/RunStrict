@@ -334,16 +334,26 @@ class HexService {
   String getTerritoryName(String baseHexId) {
     final res5Parent = getParentHexId(baseHexId, H3Config.allResolution);
 
-    // Use last 8 characters of hex ID to generate indices
-    final hashPart = res5Parent.length >= 8
-        ? res5Parent.substring(res5Parent.length - 8)
-        : res5Parent.padLeft(8, '0');
+    // Hash the full hex ID for better distribution across word lists.
+    // Use two independent hash values from different parts to avoid collisions
+    // where nearby Res 5 cells map to the same adjective+noun pair.
+    final padded = res5Parent.padLeft(16, '0');
+    final halfLen = padded.length ~/ 2;
+    final firstHalf = padded.substring(0, halfLen);
+    final secondHalf = padded.substring(halfLen);
 
-    // Parse as hex and use modulo to get indices
-    final hashValue = int.tryParse(hashPart, radix: 16) ?? 0;
-    final adjIndex = hashValue % _territoryAdjectives.length;
-    final nounIndex =
-        (hashValue ~/ _territoryAdjectives.length) % _territoryNouns.length;
+    // FNV-1a inspired: fold all characters into a hash for each word index
+    int hashA = 0x811c9dc5;
+    for (final c in firstHalf.codeUnits) {
+      hashA = ((hashA ^ c) * 0x01000193) & 0x7FFFFFFF;
+    }
+    int hashB = 0x811c9dc5;
+    for (final c in secondHalf.codeUnits) {
+      hashB = ((hashB ^ c) * 0x01000193) & 0x7FFFFFFF;
+    }
+
+    final adjIndex = hashA % _territoryAdjectives.length;
+    final nounIndex = hashB % _territoryNouns.length;
 
     return '${_territoryAdjectives[adjIndex]} ${_territoryNouns[nounIndex]}';
   }

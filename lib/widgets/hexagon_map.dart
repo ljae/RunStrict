@@ -821,8 +821,12 @@ class _HexagonMapState extends State<HexagonMap> {
         hexIds = HexService().getHexagonsInArea(zoneCenter, resolution, 5);
       } else {
         // CITY/ALL: strict parent cell boundary
-        final homeHex = PrefetchService().homeHex;
-        if (homeHex == null) {
+        // MapScreen shows GPS surroundings when outside province
+        final prefetch = PrefetchService();
+        final anchorHex = prefetch.isOutsideHomeProvince
+            ? prefetch.gpsHex
+            : prefetch.homeHex;
+        if (anchorHex == null) {
           // Fallback to camera center with k-ring if no home hex
           final lat = center.coordinates.lat;
           final lng = center.coordinates.lng;
@@ -836,7 +840,7 @@ class _HexagonMapState extends State<HexagonMap> {
           // Get parent cell at scope resolution, then expand to base resolution
           final scopeResolution = currentScope.resolution;
           parentHexForBoundary = HexService().getParentHexId(
-            homeHex,
+            anchorHex,
             scopeResolution,
           );
           hexIds = HexService().getAllChildrenAtResolution(
