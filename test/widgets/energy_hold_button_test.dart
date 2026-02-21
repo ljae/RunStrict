@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/widgets/energy_hold_button.dart';
+import 'package:runner/core/widgets/energy_hold_button.dart';
 
 void main() {
   testWidgets('EnergyHoldButton triggers onComplete once and locks',

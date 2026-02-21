@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/models/run.dart';
-import 'package:runner/models/team.dart';
-import 'package:runner/models/location_point.dart';
+import 'package:runner/data/models/run.dart';
+import 'package:runner/data/models/team.dart';
+import 'package:runner/data/models/location_point.dart';
 
 void main() {
   group('Run Model', () {

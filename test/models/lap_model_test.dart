@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/models/lap_model.dart';
+import 'package:runner/data/models/lap_model.dart';
 
 void main() {
   group('LapModel', () {

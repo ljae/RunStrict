@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/models/lap_model.dart';
-import 'package:runner/services/lap_service.dart';
+import 'package:runner/data/models/lap_model.dart';
+import 'package:runner/features/run/services/lap_service.dart';
 
 void main() {
   group('LapService', () {

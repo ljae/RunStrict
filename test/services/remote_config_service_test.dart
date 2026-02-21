@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/models/app_config.dart';
-import 'package:runner/services/remote_config_service.dart';
+import 'package:runner/data/models/app_config.dart';
+import 'package:runner/core/services/remote_config_service.dart';
 
 void main() {
   group('RemoteConfigService', () {

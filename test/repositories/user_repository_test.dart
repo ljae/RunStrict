@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/models/team.dart';
-import 'package:runner/models/user_model.dart';
-import 'package:runner/repositories/user_repository.dart';
+import 'package:runner/data/models/team.dart';
+import 'package:runner/data/models/user_model.dart';
+import 'package:runner/data/repositories/user_repository.dart';
 
 void main() {
   group('UserRepository', () {

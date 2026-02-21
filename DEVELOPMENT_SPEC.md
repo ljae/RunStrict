@@ -289,7 +289,7 @@ A **Flip** occurs when a hex changes color (any color change counts).
 | Blue → Purple | ✅ Yes | +1 Flip Point |
 | Red → Red (same team) | ❌ No | 0 |
 
-**No streak bonus.** No flip caps of any kind (unlimited flips per day, same hex can be flipped multiple times).
+**No streak bonus.** No flip caps of any kind (unlimited flips per day, different users can each flip the same hex independently; same user cannot re-flip own hex due to snapshot isolation).
 
 ### 2.5 Economy & Points
 
@@ -307,7 +307,7 @@ A **Flip** occurs when a hex changes color (any color change counts).
 - All Flip Points belong to the individual.
 - Points are calculated at run completion ("The Final Sync").
 - Multiplier is determined by team-based buff system (see §2.3).
-- No streak bonuses. No daily total cap. **No daily hex limit** (same hex can be flipped multiple times per day).
+- No streak bonuses. No daily total cap. **No daily hex limit** (different users can each flip the same hex independently; same user cannot re-flip own hex due to snapshot isolation).
 
 #### 2.5.2 Team-Based Buff Multiplier
 
@@ -820,7 +820,7 @@ Applies to: TeamScreen (yesterday stats), RunHistoryScreen (ALL TIME + period pa
 **Google AdMob**: BannerAd displayed on MapScreen via `_NativeAdCard` widget.
 - Shows on all scope views (zone, district, province)
 - Shows in both portrait and landscape orientations
-- `AdService` singleton manages SDK initialization (`lib/services/ad_service.dart`)
+- `AdService` singleton manages SDK initialization (`lib/core/services/ad_service.dart`)
 - Test ad unit IDs during development; replace with production IDs before release
 
 #### Animation Standards
@@ -914,7 +914,7 @@ class HexModel {
 }
 ```
 
-#### Run (Unified Run Model — `lib/models/run.dart`)
+#### Run (Unified Run Model — `lib/data/models/run.dart`)
 
 > **Note**: The unified `Run` model replaces three legacy models: `RunSession` (active runs), `RunSummary` (completed runs), and `RunHistoryModel` (history display). A single model handles the full run lifecycle.
 
@@ -956,7 +956,7 @@ class Run {
 
 > **Storage Optimization**:
 > - `hexPath` stores deduplicated H3 hex IDs only (no individual timestamps).
-> - Raw GPS trace is NOT stored (90%+ storage savings).
+> - Raw GPS trace is NOT uploaded to server (stored locally in SQLite `routes` table for route display only).
 > - Route shape can be reconstructed by connecting hex centers.
 > - `endTime` is the sole timestamp used for conflict resolution.
 
@@ -1583,10 +1583,10 @@ Server data and map display use different location anchors. This prevents server
 | **Seasonal** | `runs` (heavy with hex_path) | Supabase (PostgreSQL) | Current season | DROP PARTITION (instant) |
 | **Permanent** | `run_history` (lightweight stats) | Supabase (PostgreSQL) | **Forever** | Never deleted |
 | **Permanent** | `daily_stats` (aggregated daily) | Supabase (PostgreSQL) | **Forever** | Never deleted |
-| **Cold** | ~~Raw GPS paths~~ **NOT STORED** | — | — | 90%+ storage savings |
+| **Cold** | Raw GPS paths | Local SQLite only (`routes`) | Device lifetime | Never uploaded to server (90%+ server storage savings) |
 
 > **Key Design**: Separate `runs` (heavy, deleted) from `run_history` (light, preserved).
-> Raw GPS coordinates are NOT stored. Only `hex_path` (H3 IDs) is in `runs`.
+> Raw GPS coordinates are stored locally only (SQLite `routes` table for route display). Only `hex_path` (H3 IDs) is uploaded to server in `runs`.
 
 **Snapshot-Based Points Flow ("The Final Sync"):**
 
@@ -1720,7 +1720,9 @@ CREATE TABLE run_checkpoint (
 ```yaml
 # Core
 flutter: sdk
-provider: ^6.1.2
+flutter_riverpod: ^2.6.1       # Riverpod 3.0 state management
+hooks_riverpod: ^2.6.1         # Riverpod + Flutter Hooks integration
+go_router: ^14.0.0             # Declarative routing
 
 # Location & Maps
 geolocator: ^13.0.2
@@ -1750,80 +1752,56 @@ animated_text_kit: ^4.2.2
 shimmer: ^3.0.0
 ```
 
-> **Migration Note**: `firebase_core`, `cloud_firestore`, and `firebase_auth` are replaced by single `supabase_flutter` package which provides auth, database, realtime, and storage in one SDK.
+> **Migration Note**: `firebase_core`, `cloud_firestore`, and `firebase_auth` are replaced by single `supabase_flutter` package which provides auth, database, realtime, and storage in one SDK. The legacy `provider` package has been replaced by `flutter_riverpod` / `hooks_riverpod` (Riverpod 3.0).
 
 ### 5.3 Directory Structure
 
 ```
 lib/
-├── main.dart                    # App entry point, Provider setup
-├── config/
-│   ├── mapbox_config.dart       # Mapbox API configuration
-│   └── supabase_config.dart     # Supabase URL & anon key
-├── models/
-│   ├── team.dart                # Team enum (red/blue/purple)
-│   ├── user_model.dart          # User data model (with CV aggregates)
-│   ├── hex_model.dart           # Hex tile (lastRunnerTeam only)
-│   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
-│   ├── run.dart                 # Unified run model (active + completed + history)
-│   ├── lap_model.dart           # Per-km lap data for CV calculation
-│   ├── daily_running_stat.dart  # Daily stats (preserved)
-│   ├── location_point.dart      # GPS point (active run)
-│   └── route_point.dart         # Compact route point (Cold storage)
-├── providers/
-│   ├── app_state_provider.dart  # Global app state (team, user)
-│   ├── run_provider.dart        # Run lifecycle & hex capture
-│   └── hex_data_provider.dart   # Hex data cache & state
-├── screens/
-│   ├── team_selection_screen.dart
-│   ├── home_screen.dart         # Main navigation hub + AppBar
-│   ├── map_screen.dart          # Hex map exploration view
-│   ├── running_screen.dart      # Pre-run & active run (unified)
-│   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
-│   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, sex, birthday, stats, dual-location card
-├── services/
-│   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
-│   ├── remote_config_service.dart      # Server-configurable constants (fetch, cache, provide)
-│   ├── config_cache_service.dart       # Local JSON cache for remote config
-│   ├── prefetch_service.dart    # Home hex anchoring & scope data prefetch (2,401 hexes)
-│   ├── hex_service.dart         # H3 hex grid operations
-│   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
-│   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
-│   ├── lap_service.dart         # CV calculation from lap data
-│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer, uses RemoteConfigService)
-│   ├── accelerometer_service.dart      # Accelerometer anti-spoofing (5s no-data warning)
-│   ├── storage_service.dart     # Storage interface (abstract)
-│   ├── in_memory_storage_service.dart  # In-memory (MVP/testing)
-│   ├── local_storage_service.dart      # SharedPreferences helpers
-│   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 40-day season countdown (uses RemoteConfigService)
-│   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
-│   ├── running_score_service.dart      # Pace validation for capture
-│   ├── app_lifecycle_manager.dart      # App foreground/background handling (uses RemoteConfigService)
-│   ├── sync_retry_service.dart        # Retry failed Final Syncs (uses connectivity_plus)
-│   ├── ad_service.dart                # Google AdMob initialization & ad unit IDs
-│   └── data_manager.dart        # Hot/Cold data separation
-├── storage/
-│   └── local_storage.dart       # SQLite implementation
-├── theme/
-│   ├── app_theme.dart           # Main theme (colors, typography)
-│   └── neon_theme.dart          # Neon accent colors
-├── utils/
-│   ├── image_utils.dart         # Location marker generation
-│   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
-│   └── lru_cache.dart           # LRU cache for hex data
-└── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer + boundary layers)
-    ├── route_map.dart           # Running route display + navigation mode
-    ├── smooth_camera_controller.dart  # 60fps camera interpolation
-    ├── glowing_location_marker.dart   # Team-colored pulsing marker
-    ├── flip_points_widget.dart  # Animated flip counter (header)
-    ├── season_countdown_widget.dart   # D-day countdown badge
-    ├── energy_hold_button.dart  # Hold-to-trigger button
-    ├── capturable_hex_pulse.dart     # Pulsing effect for capturable hexes
-    ├── stat_card.dart           # Statistics card
-    └── neon_stat_card.dart      # Neon-styled stat card
+├── main.dart                    # App entry point, ProviderScope setup
+├── app/
+│   ├── app.dart                 # Root app widget
+│   ├── routes.dart              # go_router route definitions
+│   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
+│   ├── theme.dart               # Theme re-export
+│   └── neon_theme.dart          # Neon accent colors (used by route_map)
+├── features/
+│   ├── auth/
+│   │   ├── screens/             # login, profile_register, season_register, team_selection
+│   │   ├── providers/           # app_state (Notifier), app_init (AsyncNotifier)
+│   │   └── services/            # auth_service
+│   ├── run/
+│   │   ├── screens/             # running_screen
+│   │   ├── providers/           # run_provider (Notifier)
+│   │   └── services/            # run_tracker, gps_validator, accelerometer, location, running_score, lap, voice_announcement
+│   ├── map/
+│   │   ├── screens/             # map_screen
+│   │   ├── providers/           # hex_data_provider (Notifier)
+│   │   └── widgets/             # hexagon_map, route_map, smooth_camera, glowing_marker
+│   ├── leaderboard/
+│   │   ├── screens/             # leaderboard_screen
+│   │   └── providers/           # leaderboard_provider (Notifier)
+│   ├── team/
+│   │   ├── screens/             # team_screen, traitor_gate_screen
+│   │   └── providers/           # team_stats (Notifier), buff (Notifier)
+│   ├── profile/
+│   │   └── screens/             # profile_screen
+│   └── history/
+│       ├── screens/             # run_history_screen
+│       └── widgets/             # run_calendar
+├── core/
+│   ├── config/                  # h3, mapbox, supabase, auth configuration
+│   ├── storage/
+│   │   └── local_storage.dart   # SQLite v15 (runs, routes, laps, run_checkpoint)
+│   ├── utils/                   # country, gmt2_date, lru_cache, route_optimizer
+│   ├── widgets/                 # energy_hold_button, flip_points, season_countdown
+│   ├── services/                # supabase, remote_config, config_cache, season, ad, lifecycle, sync_retry, points, buff, timezone, prefetch, hex, storage_service, local_storage_service
+│   └── providers/               # infrastructure, user_repository, points
+├── data/
+│   ├── models/                  # team, user, hex, run, lap, location_point, app_config, team_stats
+│   └── repositories/            # hex, leaderboard, user
+└── theme/
+    └── app_theme.dart           # Colors, typography, animations (re-exported via app/theme.dart)
 ```
 
 ### 5.4 GPS Anti-Spoofing
@@ -1962,7 +1940,7 @@ lib/
 
 Geographic scope filtering uses H3's hierarchical parent cell system. Users are grouped by their parent hex ID at the scope's resolution level.
 
-**Implementation (lib/config/h3_config.dart):**
+**Implementation (lib/core/config/h3_config.dart):**
 
 | Scope | H3 Resolution | Map Zoom | Filter Logic |
 |-------|---------------|----------|--------------|
@@ -2032,7 +2010,7 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 | | — Min time between points: 100ms → 1500ms (allows 0.5Hz with margin) |
 | | — Pace validation now uses 20-second moving average instead of 10-second |
 | 2026-01-26 | **Session 4 - Data Architecture**: |
-| | — Daily flip limit REMOVED — same hex can be flipped multiple times per day |
+| | — Daily flip limit REMOVED — different users can each flip the same hex independently (same user cannot re-flip own hex due to snapshot isolation) |
 | | — Table separation: `runs` (heavy, seasonal) vs `run_history` (light, permanent) |
 | | — `daily_flips` table and `has_flipped_today()` function removed |
 | | — D-Day reset now preserves `run_history` (personal run stats survive) |
@@ -2209,7 +2187,7 @@ Geographic scope filtering uses H3's hierarchical parent cell system. Users are 
 | | ☐ In-memory only (data loss risk) | |
 
 **Storage Optimization:**
-- Raw GPS coordinates are NOT uploaded (only `hex_path`).
+- Raw GPS coordinates are NOT uploaded to server (stored locally in SQLite `routes` table for route display; only `hex_path` uploaded).
 - `hex_path` = deduplicated list of H3 hex IDs passed.
 - Estimated 90%+ reduction in storage compared to full GPS trace.
 
@@ -2490,9 +2468,9 @@ await RemoteConfigService().initialize();
 |------|---------|
 | `supabase/migrations/20260128_create_app_config.sql` | Database table with JSONB schema |
 | `supabase/migrations/20260128_update_app_launch_sync.sql` | RPC returns config |
-| `lib/models/app_config.dart` | Typed model with nested classes |
-| `lib/services/config_cache_service.dart` | Local JSON caching |
-| `lib/services/remote_config_service.dart` | Singleton service |
+| `lib/data/models/app_config.dart` | Typed model with nested classes |
+| `lib/core/services/config_cache_service.dart` | Local JSON caching |
+| `lib/core/services/remote_config_service.dart` | Singleton service |
 | `test/services/remote_config_service_test.dart` | Unit tests (7 tests) |
 
 #### 9.12.8 Services Using RemoteConfigService
@@ -2529,7 +2507,7 @@ await RemoteConfigService().initialize();
 | **Buff Display** | ✅ Complete | Shows current buff multiplier in UI |
 | **Supabase Realtime** | ✅ REMOVED | No WebSocket features needed — all data synced on launch/completion |
 | **Run History Timezone** | ✅ Complete | User-selectable timezone for history display |
-| **Daily Flip Limit** | ✅ REMOVED | No daily limit — same hex can be flipped multiple times per day |
+| **Daily Flip Limit** | ✅ REMOVED | No daily limit — different users can each flip the same hex independently (same user cannot re-flip own hex due to snapshot isolation) |
 | **Table Separation** | ✅ Complete | `runs` (heavy, deleted on reset) vs `run_history` (light, preserved 5 years) |
 | **Pace Validation** | ✅ Complete | **Moving average pace (10 sec)** at hex entry (GPS noise smoothing) |
 | **Points Authority** | ✅ Complete | **Server verified** — points ≤ hex_count × multiplier |

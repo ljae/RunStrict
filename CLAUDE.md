@@ -18,9 +18,9 @@
 - Performance-optimized (no 3D rendering)
 - Serverless: No backend API server (Supabase RLS + Edge Functions)
 - **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync")
-- **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier)
+- **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier). **Accepted risk**: Client-authoritative scoring means a sophisticated attacker could forge hex paths. Full server-side GPS validation would require storing raw GPS traces, which conflicts with the privacy-first design. The cap validation (`flip_points ≤ hex_count × multiplier`) bounds the maximum damage.
 - **Offline resilient**: Failed syncs retry automatically via `SyncRetryService` (on launch, OnResume, next run)
-- **Crash recovery**: `run_checkpoint` table saves state on each hex flip; recovered on next app launch
+- **Crash recovery**: `run_checkpoint` table saves state on each hex flip (including serialized `config_snapshot`); recovered on next app launch
 
 ### Core Philosophy
 | Surface Layer | Hidden Layer |
@@ -84,73 +84,50 @@ flutter test --coverage  # Run with coverage
 
 ```
 lib/
-├── main.dart                    # App entry point, Provider setup
-├── config/
-│   ├── mapbox_config.dart       # Mapbox API configuration
-│   └── supabase_config.dart     # Supabase URL & anon key
-├── models/
-│   ├── team.dart                # Team enum (red/blue/purple)
-│   ├── user_model.dart          # User data model (with CV aggregates)
-│   ├── hex_model.dart           # Hex tile model (lastRunnerTeam only)
-│   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
-│   ├── run.dart                 # Unified run model (active + completed + history)
-│   ├── lap_model.dart           # Per-km lap data for CV calculation
-│   ├── daily_running_stat.dart  # Daily stats (Warm data)
-│   ├── location_point.dart      # GPS point model (active run)
-│   └── route_point.dart         # Compact route point (cold storage)
-├── providers/
-│   ├── app_state_provider.dart  # Global app state (team, user)
-│   ├── run_provider.dart        # Run lifecycle & hex capture
-│   └── hex_data_provider.dart   # Hex data cache & state
-├── screens/
-│   ├── team_selection_screen.dart
+├── main.dart                    # App entry point, ProviderScope setup
+├── app/
+│   ├── app.dart                 # Root app widget
+│   ├── routes.dart              # go_router route definitions
 │   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
-│   ├── map_screen.dart          # Hex territory exploration
-│   ├── running_screen.dart      # Pre-run & active run tracking
-│   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
-│   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, sex, birthday, nationality, stats, dual-location card
-├── services/
-│   ├── supabase_service.dart    # Supabase client init & RPC wrappers (passes CV to finalize_run)
-│   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
-│   ├── config_cache_service.dart # Local JSON cache for remote config
-│   ├── hex_service.dart         # H3 hex grid operations
-│   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
-│   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
-│   ├── lap_service.dart         # CV calculation from lap data
-│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer, uses RemoteConfigService)
-│   ├── accelerometer_service.dart # Accelerometer anti-spoofing (5s no-data warning)
-│   ├── storage_service.dart     # Storage interface (abstract)
-│   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
-│   ├── local_storage_service.dart # SharedPreferences helpers
-│   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 40-day season countdown (uses RemoteConfigService)
-│   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
-│   ├── running_score_service.dart # Pace validation for capture
-│   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
-│   ├── sync_retry_service.dart  # Retry failed Final Syncs (uses connectivity_plus)
-│   ├── ad_service.dart          # Google AdMob initialization & ad unit IDs
-│   └── data_manager.dart        # Hot/Cold data separation
-├── storage/
-│   └── local_storage.dart       # SQLite v12 (runs, routes, run_checkpoint)
-├── theme/
-│   ├── app_theme.dart           # Colors, typography, animations
+│   ├── theme.dart               # Theme re-export
 │   └── neon_theme.dart          # Neon accent colors (used by route_map)
-├── utils/
-│   ├── image_utils.dart         # Location marker generation
-│   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
-│   └── lru_cache.dart           # LRU cache for hex data
-└── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer + boundary layers)
-    ├── route_map.dart           # Route display + navigation mode
-    ├── smooth_camera_controller.dart # 60fps camera interpolation
-    ├── glowing_location_marker.dart  # Team-colored pulsing marker
-    ├── flip_points_widget.dart  # Animated flip counter (header)
-    ├── season_countdown_widget.dart  # D-day countdown badge
-    ├── energy_hold_button.dart  # Hold-to-trigger button
-    ├── capturable_hex_pulse.dart # Pulsing effect for capturable hexes
-    ├── stat_card.dart           # Statistics card
-    └── neon_stat_card.dart      # Neon-styled stat card
+├── features/
+│   ├── auth/
+│   │   ├── screens/             # login, profile_register, season_register, team_selection
+│   │   ├── providers/           # app_state (Notifier), app_init (AsyncNotifier)
+│   │   └── services/            # auth_service
+│   ├── run/
+│   │   ├── screens/             # running_screen
+│   │   ├── providers/           # run_provider (Notifier)
+│   │   └── services/            # run_tracker, gps_validator, accelerometer, location, running_score, lap, voice_announcement
+│   ├── map/
+│   │   ├── screens/             # map_screen
+│   │   ├── providers/           # hex_data_provider (Notifier)
+│   │   └── widgets/             # hexagon_map, route_map, smooth_camera, glowing_marker
+│   ├── leaderboard/
+│   │   ├── screens/             # leaderboard_screen
+│   │   └── providers/           # leaderboard_provider (Notifier)
+│   ├── team/
+│   │   ├── screens/             # team_screen, traitor_gate_screen
+│   │   └── providers/           # team_stats (Notifier), buff (Notifier)
+│   ├── profile/
+│   │   └── screens/             # profile_screen
+│   └── history/
+│       ├── screens/             # run_history_screen
+│       └── widgets/             # run_calendar
+├── core/
+│   ├── config/                  # h3, mapbox, supabase, auth configuration
+│   ├── storage/
+│   │   └── local_storage.dart   # SQLite v15 (runs, routes, laps, run_checkpoint)
+│   ├── utils/                   # country, gmt2_date, lru_cache, route_optimizer
+│   ├── widgets/                 # energy_hold_button, flip_points, season_countdown
+│   ├── services/                # supabase, remote_config, config_cache, season, ad, lifecycle, sync_retry, points, buff, timezone, prefetch, hex, storage_service, local_storage_service
+│   └── providers/               # infrastructure, user_repository, points
+├── data/
+│   ├── models/                  # team, user, hex, run, lap, location_point, app_config, team_stats
+│   └── repositories/            # hex, leaderboard, user
+└── theme/
+    └── app_theme.dart           # Colors, typography, animations (re-exported via app/theme.dart)
 ```
 
 ---
@@ -186,7 +163,7 @@ class UserModel {
   String? nationality;     // ISO country code (e.g., 'KR', 'US')
   String? homeHex;         // H3 index of run start location (self only)
   String? homeHexEnd;      // H3 index of run end location (visible to others)
-  String? districtHex;     // Res 6 H3 parent hex, set by finalize_run()
+  String? districtHex;     // Res 6 H3 parent hex, set by update_home_location()
   String? seasonHomeHex;   // Home hex for current season
   double totalDistanceKm;  // Running season aggregate
   double? avgPaceMinPerKm; // Weighted average pace
@@ -305,7 +282,7 @@ Buff multipliers are calculated daily at midnight GMT+2 via Edge Function:
 - GPS accuracy must be ≤ 50m
 - GPS Polling: Fixed 0.5 Hz (every 2 seconds) for battery optimization
 - Any color change = Flip (including neutral → team color)
-- **NO daily flip limit** - same hex can be flipped multiple times per day
+- **NO daily flip limit** - different users can each flip the same hex independently (same user cannot re-flip own hex due to snapshot isolation)
 - Conflict resolution: **Later run_endTime wins** (compared via last_flipped_at timestamp)
 - Capturable hexes pulse (2s, 1.2x scale, glow)
 
@@ -414,7 +391,7 @@ Server data and map display use different location anchors:
 ### Import Order
 1. Dart SDK (`dart:async`)
 2. Flutter (`package:flutter/material.dart`)
-3. Third-party packages (`package:provider/provider.dart`)
+3. Third-party packages (`package:hooks_riverpod/hooks_riverpod.dart`)
 4. Internal imports (`../models/run_session.dart`)
 
 ### Widget Construction
@@ -422,10 +399,12 @@ Server data and map display use different location anchors:
 - Use `super.key` for widget keys
 - Break large widgets into private helper widgets
 
-### State Management (Provider)
-- Providers extend `ChangeNotifier`
-- Call `notifyListeners()` after state changes
-- Services injected via constructor
+### State Management (Riverpod 3.0)
+- Use `Notifier<T>` / `AsyncNotifier<T>` class-based providers
+- Use `NotifierProvider` / `AsyncNotifierProvider` declarations
+- Use `ConsumerWidget` / `ConsumerStatefulWidget` for widgets
+- Use `ref.watch()` for reactive state, `ref.read()` for one-off actions
+- Follow patterns defined in `riverpod_rule.md`
 
 ### Error Handling
 - Use `debugPrint()` for logging (not `print()`)
@@ -435,7 +414,7 @@ Server data and map display use different location anchors:
 
 ## Theme & Colors
 
-All colors centralized in `lib/theme/app_theme.dart`.
+All colors centralized in `lib/theme/app_theme.dart` (re-exported via `lib/app/theme.dart`).
 
 ```dart
 // Team colors
@@ -458,7 +437,7 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 
 ### Do
 - Use `const` constructors for immutable widgets
-- Follow Provider pattern for state
+- Follow Riverpod Notifier pattern per `riverpod_rule.md`
 - Use relative imports for internal files
 - Run `flutter analyze` before committing
 - Add `///` documentation for public APIs
@@ -469,6 +448,7 @@ Current:    Team color @ 0.5 opacity, 2.5px border
 - Don't suppress lint rules without good reason
 - Don't put business logic in widgets
 - Don't hardcode colors - use `AppTheme`
+- Don't use `ChangeNotifier`, `StateNotifier`, or the legacy `provider` package — Riverpod 3.0 (`flutter_riverpod` / `hooks_riverpod`) is the sole state management solution
 - Don't create new state management patterns
 - Don't store derived/calculated data in database
 - Don't create backend API endpoints - use RLS
@@ -511,7 +491,8 @@ season_leaderboard_snapshot -- user_id, season_number, rank, name, team, avatar,
 
 | Package | Purpose |
 |---------|---------|
-| `provider` | State management |
+| `flutter_riverpod` | State management (Riverpod 3.0) |
+| `hooks_riverpod` | Riverpod + Flutter Hooks integration |
 | `geolocator` | GPS location tracking |
 | `mapbox_maps_flutter` | Map rendering |
 | `h3_flutter` | Hexagonal grid system |
@@ -520,6 +501,7 @@ season_leaderboard_snapshot -- user_id, season_number, rank, name, team, avatar,
 | `sensors_plus` | Accelerometer (anti-spoofing) |
 | `connectivity_plus` | Network connectivity check before sync |
 | `google_mobile_ads` | Google AdMob banner ads |
+| `go_router` | Declarative routing |
 
 ---
 
@@ -715,7 +697,7 @@ String formatPace(double paceMinPerKm) {
 - Airport departure board style flip animation for each digit
 
 ### Google AdMob Integration
-- `AdService` singleton in `lib/services/ad_service.dart` manages AdMob SDK
+- `AdService` singleton in `lib/core/services/ad_service.dart` manages AdMob SDK
 - BannerAd displayed on MapScreen (all scope views: zone, district, province)
 - Shows in both portrait and landscape orientations
 - Test ad unit IDs used during development (replace with production IDs before release)

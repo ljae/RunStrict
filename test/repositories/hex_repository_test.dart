@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:runner/models/team.dart';
-import 'package:runner/providers/hex_data_provider.dart';
-import 'package:runner/repositories/hex_repository.dart';
-import 'package:runner/services/hex_service.dart';
+import 'package:runner/data/models/team.dart';
+import 'package:runner/features/map/providers/hex_data_provider.dart';
+import 'package:runner/data/repositories/hex_repository.dart';
+import 'package:runner/core/services/hex_service.dart';
 
 void main() {
   setUpAll(() async {

@@ -77,7 +77,7 @@
                      +--------+--------+
                               |
                      +--------v--------+
-                     | LocalStorage    |  (2) SQLite v13 open
+                     | LocalStorage    |  (2) SQLite v15 open
                      | .initialize()   |
                      +--------+--------+
                               |
@@ -119,7 +119,7 @@
     +------v-------+    +------v------+          |
     |AppState      |    |HexData     |    +------v------+
     |Provider      |    |Provider    |    |SeasonService|
-    |(ChangeNotify) |    |(singleton) |    |BuffService  |
+    |(Notifier)     |    |(singleton) |    |BuffService  |
     +------+-------+    +------+------+    |GpsValidator |
            |                   |          +-------------+
            +--------+  +------+
@@ -335,7 +335,7 @@ double get avgPaceMinPerKm {
 
 ### 4.8 ~~CONSOLIDATE: TeamStats inline models~~ DONE
 
-**Status**: Completed. Extracted 8 model classes from `team_stats_provider.dart` into `lib/models/team_stats.dart`. Key changes:
+**Status**: Completed. Extracted 8 model classes from `team_stats_provider.dart` into `lib/data/models/team_stats.dart`. Key changes:
 - `HexDominanceScope.dominantTeam` → computed getter (derived from max hex count)
 - `HexDominanceScope.total` → computed getter (sum of red + blue + purple)
 - `BlueTeamBuff` eliminated — `unionMultiplier` folded into `TeamBuffComparison.blueUnionMultiplier`
@@ -564,12 +564,12 @@ Each model maintains 2-4 serialization formats:
 
 ---
 
-## 9. Storage Schema (SQLite v13)
+## 9. Storage Schema (SQLite v15)
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `runs` | Run history (cold) | `id`, `distance_meters`, `durationSeconds`, `hexesColored`, `teamAtRun`, `hex_path`, `buff_multiplier`, `cv`, `sync_status`, `run_date` |
-| `routes` | GPS path per run (cold) | `runId`, lat/lng stream |
+| `routes` | GPS path per run (local only, never uploaded) | `runId`, lat/lng stream |
 | `laps` | Per-km segments (cold) | `runId`, `lapNumber`, `distanceMeters`, `durationSeconds` |
 | `run_checkpoint` | Crash recovery (hot) | `run_id`, `captured_hex_ids` - saved on every hex flip |
 | `prefetch_meta` | Persistent anchors | `home_hex`, daily territory snapshots (JSON) |

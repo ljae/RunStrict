@@ -40,8 +40,7 @@ dependencies:
   geolocator: ^13.0.2
   permission_handler: ^11.3.1
 
-  # State management
-  provider: ^6.1.2
+  # State management (Riverpod 3.0)
 
   # Local storage
   sqflite: ^2.3.3+2
@@ -73,7 +72,6 @@ dependencies:
 
   # Social auth
   sign_in_with_apple: ^6.1.0
-  google_sign_in: ^6.2.0
   crypto: ^3.0.6
 
   # Animations
@@ -85,10 +83,15 @@ dependencies:
 
   # Ads
   google_mobile_ads: ^5.3.0
+
+  # In-App Purchases (RevenueCat)
+  purchases_flutter: ^8.0.0
   flutter_riverpod: ^3.2.1
   hooks_riverpod: ^3.2.1
   flutter_hooks: ^0.21.3+1
-  riverpod_annotation: ^4.0.2
+
+  # Routing
+  go_router: ^14.0.0
 
 
 
@@ -101,8 +104,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  riverpod_generator: ^4.0.3
-  build_runner: ^2.11.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

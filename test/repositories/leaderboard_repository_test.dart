@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:runner/config/h3_config.dart';
-import 'package:runner/models/team.dart';
-import 'package:runner/providers/leaderboard_provider.dart';
-import 'package:runner/repositories/leaderboard_repository.dart';
+import 'package:runner/core/config/h3_config.dart';
+import 'package:runner/data/models/team.dart';
+import 'package:runner/features/leaderboard/providers/leaderboard_provider.dart';
+import 'package:runner/data/repositories/leaderboard_repository.dart';
 
 void main() {
   group('LeaderboardRepository', () {

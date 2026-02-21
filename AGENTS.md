@@ -23,7 +23,7 @@
 - **Offline resilient**: Failed syncs retry automatically via `SyncRetryService` (on launch, OnResume, next run)
 - **Crash recovery**: `run_checkpoint` table saves state on each hex flip; recovered on next app launch
 
-**Tech Stack**: Flutter 3.10+, Dart, Provider (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
+**Tech Stack**: Flutter 3.10+, Dart, Riverpod 3.0 (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
 
 ---
 
@@ -72,78 +72,50 @@ flutter test --coverage                   # Run with coverage
 
 ```
 lib/
-├── main.dart                    # App entry, Provider setup
-├── config/
-│   ├── mapbox_config.dart       # Mapbox API configuration
-│   └── supabase_config.dart     # Supabase URL & anon key
-├── models/
-│   ├── team.dart                # Team enum (red/blue/purple)
-│   ├── user_model.dart          # User with seasonPoints & CV aggregates
-│   ├── hex_model.dart           # Hex with lastRunnerTeam only
-│   ├── app_config.dart          # Server-configurable constants (Season, GPS, Scoring, Hex, Timing, Buff)
-│   ├── run.dart                 # Unified run model (active + completed + history)
-│   ├── lap_model.dart           # Per-km lap data for CV calculation
-│   ├── daily_running_stat.dart  # Daily stats (Warm data)
-│   ├── location_point.dart      # GPS point (active run)
-│   └── route_point.dart         # Compact route point (cold storage)
-├── repositories/                # Single source of truth (Repository pattern)
-│   ├── user_repository.dart     # User data, season points
-│   ├── hex_repository.dart      # Hex cache with LRU, delta sync
-│   └── leaderboard_repository.dart # Leaderboard entries, filtering
-├── providers/
-│   ├── app_state_provider.dart  # Global app state (team, user)
-│   ├── run_provider.dart        # Run lifecycle & hex capture
-│   └── hex_data_provider.dart   # Hex data cache & state
-├── screens/
-│   ├── team_selection_screen.dart  # Onboarding / new season
+├── main.dart                    # App entry point, ProviderScope setup
+├── app/
+│   ├── app.dart                 # Root app widget
+│   ├── routes.dart              # go_router route definitions
 │   ├── home_screen.dart         # Navigation hub + AppBar (FlipPoints)
-│   ├── map_screen.dart          # Hex territory exploration
-│   ├── running_screen.dart      # Pre-run & active run tracking
-│   ├── leaderboard_screen.dart  # Rankings (Province/District/Zone scope)
-│   ├── run_history_screen.dart  # Past runs (Calendar)
-│   └── profile_screen.dart      # Manifesto, sex, birthday, stats, dual-location card
-├── services/
-│   ├── supabase_service.dart    # Supabase client init & RPC wrappers
-│   ├── remote_config_service.dart # Server-configurable constants (fallback: server → cache → defaults)
-│   ├── config_cache_service.dart # Local JSON cache for remote config
-│   ├── prefetch_service.dart    # Home hex anchoring & scope data prefetch (2,401 hexes)
-│   ├── hex_service.dart         # H3 hex grid operations
-│   ├── location_service.dart    # GPS tracking (uses RemoteConfigService)
-│   ├── run_tracker.dart         # Run session & hex capture engine (lap tracking, CV calculation)
-│   ├── lap_service.dart         # CV calculation from lap data
-│   ├── gps_validator.dart       # Anti-spoofing (GPS + accelerometer, uses RemoteConfigService)
-│   ├── accelerometer_service.dart # Accelerometer anti-spoofing (5s no-data warning)
-│   ├── storage_service.dart     # Storage interface (abstract)
-│   ├── in_memory_storage_service.dart # In-memory (MVP/testing)
-│   ├── local_storage_service.dart # SharedPreferences helpers
-│   ├── points_service.dart      # Flip points & multiplier calculation
-│   ├── season_service.dart      # 40-day season countdown (uses RemoteConfigService)
-│   ├── buff_service.dart        # Team-based buff multiplier (frozen during runs)
-│   ├── running_score_service.dart # Pace validation for capture
-│   ├── app_lifecycle_manager.dart # App foreground/background handling (uses RemoteConfigService)
-│   ├── sync_retry_service.dart  # Retry failed Final Syncs (uses connectivity_plus)
-│   ├── ad_service.dart          # Google AdMob initialization & ad unit IDs
-│   └── data_manager.dart        # Hot/Cold data separation
-├── storage/
-│   └── local_storage.dart       # SQLite v12 (runs, routes, run_checkpoint)
-├── theme/
-│   ├── app_theme.dart           # Colors, typography, animations
+│   ├── theme.dart               # Theme re-export
 │   └── neon_theme.dart          # Neon accent colors (used by route_map)
-├── utils/
-│   ├── image_utils.dart         # Location marker generation
-│   ├── route_optimizer.dart     # Ring buffer + Douglas-Peucker
-│   └── lru_cache.dart           # LRU cache for hex data
-└── widgets/
-    ├── hexagon_map.dart         # Hex grid overlay (GeoJsonSource + FillLayer + boundary layers)
-    ├── route_map.dart           # Route display + navigation mode
-    ├── smooth_camera_controller.dart # 60fps camera interpolation
-    ├── glowing_location_marker.dart  # Team-colored pulsing marker
-    ├── flip_points_widget.dart  # Animated flip counter (header)
-    ├── season_countdown_widget.dart  # D-day countdown badge
-    ├── energy_hold_button.dart  # Hold-to-trigger button
-    ├── capturable_hex_pulse.dart # Pulsing effect for capturable hexes
-    ├── stat_card.dart           # Statistics card
-    └── neon_stat_card.dart      # Neon-styled stat card
+├── features/
+│   ├── auth/
+│   │   ├── screens/             # login, profile_register, season_register, team_selection
+│   │   ├── providers/           # app_state (Notifier), app_init (AsyncNotifier)
+│   │   └── services/            # auth_service
+│   ├── run/
+│   │   ├── screens/             # running_screen
+│   │   ├── providers/           # run_provider (Notifier)
+│   │   └── services/            # run_tracker, gps_validator, accelerometer, location, running_score, lap, voice_announcement
+│   ├── map/
+│   │   ├── screens/             # map_screen
+│   │   ├── providers/           # hex_data_provider (Notifier)
+│   │   └── widgets/             # hexagon_map, route_map, smooth_camera, glowing_marker
+│   ├── leaderboard/
+│   │   ├── screens/             # leaderboard_screen
+│   │   └── providers/           # leaderboard_provider (Notifier)
+│   ├── team/
+│   │   ├── screens/             # team_screen, traitor_gate_screen
+│   │   └── providers/           # team_stats (Notifier), buff (Notifier)
+│   ├── profile/
+│   │   └── screens/             # profile_screen
+│   └── history/
+│       ├── screens/             # run_history_screen
+│       └── widgets/             # run_calendar
+├── core/
+│   ├── config/                  # h3, mapbox, supabase, auth configuration
+│   ├── storage/
+│   │   └── local_storage.dart   # SQLite v15 (runs, routes, laps, run_checkpoint)
+│   ├── utils/                   # country, gmt2_date, lru_cache, route_optimizer
+│   ├── widgets/                 # energy_hold_button, flip_points, season_countdown
+│   ├── services/                # supabase, remote_config, config_cache, season, ad, lifecycle, sync_retry, points, buff, timezone, prefetch, hex, storage_service, local_storage_service
+│   └── providers/               # infrastructure, user_repository, points
+├── data/
+│   ├── models/                  # team, user, hex, run, lap, location_point, app_config, team_stats
+│   └── repositories/            # hex, leaderboard, user
+└── theme/
+    └── app_theme.dart           # Colors, typography, animations (re-exported via app/theme.dart)
 ```
 
 ---
@@ -165,13 +137,13 @@ lib/
 
 1. Dart SDK imports (`dart:async`, `dart:io`)
 2. Flutter imports (`package:flutter/material.dart`)
-3. Third-party packages (`package:provider/provider.dart`)
+3. Third-party packages (`package:hooks_riverpod/hooks_riverpod.dart`)
 4. Internal imports (relative paths `../models/run_session.dart`)
 
 ```dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../models/run_session.dart';
 import '../services/location_service.dart';
 ```
@@ -219,27 +191,29 @@ class _HeaderSection extends StatelessWidget {
 }
 ```
 
-### State Management (Provider)
+### State Management (Riverpod 3.0)
 
-- Providers extend `ChangeNotifier`
-- Call `notifyListeners()` after state changes
-- Services injected via constructor
+- Use `Notifier<T>` / `AsyncNotifier<T>` class-based providers
+- Use `NotifierProvider` / `AsyncNotifierProvider` declarations
+- Use `ConsumerWidget` / `ConsumerStatefulWidget` for widgets
+- Use `ref.watch()` for reactive state, `ref.read()` for one-off actions
+- Always check `ref.mounted` after async ops in notifiers
 
 ```dart
-class RunProvider with ChangeNotifier {
-  final LocationService _locationService;
-
-  RunProvider({required LocationService locationService})
-      : _locationService = locationService;
-
-  RunSession? _activeRun;
-  RunSession? get activeRun => _activeRun;
+class RunNotifier extends Notifier<RunState> {
+  @override
+  RunState build() => const RunState();
 
   Future<void> startRun() async {
+    final locationService = ref.read(locationServiceProvider);
     // ... logic
-    notifyListeners();
+    state = state.copyWith(activeRun: run);
   }
 }
+
+final runProvider = NotifierProvider<RunNotifier, RunState>(
+  RunNotifier.new,
+);
 ```
 
 ### Error Handling
@@ -327,7 +301,7 @@ class UserModel {
 
 ## Theme & Colors
 
-All colors and styles are centralized in `lib/theme/app_theme.dart`.
+All colors and styles are centralized in `lib/theme/app_theme.dart` (re-exported via `lib/app/theme.dart`).
 
 ```dart
 // Team colors
@@ -477,7 +451,8 @@ bool setRunnerColor(Team runnerTeam, DateTime runEndTime) {
   return true; // Color changed (flip)
 }
 
-// NO daily flip limit - same hex can be flipped multiple times per day
+// NO daily flip limit - different users can each flip the same hex independently
+// (same user cannot re-flip own hex on same day — snapshot isolation by design)
 // Conflict resolution: Later run_endTime wins (compared via last_flipped_at)
 ```
 
@@ -545,18 +520,15 @@ void defectToPurple() {
 
 ## Common Patterns
 
-### Screen with Provider
+### Screen with Riverpod
 ```dart
-class RunningScreen extends StatelessWidget {
+class RunningScreen extends ConsumerWidget {
   const RunningScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<RunProvider>(
-      builder: (context, runProvider, child) {
-        return // ... UI using runProvider
-      },
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final runState = ref.watch(runProvider);
+    return // ... UI using runState
   }
 }
 ```
@@ -571,12 +543,13 @@ final result = await supabase.rpc('get_user_buff', params: {
 
 ### Async Initialization
 ```dart
-@override
-void initState() {
-  super.initState();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    context.read<MyProvider>().initialize();
-  });
+// Use AsyncNotifier for async initialization
+class AppInitNotifier extends AsyncNotifier<AppInitState> {
+  @override
+  Future<AppInitState> build() async {
+    // ... async initialization logic
+    return const AppInitState.ready();
+  }
 }
 ```
 
@@ -586,7 +559,7 @@ void initState() {
 
 ### Do
 - Use `const` constructors for immutable widgets
-- Follow the existing Provider pattern for state
+- Follow the existing Riverpod 3.0 Notifier pattern for state
 - Use relative imports for internal files
 - Run `flutter analyze` before committing
 - Add `///` documentation for public APIs
@@ -598,7 +571,7 @@ void initState() {
 - Don't suppress lint rules without good reason
 - Don't put business logic in widgets - use services/providers
 - Don't hardcode colors - use `AppTheme` constants
-- Don't create new state management patterns - stick with Provider
+- Don't create new state management patterns - stick with Riverpod 3.0
 - Don't store derived/calculated data in database (calculate on-demand)
 - Don't create backend API endpoints - use RLS + Edge Functions
 
@@ -627,7 +600,9 @@ void main() {
 
 | Package | Purpose |
 |---------|---------|
-| `provider` | State management |
+| `flutter_riverpod` | State management (Riverpod 3.0) |
+| `hooks_riverpod` | Riverpod + Flutter Hooks integration |
+| `go_router` | Declarative routing |
 | `geolocator` | GPS location tracking |
 | `mapbox_maps_flutter` | Map rendering |
 | `h3_flutter` | Hexagonal grid system |
@@ -752,9 +727,9 @@ All game constants (50+) are server-configurable via the `app_config` table in S
 
 | File | Purpose |
 |------|---------|
-| `lib/models/app_config.dart` | Typed config model with nested classes (SeasonConfig, GpsConfig, ScoringConfig, HexConfig, TimingConfig, BuffConfig) |
-| `lib/services/remote_config_service.dart` | Singleton service with `config`, `configSnapshot`, `freezeForRun()` |
-| `lib/services/config_cache_service.dart` | Local JSON caching for offline fallback |
+| `lib/data/models/app_config.dart` | Typed config model with nested classes (SeasonConfig, GpsConfig, ScoringConfig, HexConfig, TimingConfig, BuffConfig) |
+| `lib/core/services/remote_config_service.dart` | Singleton service with `config`, `configSnapshot`, `freezeForRun()` |
+| `lib/core/services/config_cache_service.dart` | Local JSON caching for offline fallback |
 | `supabase/migrations/20260128_create_app_config.sql` | Database table with JSONB schema |
 
 ### Usage Pattern
@@ -865,21 +840,17 @@ The app uses a **Repository Pattern** where repositories serve as the single sou
 Providers delegate storage to repositories while maintaining their own UI-facing API:
 
 ```dart
-class LeaderboardProvider with ChangeNotifier {
-  final _repo = LeaderboardRepository();
-  
-  LeaderboardProvider() {
-    _repo.addListener(_onRepoChanged);
-  }
-  
-  void _onRepoChanged() => notifyListeners();
-  
+class LeaderboardNotifier extends Notifier<LeaderboardState> {
+  @override
+  LeaderboardState build() => const LeaderboardState();
+
   // Delegate to repository
-  List<LeaderboardEntry> get entries => _repo.entries;
-  
+  List<LeaderboardEntry> get entries => LeaderboardRepository().entries;
+
   Future<void> fetchLeaderboard() async {
-    final data = await _supabase.getLeaderboard();
-    _repo.loadEntries(data);  // Store in repository
+    final data = await SupabaseService().getLeaderboard();
+    LeaderboardRepository().loadEntries(data);  // Store in repository
+    state = state.copyWith(entries: entries);
   }
 }
 ```
@@ -961,7 +932,8 @@ HexRepository().applyLocalOverlay(localFlips);
 
 ### Database Version
 
-Current SQLite version: **v12**
+Current SQLite version: **v15**
 - v9: Added `sync_status`, `flip_points`, `run_date` to runs table
 - v10: Dropped legacy `sync_queue` table
 - v12: Added `hex_path`, `buff_multiplier` columns to runs table (for sync retry); added `run_checkpoint` table (crash recovery)
+- v15: Current schema version
