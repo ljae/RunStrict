@@ -1296,9 +1296,11 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
 
   Widget _buildToggleOption({
     required IconData icon,
+    String? label,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final color = isSelected ? _teamColor : Colors.white38;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1308,11 +1310,16 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
           color: isSelected ? _teamColor.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: isSelected ? _teamColor : Colors.white38,
-        ),
+        child: label != null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 14, color: color),
+                  const SizedBox(width: 4),
+                  Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+                ],
+              )
+            : Icon(icon, size: 16, color: color),
       ),
     );
   }
