@@ -229,11 +229,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           // Watch run state for reactivity, read notifier for computed getters
           ref.watch(runProvider);
           final run = ref.read(runProvider.notifier);
-          // Watch hex data for todayRoutes updates
-          final hexData = ref.watch(hexDataProvider);
-
-          // Combine today's completed routes with active run route
-          final completedRoutes = hexData.todayRoutes;
+          // Watch only todayRoutes (NOT full hexDataProvider — version bumps
+          // on every hex update and would cause excessive map rebuilds)
+          final completedRoutes = ref.watch(
+            hexDataProvider.select((state) => state.todayRoutes),
+          );
           final activeRoute = run.routePoints;
           final allRoutes = <List<LocationPoint>>[
             ...completedRoutes,
