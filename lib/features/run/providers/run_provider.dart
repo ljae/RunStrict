@@ -12,6 +12,7 @@ import '../../../core/services/storage_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/hex_service.dart';
 import '../../../core/services/app_lifecycle_manager.dart';
+import '../../../core/providers/user_repository_provider.dart';
 import '../services/voice_announcement_service.dart';
 import '../../../data/models/team.dart';
 import '../../../data/repositories/hex_repository.dart';
@@ -35,6 +36,8 @@ class RunState {
   final Duration duration;
   final bool isMetric;
   final int routeVersion;
+  final LatLng? liveLocation;
+  final double? liveHeading;
 
   const RunState({
     this.activeRun,
@@ -47,6 +50,8 @@ class RunState {
     this.duration = Duration.zero,
     this.isMetric = true,
     this.routeVersion = 0,
+    this.liveLocation,
+    this.liveHeading,
   });
 
   /// Returns true if run is active, starting, or stopping
@@ -64,6 +69,8 @@ class RunState {
     Duration? duration,
     bool? isMetric,
     int? routeVersion,
+    LatLng? Function()? liveLocation,
+    double? Function()? liveHeading,
   }) {
     return RunState(
       activeRun: activeRun != null ? activeRun() : this.activeRun,
@@ -76,6 +83,8 @@ class RunState {
       duration: duration ?? this.duration,
       isMetric: isMetric ?? this.isMetric,
       routeVersion: routeVersion ?? this.routeVersion,
+      liveLocation: liveLocation != null ? liveLocation() : this.liveLocation,
+      liveHeading: liveHeading != null ? liveHeading() : this.liveHeading,
     );
   }
 }
@@ -168,6 +177,8 @@ class RunNotifier extends Notifier<RunState> {
   double get distance => state.activeRun?.distanceKm ?? 0.0;
   List<LocationPoint> get routePoints => state.activeRun?.route ?? [];
   int get routeVersion => state.routeVersion;
+  LatLng? get liveLocation => state.liveLocation;
+  double? get liveHeading => state.liveHeading;
 
   int get buffMultiplier => ref.read(buffProvider).effectiveMultiplier;
 
@@ -310,10 +321,30 @@ class RunNotifier extends Notifier<RunState> {
         final hexId = HexService().getHexId(location, 9);
         ref.read(hexDataProvider.notifier).updateUserLocation(location, hexId);
 
-        state = state.copyWith(
-          activeRun: () => _runTracker.currentRun,
-          routeVersion: state.routeVersion + 1,
-        );
+        final currentRun = _runTracker.currentRun;
+        final newLength = currentRun?.route.length ?? 0;
+        final oldLength = state.activeRun?.route.length ?? 0;
+        // Extract GPS heading (sensor-fused by Geolocator)
+        // heading == -1 or 0 means unavailable on some platforms
+        final gpsHeading = (point.heading != null && point.heading! > 0)
+            ? point.heading
+            : null;
+        if (newLength > oldLength) {
+          // Route grew — trigger full redraw (route line + hexes)
+          state = state.copyWith(
+            activeRun: () => currentRun,
+            liveLocation: () => location,
+            liveHeading: () => gpsHeading,
+            routeVersion: state.routeVersion + 1,
+          );
+        } else {
+          // No new route point — update live location + heading only
+          state = state.copyWith(
+            activeRun: () => currentRun,
+            liveLocation: () => location,
+            liveHeading: () => gpsHeading,
+          );
+        }
       });
     } on LocationPermissionException {
       _stopTimer();
@@ -448,8 +479,9 @@ class RunNotifier extends Notifier<RunState> {
             await storageService.updateRunSyncStatus(completedRun.id, 'synced');
             await storageService.clearRunCheckpoint();
           }
+          await ref.read(hexDataProvider.notifier).loadTodayRoutes();
           ref.read(hexDataProvider.notifier).clearUserLocation();
-          state = state.copyWith(activeRun: () => null, routeVersion: 0);
+          state = state.copyWith(activeRun: () => null, liveLocation: () => null, routeVersion: 0);
           await AppLifecycleManager().onRunCompleted();
           return capturedHexIds;
         }
@@ -487,14 +519,28 @@ class RunNotifier extends Notifier<RunState> {
           ref.read(pointsProvider.notifier).onRunSynced(flipPoints);
         }
 
+        // Update ALL TIME aggregates from completed run (mirrors finalize_run server-side).
+        // Done regardless of sync success — the run happened locally.
+        final userRepoNotifier = ref.read(userRepositoryProvider.notifier);
+        userRepoNotifier.updateAfterRun(
+          distanceKm: completedRun.distanceKm,
+          durationSeconds: completedRun.durationSeconds,
+          cv: completedRun.cv,
+        );
+        await userRepoNotifier.saveToDisk();
+
         if (storageService is LocalStorage) {
           await storageService.clearRunCheckpoint();
         }
+
+        // Reload today's routes so the just-completed run persists on the map
+        await ref.read(hexDataProvider.notifier).loadTodayRoutes();
 
         ref.read(hexDataProvider.notifier).clearUserLocation();
 
         state = state.copyWith(
           activeRun: () => null,
+          liveLocation: () => null,
           routeVersion: 0,
         );
 
@@ -502,6 +548,9 @@ class RunNotifier extends Notifier<RunState> {
 
         return capturedHexIds;
       }
+
+      // Reload today's routes for runs with no result
+      await ref.read(hexDataProvider.notifier).loadTodayRoutes();
 
       ref.read(hexDataProvider.notifier).clearUserLocation();
 

@@ -24,7 +24,7 @@ class HexagonMap extends ConsumerStatefulWidget {
   final Color? teamColor;
   final Team? userTeam; // User's team for capturable hex detection
   final bool showUserLocation;
-  final List<LocationPoint>? route; // Route for tracking line
+  final List<List<LocationPoint>>? todayRoutes; // Today's route segments (completed + active)
 
   const HexagonMap({
     super.key,
@@ -35,7 +35,7 @@ class HexagonMap extends ConsumerStatefulWidget {
     this.teamColor,
     this.userTeam,
     this.showUserLocation = true,
-    this.route,
+    this.todayRoutes,
   });
 
   @override
@@ -278,8 +278,8 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
       _updateHexagons();
     }
 
-    // Draw initial route if available
-    if (widget.route != null && widget.route!.isNotEmpty) {
+    // Draw initial routes if available
+    if (widget.todayRoutes != null && widget.todayRoutes!.isNotEmpty) {
       await _drawRoute();
     }
   }
@@ -437,30 +437,52 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
     });
   }
 
-  /// Draw the tracking route line on the map
+  /// Total point count across all route segments (for change detection)
+  int get _totalRoutePoints {
+    if (widget.todayRoutes == null) return 0;
+    int total = 0;
+    for (final segment in widget.todayRoutes!) {
+      total += segment.length;
+    }
+    return total;
+  }
+
+  /// Draw all today's route segments on the map.
+  /// Last segment gets full opacity (active run), earlier ones are dimmed.
   Future<void> _drawRoute() async {
     if (_mapboxMap == null || _polylineManager == null) return;
-    if (widget.route == null || widget.route!.isEmpty) return;
+    if (widget.todayRoutes == null || widget.todayRoutes!.isEmpty) return;
 
     try {
-      // Clear existing route line
+      // Clear existing route lines
       await _polylineManager!.deleteAll();
 
-      final coordinates = widget.route!
-          .map((point) => Position(point.longitude, point.latitude))
-          .toList();
-
       final teamColor = widget.teamColor ?? AppTheme.electricBlue;
+      final segmentCount = widget.todayRoutes!.length;
 
-      final polylineOptions = PolylineAnnotationOptions(
-        geometry: LineString(coordinates: coordinates),
-        lineColor: teamColor.toARGB32(),
-        lineWidth: 5.0,
-        lineOpacity: 0.9,
-      );
+      for (int i = 0; i < segmentCount; i++) {
+        final segment = widget.todayRoutes![i];
+        if (segment.isEmpty) continue;
 
-      await _polylineManager!.create(polylineOptions);
-      _lastRouteLength = widget.route!.length;
+        final coordinates = segment
+            .map((point) => Position(point.longitude, point.latitude))
+            .toList();
+
+        // Last segment = active run (full opacity), earlier = completed (dimmed)
+        final isLastSegment = i == segmentCount - 1;
+        final opacity = isLastSegment ? 0.9 : 0.6;
+
+        final polylineOptions = PolylineAnnotationOptions(
+          geometry: LineString(coordinates: coordinates),
+          lineColor: teamColor.toARGB32(),
+          lineWidth: 5.0,
+          lineOpacity: opacity,
+        );
+
+        await _polylineManager!.create(polylineOptions);
+      }
+
+      _lastRouteLength = _totalRoutePoints;
     } catch (e) {
       debugPrint('Error drawing route: $e');
     }
@@ -941,16 +963,16 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
   void didUpdateWidget(HexagonMap oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Check if route changed and needs redrawing
-    if (widget.route != null && widget.route!.isNotEmpty) {
-      final routeLength = widget.route!.length;
-      if (routeLength != _lastRouteLength) {
+    // Check if routes changed and need redrawing
+    if (widget.todayRoutes != null && widget.todayRoutes!.isNotEmpty) {
+      final totalPoints = _totalRoutePoints;
+      if (totalPoints != _lastRouteLength) {
         _drawRoute();
       }
-    } else if (oldWidget.route != null &&
-        oldWidget.route!.isNotEmpty &&
-        (widget.route == null || widget.route!.isEmpty)) {
-      // Route was cleared - remove the line
+    } else if (oldWidget.todayRoutes != null &&
+        oldWidget.todayRoutes!.isNotEmpty &&
+        (widget.todayRoutes == null || widget.todayRoutes!.isEmpty)) {
+      // Routes were cleared - remove all lines
       _polylineManager?.deleteAll();
       _lastRouteLength = 0;
     }

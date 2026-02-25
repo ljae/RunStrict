@@ -400,8 +400,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     return 'SEASON RECORD';
   }
 
-  /// Season stats section - user's season record (matching ALL TIME design in history)
-  /// Uses SNAPSHOT data (leaderboard frozen at midnight), not live UserModel.
+  /// Season stats section - "SEASON RECORD until D-XX"
+  /// Shows cumulative stats through YESTERDAY (midnight GMT+2), not live.
+  /// Points = totalSeasonPoints - todayFlipPoints (subtracts today's contribution).
+  /// Rank derived from leaderboard entries (live users table).
   Widget _buildSeasonStatsSection(BuildContext context) {
     final currentUser = ref.watch(userRepositoryProvider);
 
@@ -409,17 +411,23 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
       return const SizedBox.shrink();
     }
 
-    // All values from leaderboard snapshot (Snapshot Domain — frozen at midnight)
+    // Season record shows data through yesterday (midnight GMT+2).
+    // get_leaderboard RPC already excludes today's points, so use the
+    // leaderboard entry for all stats (points, distance, pace, rank).
+    // If the user isn't in the leaderboard (no yesterday data), show zeros.
     final currentSeasonRunners =
         PrefetchService().getLeaderboardForScope(GeographicScope.all);
     final rank = _getCurrentUserRank(context, currentSeasonRunners);
-    final userId = currentUser.id;
-    final snapshotEntry = currentSeasonRunners
-        .cast<LeaderboardEntry?>()
-        .firstWhere((e) => e!.id == userId, orElse: () => null);
-    final snapshotPoints = snapshotEntry?.seasonPoints ?? 0;
-    final snapshotDistance = snapshotEntry?.totalDistanceKm ?? 0.0;
-    final snapshotPace = snapshotEntry?.avgPaceMinPerKm;
+    final userId = _getCurrentUserId(context);
+    final leaderboardEntry = userId != null
+        ? currentSeasonRunners
+            .where((e) => e.id == userId)
+            .firstOrNull
+        : null;
+
+    final seasonRecordPoints = leaderboardEntry?.seasonPoints ?? 0;
+    final liveDistance = leaderboardEntry?.totalDistanceKm ?? 0.0;
+    final livePace = leaderboardEntry?.avgPaceMinPerKm;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -458,7 +466,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '$snapshotPoints',
+                            '$seasonRecordPoints',
                             style: GoogleFonts.sora(
                               fontSize: 32,
                               fontWeight: FontWeight.w700,
@@ -495,11 +503,11 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _buildSeasonMiniStat(
-                          _formatCompact(snapshotDistance),
+                          _formatCompact(liveDistance),
                           'km',
                         ),
                         _buildSeasonMiniStat(
-                          _formatPace(snapshotPace),
+                          _formatPace(livePace),
                           '/km',
                         ),
                         _buildSeasonMiniStat(rank > 0 ? '#$rank' : '—', 'rank'),
@@ -554,9 +562,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
         child: Row(
           children: LeagueScope.values.map((scope) {
             final isSelected = _selectedScope == scope;
-            final label = scope == LeagueScope.myLeague
-                ? 'MY LEAGUE'
-                : 'GLOBAL TOP 100';
+            final icon = scope == LeagueScope.myLeague
+                ? Icons.people_rounded
+                : Icons.public_rounded;
             return Expanded(
               child: GestureDetector(
                 onTap: () {
@@ -574,16 +582,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                     borderRadius: BorderRadius.circular(18),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    label,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                      color: isSelected ? Colors.white : Colors.white38,
-                      letterSpacing: 0.5,
-                    ),
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: isSelected ? Colors.white : Colors.white38,
                   ),
                 ),
               ),
@@ -820,6 +822,24 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                     ),
                   ),
 
+                  // Province name (GLOBAL TOP 100 only)
+                  if (_selectedScope == LeagueScope.globalTop100 &&
+                      runner.provinceName != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        runner.provinceName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white30,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+
                   // Manifesto
                   if (runner.manifesto != null &&
                       runner.manifesto!.isNotEmpty) ...[
@@ -1012,6 +1032,23 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                             ),
                           ],
                         ),
+                        // Province name (GLOBAL TOP 100 only)
+                        if (_selectedScope == LeagueScope.globalTop100 &&
+                            runner.provinceName != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Text(
+                              runner.provinceName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white24,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
                         if (runner.manifesto != null &&
                             runner.manifesto!.isNotEmpty)
                           _ElectricManifesto(

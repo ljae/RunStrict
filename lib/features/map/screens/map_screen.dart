@@ -229,8 +229,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           // Watch run state for reactivity, read notifier for computed getters
           ref.watch(runProvider);
           final run = ref.read(runProvider.notifier);
-          // Get route from active run if in ZONE view
-          final route = _showUserLocation ? run.routePoints : null;
+          // Watch hex data for todayRoutes updates
+          final hexData = ref.watch(hexDataProvider);
+
+          // Combine today's completed routes with active run route
+          final completedRoutes = hexData.todayRoutes;
+          final activeRoute = run.routePoints;
+          final allRoutes = <List<LocationPoint>>[
+            ...completedRoutes,
+            if (activeRoute.isNotEmpty) activeRoute,
+          ];
 
           return Stack(
             children: [
@@ -240,7 +248,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   onMapCreated: _onMapCreated,
                   showUserLocation: _showUserLocation,
                   onStatsUpdated: _onStatsUpdated,
-                  route: route,
+                  todayRoutes: allRoutes.isNotEmpty ? allRoutes : null,
                 ),
               ),
 
@@ -338,13 +346,13 @@ class _HexMapCard extends ConsumerWidget {
   final Function(mapbox.MapboxMap) onMapCreated;
   final bool showUserLocation;
   final Function(HexAggregatedStats)? onStatsUpdated;
-  final List<LocationPoint>? route;
+  final List<List<LocationPoint>>? todayRoutes;
 
   const _HexMapCard({
     required this.onMapCreated,
     this.showUserLocation = true,
     this.onStatsUpdated,
-    this.route,
+    this.todayRoutes,
   });
 
   @override
@@ -361,7 +369,7 @@ class _HexMapCard extends ConsumerWidget {
       showUserLocation: showUserLocation,
       onMapCreated: onMapCreated,
       onScoresUpdated: onStatsUpdated,
-      route: route,
+      todayRoutes: todayRoutes,
     );
   }
 }
@@ -443,9 +451,9 @@ class _TeamStatsOverlay extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    ' hexes',
+                    ' ⬡',
                     style: GoogleFonts.sora(
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: FontWeight.w400,
                       color: Colors.white.withValues(alpha: 0.5),
                     ),
@@ -525,9 +533,9 @@ class _TeamStatsOverlay extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      ' unclaimed',
+                      ' ⬡',
                       style: GoogleFonts.sora(
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w400,
                         color: Colors.white.withValues(alpha: 0.3),
                       ),

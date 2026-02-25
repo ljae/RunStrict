@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import '../../../core/storage/local_storage.dart';
 import '../../../data/models/hex_model.dart';
+import '../../../data/models/location_point.dart';
 import '../../../data/models/team.dart';
 import '../../../data/repositories/hex_repository.dart';
 
@@ -11,22 +13,26 @@ class HexDataState {
   final LatLng? userLocation;
   final String? currentUserHexId;
   final int version; // bump to trigger rebuilds
+  final List<List<LocationPoint>> todayRoutes;
 
   const HexDataState({
     this.userLocation,
     this.currentUserHexId,
     this.version = 0,
+    this.todayRoutes = const [],
   });
 
   HexDataState copyWith({
     LatLng? Function()? userLocation,
     String? Function()? currentUserHexId,
     int? version,
+    List<List<LocationPoint>>? todayRoutes,
   }) {
     return HexDataState(
       userLocation: userLocation != null ? userLocation() : this.userLocation,
       currentUserHexId: currentUserHexId != null ? currentUserHexId() : this.currentUserHexId,
       version: version ?? this.version,
+      todayRoutes: todayRoutes ?? this.todayRoutes,
     );
   }
 }
@@ -41,6 +47,8 @@ class HexDataNotifier extends Notifier<HexDataState> {
   @override
   HexDataState build() {
     _hexRepository = HexRepository();
+    // Load today's routes on init (fire-and-forget, updates state when ready)
+    Future.microtask(() => loadTodayRoutes());
     return const HexDataState();
   }
 
@@ -135,6 +143,21 @@ class HexDataNotifier extends Notifier<HexDataState> {
       purpleCount: purpleCount,
       neutralCount: neutralCount,
     );
+  }
+
+  /// Load today's completed run routes from SQLite.
+  /// Called on init and after run completion.
+  Future<void> loadTodayRoutes() async {
+    try {
+      final routes = await LocalStorage().getTodayRoutes();
+      state = state.copyWith(
+        todayRoutes: routes,
+        version: state.version + 1,
+      );
+      debugPrint('HexDataNotifier: Loaded ${routes.length} today route segments');
+    } catch (e) {
+      debugPrint('HexDataNotifier: Failed to load today routes: $e');
+    }
   }
 
   /// Clear all hex data (for season reset / The Void)

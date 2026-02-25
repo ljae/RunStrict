@@ -1281,13 +1281,11 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
         children: [
           _buildToggleOption(
             icon: Icons.bar_chart_rounded,
-            label: 'Graph',
             isSelected: _viewMode == HistoryViewMode.list,
             onTap: () => setState(() => _viewMode = HistoryViewMode.list),
           ),
           _buildToggleOption(
             icon: Icons.calendar_month_rounded,
-            label: 'Calendar',
             isSelected: _viewMode == HistoryViewMode.calendar,
             onTap: () => setState(() => _viewMode = HistoryViewMode.calendar),
           ),
@@ -1298,7 +1296,6 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
 
   Widget _buildToggleOption({
     required IconData icon,
-    required String label,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -1311,24 +1308,10 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
           color: isSelected ? _teamColor.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isSelected ? _teamColor : Colors.white38,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? _teamColor : Colors.white38,
-              ),
-            ),
-          ],
+        child: Icon(
+          icon,
+          size: 16,
+          color: isSelected ? _teamColor : Colors.white38,
         ),
       ),
     );

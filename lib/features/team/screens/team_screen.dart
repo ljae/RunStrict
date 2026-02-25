@@ -37,7 +37,8 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final userId = user?.id;
     final userTeam = user?.team.name;
     // Server data always uses home hex (Snapshot Domain)
-    final cityHex = PrefetchService().homeHexCity;
+    final cityHex = PrefetchService().homeHexCity; // Res 6 for buff/rankings
+    final provinceHex = PrefetchService().homeHexAll; // Res 5 for hex dominance
     if (userId != null) {
       // Ensure pending runs are synced before reading server data.
       // This prevents yesterday's points from showing less than local SQLite.
@@ -54,6 +55,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
       await ref.read(teamStatsProvider.notifier).loadTeamData(
         userId,
         cityHex: cityHex,
+        provinceHex: provinceHex,
         userTeam: userTeam,
         userName: user?.name,
       );
@@ -382,9 +384,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     if (count >= 1000) {
       final thousands = count ~/ 1000;
       final remainder = count % 1000;
-      return '$thousands,${remainder.toString().padLeft(3, '0')} hexes';
+      return '$thousands,${remainder.toString().padLeft(3, '0')} ⬡';
     }
-    return '$count hexes';
+    return '$count ⬡';
   }
 
   /// Badge showing data is from yesterday's snapshot
@@ -787,14 +789,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     return _buildCard(
       child: Column(
         children: [
-          Text(
-            'YOUR BUFF',
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Colors.white30,
-              letterSpacing: 1.5,
-            ),
+          const Text(
+            '⚡',
+            style: TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 8),
           Row(
@@ -861,14 +858,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'BUFF COMPARISON',
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Colors.white30,
-            letterSpacing: 1.5,
-          ),
+        const Text(
+          '⚡ ⚔ ⚡',
+          style: TextStyle(fontSize: 14, color: Colors.white30),
         ),
         const SizedBox(height: 12),
         // Split screen: User's team on LEFT, opponent on RIGHT
@@ -1551,14 +1543,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
         ),
         const SizedBox(height: 20),
         // YOUR BUFF section
-        Text(
-          'YOUR BUFF',
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Colors.white30,
-            letterSpacing: 1.5,
-          ),
+        const Text(
+          '⚡',
+          style: TextStyle(fontSize: 14),
         ),
         const SizedBox(height: 12),
         _buildCard(

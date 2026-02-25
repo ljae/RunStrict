@@ -1223,6 +1223,37 @@ class LocalStorage implements StorageService {
         .toList();
   }
 
+  /// Get all route segments from today's completed runs (GMT+2).
+  ///
+  /// Returns a list of route segments (one per run), each segment being
+  /// a list of LocationPoint. Used to persist run routes on the map
+  /// until midnight GMT+2.
+  Future<List<List<LocationPoint>>> getTodayRoutes() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final today = Gmt2DateUtils.todayGmt2String;
+    final runs = await _database!.query(
+      _tableRuns,
+      columns: ['id'],
+      where: 'run_date = ?',
+      whereArgs: [today],
+      orderBy: 'startTime ASC',
+    );
+
+    final segments = <List<LocationPoint>>[];
+    for (final run in runs) {
+      final runId = run['id'] as String;
+      final route = await _getRouteForRun(runId);
+      if (route.isNotEmpty) {
+        segments.add(route);
+      }
+    }
+
+    return segments;
+  }
+
   /// Clear all guest data (runs, routes, laps, checkpoint, hex cache).
   /// Called at midnight to wipe one-day guest session data.
   Future<void> clearAllGuestData() async {
