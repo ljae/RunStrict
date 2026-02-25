@@ -109,10 +109,11 @@ class Run {
     }
   }
 
-  /// Mark run as complete and record end time
+  /// Mark run as complete and record end time.
+  /// Uses UTC to ensure server-side run_date computation is correct.
   void complete() {
     isActive = false;
-    endTime = DateTime.now();
+    endTime = DateTime.now().toUtc();
   }
 
   // SERIALIZATION

@@ -78,6 +78,7 @@ class GpsValidator {
   int _totalRejects = 0;
   int _totalPoints = 0;
   DateTime? _lastValidTimestamp;
+  DateTime? _resetTimestamp;
 
   // Moving average pace tracking
   final Queue<_PaceSample> _paceSamples = Queue<_PaceSample>();
@@ -103,12 +104,20 @@ class GpsValidator {
   bool get canCaptureAtCurrentPace =>
       _movingAvgPaceMinPerKm < maxCapturePaceMinPerKm;
 
+  /// Whether we're in the GPS warmup grace period (first 10 seconds after reset).
+  /// During warmup, trajectory speed threshold is doubled to tolerate GPS jitter.
+  bool get _isInWarmup {
+    if (_resetTimestamp == null) return false;
+    return DateTime.now().difference(_resetTimestamp!).inSeconds < 10;
+  }
+
   /// Reset validation state (call when starting new run)
   void reset() {
     _consecutiveRejects = 0;
     _totalRejects = 0;
     _totalPoints = 0;
     _lastValidTimestamp = null;
+    _resetTimestamp = DateTime.now();
     _paceSamples.clear();
     _movingAvgPaceMinPerKm = double.infinity;
   }
@@ -181,7 +190,9 @@ class GpsValidator {
     // Calculate actual speed from trajectory
     final calculatedSpeed = distance / timeDiff;
 
-    if (calculatedSpeed > maxSpeedMps) {
+    // During warmup (first 10s), use 2x threshold to tolerate GPS jitter
+    final effectiveMaxSpeed = _isInWarmup ? maxSpeedMps * 2 : maxSpeedMps;
+    if (calculatedSpeed > effectiveMaxSpeed) {
       return ValidationResult.invalid(
         'Calculated speed too high: ${(calculatedSpeed * 3.6).toStringAsFixed(1)} km/h',
       );

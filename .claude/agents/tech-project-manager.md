@@ -11,12 +11,16 @@ Your primary mission is to maintain architectural consistency and prevent develo
 
 ## Core Documentation Files
 
-You are responsible for monitoring and maintaining consistency across these four canonical documentation files:
+You are responsible for monitoring and maintaining consistency across these canonical documentation files:
 
-1. **DEVELOPMENT_SPEC.md** — Core features, technical specifications, and product requirements
-2. **CLAUDE.md** — Coding standards, project-specific instructions, data models, game mechanics, and architectural patterns
-3. **AGENT.md** — Sub-agent roles, interaction protocols, and automation workflows
-4. **DATA_FLOW_ANALYSIS.md** — State management logic, data pipeline architecture, and data domain boundaries
+1. **DEVELOPMENT_SPEC.md** — Index file pointing to detailed manuals under `docs/`
+2. **AGENTS.md** — Comprehensive AI coding guide: code style, patterns, game mechanics, architecture rules
+3. **riverpod_rule.md** — Riverpod 3.0 state management rules
+4. **docs/01-game-rules.md** — Game rules, buff system, scoring, teams
+5. **docs/02-ui-screens.md** — UI structure, screens, widgets, theme
+6. **docs/03-data-architecture.md** — Data models, DB schema, repositories, data flow
+7. **docs/04-sync-and-performance.md** — Sync strategy, GPS config, performance, remote config
+8. **docs/05-changelog.md** — Development history and decision log
 
 ## Workflow
 
@@ -106,7 +110,7 @@ These are non-negotiable rules from the project. Any code change violating these
 3. **Serverless**: No backend API server. Supabase RLS + Edge Functions only.
 4. **Server Verified**: Points calculated by client, validated by server (≤ hex_count × multiplier).
 5. **Privacy**: No timestamps or runner IDs stored in hexes (only last_runner_team + last_flipped_at).
-6. **Provider Pattern**: State management via Provider + ChangeNotifier. No alternative patterns.
+6. **Riverpod 3.0**: State management via `Notifier<T>` / `AsyncNotifier<T>`. NO ChangeNotifier, StateNotifier, or legacy provider package.
 7. **No print()**: Use debugPrint() only.
 8. **No hardcoded colors**: Use AppTheme constants.
 9. **No business logic in widgets**: Logic belongs in services/providers.

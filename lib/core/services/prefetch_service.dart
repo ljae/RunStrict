@@ -89,6 +89,7 @@ class PrefetchService {
   String? get homeHex => _homeHex;
   String? get gpsHex => _gpsBaseHex;
   String? get homeHexCity => _homeHexCity;
+  String? get homeHexAll => _homeHexAll;
   String? get errorMessage => _errorMessage;
   DateTime? get lastPrefetchTime => _lastPrefetchTime;
   bool get isInitialized => _status == PrefetchStatus.completed;
@@ -430,7 +431,7 @@ class PrefetchService {
       // Use get_leaderboard RPC (works with remote schema)
       final result = await _supabase.client.rpc(
         'get_leaderboard',
-        params: {'p_limit': 100},
+        params: {'p_limit': 200},
       );
 
       final entries = result as List<dynamic>? ?? [];
@@ -476,6 +477,10 @@ class PrefetchService {
   ///
   /// Filters cached leaderboard to only include users whose home hex
   /// is in the same scope as the current user's home hex.
+  ///
+  /// For province (ALL) scope, uses [districtHex] from the RPC response
+  /// rather than computing cellToParent from home_hex, because seed
+  /// home_hex values may not be valid H3 cells.
   List<LeaderboardEntry> getLeaderboardForScope(GeographicScope scope) {
     if (_homeHex == null) return _leaderboardCache;
 
@@ -483,9 +488,12 @@ class PrefetchService {
     if (homeParent == null) return _leaderboardCache;
 
     return _leaderboardCache.where((entry) {
-      if (entry.homeHex == null) return false;
-      final entryParent = _hexService.getScopeHexId(entry.homeHex!, scope);
-      return entryParent == homeParent;
+      if (entry.homeHex == null && entry.districtHex == null) return false;
+      return entry.isInScope(
+        _homeHex,
+        scope,
+        referenceDistrictHex: _homeHexCity,
+      );
     }).toList();
   }
 

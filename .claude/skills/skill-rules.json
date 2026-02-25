@@ -1,0 +1,45 @@
+{
+  "flutter-dev-guidelines": {
+    "description": "Flutter/Dart coding standards, Riverpod 3.0 patterns, and project conventions",
+    "fileTriggers": {
+      "pathPatterns": [
+        "lib/**/*.dart"
+      ]
+    },
+    "keywordTriggers": [
+      "widget", "provider", "notifier", "riverpod", "state management",
+      "code style", "naming convention", "import order", "dart format",
+      "flutter analyze", "const constructor", "ConsumerWidget"
+    ]
+  },
+  "supabase-patterns": {
+    "description": "Supabase RPC calls, RLS policies, migrations, and serverless patterns",
+    "fileTriggers": {
+      "pathPatterns": [
+        "supabase/**/*.sql",
+        "supabase/functions/**/*",
+        "lib/core/services/supabase_service.dart",
+        "lib/core/config/supabase_config.dart"
+      ]
+    },
+    "keywordTriggers": [
+      "supabase", "rpc", "migration", "rls", "database", "postgresql",
+      "finalize_run", "edge function", "schema", "sql", "table"
+    ]
+  },
+  "mapbox-hex-patterns": {
+    "description": "Mapbox hex rendering, scope boundaries, navigation camera, and H3 patterns",
+    "fileTriggers": {
+      "pathPatterns": [
+        "lib/features/map/**/*.dart",
+        "lib/core/config/h3_config.dart",
+        "lib/core/config/mapbox_config.dart"
+      ]
+    },
+    "keywordTriggers": [
+      "mapbox", "hex", "hexagon", "geojson", "fill layer", "map",
+      "h3", "scope boundary", "navigation camera", "route map",
+      "territory", "hex grid"
+    ]
+  }
+}

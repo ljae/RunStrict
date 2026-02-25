@@ -16,7 +16,16 @@ class LeaderboardEntry {
   final UserModel user;
   final int rank;
 
-  const LeaderboardEntry({required this.user, required this.rank});
+  /// Res 6 district hex from the server — used for province scope filtering.
+  /// More reliable than computing cellToParent(home_hex) because seed home_hex
+  /// values may not be valid H3 cells.
+  final String? districtHex;
+
+  const LeaderboardEntry({
+    required this.user,
+    required this.rank,
+    this.districtHex,
+  });
 
   /// Convenience constructor for creating entries directly (tests, fallbacks).
   factory LeaderboardEntry.create({
@@ -64,6 +73,15 @@ class LeaderboardEntry {
   int? get stabilityScore => user.stabilityScore;
   String? get manifesto => user.manifesto;
   String? get nationality => user.nationality;
+  String? get homeHexEnd => user.homeHexEnd;
+
+  /// Get the province/territory name from homeHexEnd (visible to others).
+  /// Returns null if no home hex end is set.
+  String? get provinceName {
+    final hex = homeHexEnd ?? homeHex;
+    if (hex == null) return null;
+    return HexService().getTerritoryName(hex);
+  }
 
   /// Country code to flag emoji (e.g., 'KR' → '🇰🇷')
   String? get nationalityFlag {
@@ -90,7 +108,11 @@ class LeaderboardEntry {
   }
 
   factory LeaderboardEntry.fromJson(Map<String, dynamic> json, int rank) {
-    return LeaderboardEntry(user: UserModel.fromRow(json), rank: rank);
+    return LeaderboardEntry(
+      user: UserModel.fromRow(json),
+      rank: rank,
+      districtHex: json['district_hex'] as String?,
+    );
   }
 
   /// Serialize to cache map format (for SQLite leaderboard_cache table)
@@ -106,6 +128,7 @@ class LeaderboardEntry {
     'home_hex': homeHex,
     'manifesto': manifesto,
     'nationality': nationality,
+    'district_hex': districtHex,
   };
 
   /// Deserialize from cache map format (SQLite leaderboard_cache table)
@@ -130,13 +153,31 @@ class LeaderboardEntry {
         nationality: map['nationality'] as String?,
       ),
       rank: 0,
+      districtHex: map['district_hex'] as String?,
     );
   }
 
-  /// Check if this entry is in the same scope as a reference home hex
-  bool isInScope(String? referenceHomeHex, GeographicScope scope) {
-    if (homeHex == null || referenceHomeHex == null) return false;
+  /// Check if this entry is in the same scope as a reference home hex.
+  ///
+  /// For province (ALL) scope, uses [districtHex] when available because
+  /// it's a reliable Res 6 H3 cell. Computing cellToParent from [homeHex]
+  /// can fail when home_hex was string-generated rather than H3-derived.
+  bool isInScope(String? referenceHomeHex, GeographicScope scope, {
+    String? referenceDistrictHex,
+  }) {
     final hexService = HexService();
+
+    // For ALL (province) scope, prefer district_hex → Res 5 parent
+    if (scope == GeographicScope.all &&
+        districtHex != null &&
+        referenceDistrictHex != null) {
+      final myParent = hexService.getParentHexId(districtHex!, H3Config.allResolution);
+      final refParent = hexService.getParentHexId(referenceDistrictHex, H3Config.allResolution);
+      return myParent == refParent;
+    }
+
+    // Fallback: use home_hex
+    if (homeHex == null || referenceHomeHex == null) return false;
     final myParent = hexService.getScopeHexId(homeHex!, scope);
     final refParent = hexService.getScopeHexId(referenceHomeHex, scope);
     return myParent == refParent;
@@ -189,7 +230,7 @@ class LeaderboardNotifier extends Notifier<LeaderboardState> {
   }
 
   Future<void> fetchLeaderboard({
-    int limit = 50,
+    int limit = 200,
     bool forceRefresh = false,
   }) async {
     if (state.isLoading) return;
@@ -226,15 +267,20 @@ class LeaderboardNotifier extends Notifier<LeaderboardState> {
   }
 
   List<LeaderboardEntry> filterByScope(GeographicScope scope) {
-    if (scope == GeographicScope.all) return state.entries;
-
     final referenceHex = _prefetchService.homeHex;
     if (referenceHex == null) {
       debugPrint('LeaderboardNotifier: No active hex set, returning all entries');
       return state.entries;
     }
 
-    return state.entries.where((e) => e.isInScope(referenceHex, scope)).toList();
+    final referenceDistrict = _prefetchService.homeHexCity;
+    return state.entries
+        .where((e) => e.isInScope(
+              referenceHex,
+              scope,
+              referenceDistrictHex: referenceDistrict,
+            ))
+        .toList();
   }
 
   List<LeaderboardEntry> filterByTeamAndScope(

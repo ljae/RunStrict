@@ -54,6 +54,40 @@ class UserRepository {
     _currentUser = _currentUser!.copyWith(seasonPoints: points);
   }
 
+  /// Update user aggregates after a completed run.
+  ///
+  /// Mirrors the incremental update that `finalize_run` does server-side.
+  void updateAfterRun({
+    required double distanceKm,
+    required int durationSeconds,
+    required double? cv,
+  }) {
+    if (_currentUser == null) return;
+    final u = _currentUser!;
+    final newTotalRuns = u.totalRuns + 1;
+    final newTotalDistance = u.totalDistanceKm + distanceKm;
+
+    double? newAvgPace = u.avgPaceMinPerKm;
+    if (distanceKm > 0) {
+      final runPace = (durationSeconds / 60.0) / distanceKm;
+      newAvgPace = ((u.avgPaceMinPerKm ?? 0) * u.totalRuns + runPace) /
+          newTotalRuns;
+    }
+
+    double? newAvgCv = u.avgCv;
+    if (cv != null) {
+      final cvCount = u.totalRuns; // cv_run_count mirrors total_runs server-side
+      newAvgCv = ((u.avgCv ?? 0) * cvCount + cv) / (cvCount + 1);
+    }
+
+    _currentUser = u.copyWith(
+      totalRuns: newTotalRuns,
+      totalDistanceKm: newTotalDistance,
+      avgPaceMinPerKm: newAvgPace,
+      avgCv: newAvgCv,
+    );
+  }
+
   /// Defect to Purple team (Protocol of Chaos)
   /// Points are PRESERVED on defection
   void defectToPurple() {

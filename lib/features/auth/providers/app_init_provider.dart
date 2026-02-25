@@ -69,8 +69,13 @@ class AppInitNotifier extends Notifier<AppInitState> {
     await ref.read(runProvider.notifier).doInitialize();
 
     if (appState.hasUser) {
+      // Prefetch MUST complete first: it sets home_hex on server (for first-
+      // time / wiped users) and locally.  _loadTodayFlipPoints calls
+      // appLaunchSync which reads home_hex from the server and merges it into
+      // the UserModel — running them in parallel causes a race where
+      // appLaunchSync reads NULL before _syncHomeToServer writes it.
+      await _initializePrefetch();
       await Future.wait([
-        _initializePrefetch(),
         _loadTodayFlipPoints(),
         _retryFailedSyncs(),
         _syncPurpleDefectionIfNeeded(),

@@ -34,6 +34,8 @@ import '../../../core/utils/route_optimizer.dart';
 class RouteMap extends ConsumerStatefulWidget {
   final List<LocationPoint> route;
   final int routeVersion;
+  final latlong.LatLng? liveLocation;
+  final double? liveHeading;
   final bool showLiveLocation;
   final double aspectRatio;
   final bool interactive;
@@ -48,6 +50,8 @@ class RouteMap extends ConsumerStatefulWidget {
     super.key,
     required this.route,
     this.routeVersion = 0,
+    this.liveLocation,
+    this.liveHeading,
     this.showLiveLocation = false,
     this.aspectRatio = 16 / 9,
     this.interactive = true,
@@ -89,6 +93,7 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
   double _currentBearing = 0.0; // Current map rotation (degrees, 0 = North)
   Size? _mapWidgetSize; // Actual size of the map widget (from LayoutBuilder)
   bool _pendingHexRedraw = false; // Flag to redraw hexes after current draw completes
+  bool _pendingRouteUpdate = false; // Flag: route update queued while processing
 
   // Navigation mode camera settings
   // These values create the "car navigation" chase camera effect:
@@ -190,18 +195,19 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
             // Show marker immediately using _currentUserLocation if route is empty
             if (_isMapReady &&
                 widget.showLiveLocation &&
-                (widget.route.isNotEmpty || _currentUserLocation != null))
+                (widget.liveLocation != null || widget.route.isNotEmpty || _currentUserLocation != null))
               _NavigationMarkerOverlay(
                 key: ValueKey(
-                  'nav_marker_${widget.routeVersion}_$_cameraChangeCounter',
+                  'nav_marker_${widget.routeVersion}_${widget.liveLocation.hashCode}_$_cameraChangeCounter',
                 ),
                 mapboxMap: _mapboxMap!,
-                userLocation: widget.route.isNotEmpty
-                    ? latlong.LatLng(
-                        widget.route.last.latitude,
-                        widget.route.last.longitude,
-                      )
-                    : _currentUserLocation!,
+                userLocation: widget.liveLocation ??
+                    (widget.route.isNotEmpty
+                        ? latlong.LatLng(
+                            widget.route.last.latitude,
+                            widget.route.last.longitude,
+                          )
+                        : _currentUserLocation!),
                 teamColor: widget.teamColor ?? NeonTheme.neonCyan,
                 navigationMode: widget.navigationMode,
                 mapSize: mapSize, // Use actual map widget size
@@ -266,27 +272,35 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
   /// Navigation mode: centers on last point with pitch, bearing, and padding
   /// Overview mode: fits all route points in view
   CameraOptions _getInitialCameraOptions() {
-    if (widget.route.isEmpty) {
-      return CameraOptions(
-        center: Point(coordinates: Position(127.0, 37.5)),
-        zoom: 15.0,
-      );
-    }
-
-    // Navigation mode: chase camera behind runner
+    // Navigation mode: ALWAYS use chase camera params (pitch/zoom/padding),
+    // even when route is empty. This prevents the flat/north-up camera that
+    // occurs when MapWidget applies these options before GPS data arrives.
     if (widget.navigationMode) {
-      final last = widget.route.last;
-      // Use stored map widget size if available, otherwise estimate from MediaQuery
+      final lat = widget.liveLocation?.latitude ??
+          (widget.route.isNotEmpty ? widget.route.last.latitude : null) ??
+          _currentUserLocation?.latitude ??
+          37.5;
+      final lng = widget.liveLocation?.longitude ??
+          (widget.route.isNotEmpty ? widget.route.last.longitude : null) ??
+          _currentUserLocation?.longitude ??
+          127.0;
       final mapHeight =
           _mapWidgetSize?.height ?? MediaQuery.of(context).size.height;
       final paddingTop = mapHeight * _navPaddingRatio;
 
       return CameraOptions(
-        center: Point(coordinates: Position(last.longitude, last.latitude)),
+        center: Point(coordinates: Position(lng, lat)),
         zoom: _navZoom,
         pitch: _navPitch,
         bearing: _currentBearing,
         padding: MbxEdgeInsets(top: paddingTop, left: 0, bottom: 0, right: 0),
+      );
+    }
+
+    if (widget.route.isEmpty) {
+      return CameraOptions(
+        center: Point(coordinates: Position(127.0, 37.5)),
+        zoom: 15.0,
       );
     }
 
@@ -393,7 +407,7 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
               (_mapWidgetSize?.height ?? MediaQuery.of(context).size.height) *
               _navPaddingRatio,
         ),
-        animationDuration: const Duration(milliseconds: 1000),
+        animationDuration: const Duration(milliseconds: 1800),
       );
     }
 
@@ -430,14 +444,27 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
         );
       });
       if (!mounted || _mapboxMap == null) return;
-      await _mapboxMap!.setCamera(
-        CameraOptions(
-          center: Point(
-            coordinates: Position(position.longitude, position.latitude),
+
+      // In navigation mode, use SmoothCamera to snap (preserves pitch/zoom/bearing).
+      // This prevents the flat/north-up camera that occurs when setCamera is called
+      // without navigation parameters.
+      if (widget.navigationMode && _smoothCamera != null) {
+        _smoothCamera!.snapTo(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          bearing: _currentBearing,
+        );
+      } else {
+        await _mapboxMap!.setCamera(
+          CameraOptions(
+            center: Point(
+              coordinates: Position(position.longitude, position.latitude),
+            ),
+            zoom: 16.0,
           ),
-          zoom: 16.0,
-        ),
-      );
+        );
+      }
+
       if (mounted && widget.showHexGrid) {
         await _drawHexagonsAround(
           latlong.LatLng(position.latitude, position.longitude),
@@ -502,7 +529,7 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
                 (_mapWidgetSize?.height ?? MediaQuery.of(context).size.height) *
                 _navPaddingRatio,
           ),
-          animationDuration: const Duration(milliseconds: 1000),
+          animationDuration: const Duration(milliseconds: 1800),
         );
       }
     }
@@ -516,6 +543,25 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
     // CRITICAL: Process ANY routeVersion change - this is how GPS updates flow through
     if (widget.routeVersion != oldWidget.routeVersion) {
       _processRouteUpdate();
+    }
+
+    // Handle live location changes (marker + hex highlight follow raw GPS)
+    if (widget.liveLocation != oldWidget.liveLocation &&
+        widget.routeVersion == oldWidget.routeVersion) {
+      // In navigation mode, update camera to follow live location
+      if (widget.navigationMode) {
+        _updateCameraForLiveLocation();
+      }
+      // In non-navigation mode, update marker position via pixelForCoordinate
+      if (!widget.navigationMode && mounted) {
+        setState(() {
+          _cameraChangeCounter++;
+        });
+      }
+      // Redraw hexes using latest GPS position so current hex highlight stays accurate
+      if (mounted && widget.showHexGrid) {
+        _scheduleHexRedraw();
+      }
     }
 
     // Handle hex flash changes
@@ -543,20 +589,19 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
     }
 
     // Guard only the fast path (camera + route line).
-    // If a previous fast-path update is still running, skip this one.
-    if (_isProcessingRouteUpdate) return;
+    // If a previous fast-path update is still running, queue one more.
+    if (_isProcessingRouteUpdate) {
+      _pendingRouteUpdate = true;
+      return;
+    }
     _isProcessingRouteUpdate = true;
-
     try {
       // 1. Update camera (navigation mode only) — synchronous, non-blocking
-      if (widget.navigationMode && widget.route.length >= 2) {
+      if (widget.navigationMode && widget.route.isNotEmpty) {
         _updateNavigationCamera();
       }
-
       // 2. Update route line (the tracing path) — fast polyline update
       if (mounted) await _drawRoute();
-
-      // 3. Force widget rebuild for marker position update
       if (mounted) {
         setState(() {
           _cameraChangeCounter++;
@@ -566,6 +611,12 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
       _isProcessingRouteUpdate = false;
     }
 
+    // Process pending update if one was queued while we were busy
+    if (_pendingRouteUpdate && mounted) {
+      _pendingRouteUpdate = false;
+      _processRouteUpdate();
+      return; // hex redraw will be handled by the recursive call
+    }
     // 4. Hex drawing — fire-and-forget, never blocks the next GPS update
     if (mounted && widget.showHexGrid) {
       _scheduleHexRedraw();
@@ -574,14 +625,23 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
 
   /// Schedules a hex redraw without blocking the route update pipeline.
   /// If a hex draw is already in progress, queues one redraw for when it finishes.
+  /// After hex drawing, redraws the route line on top to prevent z-order issues
+  /// where recreated hex fill annotations cover the older route polyline.
   void _scheduleHexRedraw() {
     if (_isDrawingHexagonsAsync) {
       _pendingHexRedraw = true;
       return;
     }
     _isDrawingHexagonsAsync = true;
-    _drawHexagons().whenComplete(() {
+    _drawHexagons().whenComplete(() async {
       _isDrawingHexagonsAsync = false;
+      // Redraw route line AFTER hexes to ensure it renders on top.
+      // Hex deleteAll()+createMulti() makes hex annotations "fresher" than
+      // the route polyline, causing Mapbox to render hexes above the route.
+      // Forcing a route redraw restores correct z-order.
+      if (mounted && widget.route.length >= 2) {
+        await _drawRoute(forceRedraw: true);
+      }
       if (_pendingHexRedraw && mounted) {
         _pendingHexRedraw = false;
         _scheduleHexRedraw();
@@ -596,18 +656,36 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
   /// The SmoothCameraController handles 60fps interpolation between GPS updates,
   /// creating buttery-smooth movement instead of jumping between positions.
   void _updateNavigationCamera() {
-    if (_mapboxMap == null || widget.route.length < 2) return;
-
+    if (_mapboxMap == null || widget.route.isEmpty) return;
     final last = widget.route.last;
-    final newBearing = _calculateBearingFromRoute();
 
-    // Calculate target bearing (use current if no new bearing available)
-    double targetBearing = _currentBearing;
-    if (newBearing != null) {
-      targetBearing = newBearing;
-      _currentBearing = newBearing;
+    // For the first point (length == 1), snap to position.
+    // Use GPS heading if available, otherwise keep current bearing.
+    if (widget.route.length == 1) {
+      final initialBearing = widget.liveHeading ?? _currentBearing;
+      if (_smoothCamera != null) {
+        _smoothCamera!.snapTo(
+          latitude: last.latitude,
+          longitude: last.longitude,
+          bearing: initialBearing,
+        );
+      }
+      _currentBearing = initialBearing;
+      return;
     }
 
+    // Primary: use GPS heading from device sensor
+    // Fallback: calculate bearing from recent route points
+    double targetBearing = _currentBearing;
+    if (widget.liveHeading != null) {
+      targetBearing = widget.liveHeading!;
+    } else {
+      final newBearing = _calculateBearingFromRoute();
+      if (newBearing != null) {
+        targetBearing = newBearing;
+      }
+    }
+    _currentBearing = targetBearing;
     // Use SmoothCameraController for 60fps interpolated movement
     if (_smoothCamera != null) {
       _smoothCamera!.updateTarget(
@@ -620,7 +698,6 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
       final mapHeight =
           _mapWidgetSize?.height ?? MediaQuery.of(context).size.height;
       final paddingTop = mapHeight * _navPaddingRatio;
-
       try {
         _mapboxMap!.setCamera(
           CameraOptions(
@@ -637,6 +714,23 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
           ),
         );
       } catch (_) {}
+    }
+  }
+
+  /// Updates camera when liveLocation changes but route doesn't grow.
+  /// This handles GPS points that were rejected by RunTracker (invalid pace/accuracy)
+  /// but should still move the camera to the user's real position.
+  void _updateCameraForLiveLocation() {
+    if (_smoothCamera == null || widget.liveLocation == null) return;
+    final bearing = widget.liveHeading ?? _currentBearing;
+    _currentBearing = bearing;
+    _smoothCamera!.updateTarget(
+      latitude: widget.liveLocation!.latitude,
+      longitude: widget.liveLocation!.longitude,
+      bearing: bearing,
+    );
+    if (mounted) {
+      setState(() => _cameraChangeCounter++);
     }
   }
 
@@ -808,7 +902,14 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
   }
 
   Future<void> _drawHexagons() async {
-    if (widget.route.isNotEmpty) {
+    // Prefer liveLocation for hex center — it's the most recent GPS position
+    // and ensures the "current hex" highlight matches where the user actually is,
+    // even when the GPS validator hasn't accepted the point into the route yet.
+    if (widget.liveLocation != null) {
+      await _drawHexagonsAround(
+        latlong.LatLng(widget.liveLocation!.latitude, widget.liveLocation!.longitude),
+      );
+    } else if (widget.route.isNotEmpty) {
       final last = widget.route.last;
       await _drawHexagonsAround(latlong.LatLng(last.latitude, last.longitude));
     } else if (widget.showLiveLocation) {

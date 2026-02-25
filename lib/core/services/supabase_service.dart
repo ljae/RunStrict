@@ -157,10 +157,10 @@ class SupabaseService {
     return result as Map<String, dynamic>? ?? {};
   }
 
-  Future<Map<String, dynamic>> getHexDominance({String? cityHex}) async {
+  Future<Map<String, dynamic>> getHexDominance({String? parentHex}) async {
     final result = await client.rpc(
       'get_hex_dominance',
-      params: {'p_city_hex': cityHex},
+      params: {'p_parent_hex': parentHex},
     );
     return result as Map<String, dynamic>? ?? {};
   }

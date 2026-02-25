@@ -58,6 +58,7 @@ class TeamStatsNotifier extends Notifier<TeamStatsState> {
   Future<void> loadTeamData(
     String userId, {
     String? cityHex,
+    String? provinceHex,
     String? userTeam,
     String? userName,
   }) async {
@@ -74,7 +75,7 @@ class TeamStatsNotifier extends Notifier<TeamStatsState> {
       final results = await Future.wait([
         supabase.getUserYesterdayStats(userId, date: yesterdayStr),
         supabase.getTeamRankings(userId, cityHex: cityHex),
-        supabase.getHexDominance(cityHex: cityHex),
+        supabase.getHexDominance(parentHex: provinceHex),
       ]);
 
       final yesterdayData = results[0];
@@ -175,12 +176,14 @@ class TeamStatsNotifier extends Notifier<TeamStatsState> {
   Future<void> refresh(
     String userId, {
     String? cityHex,
+    String? provinceHex,
     String? userTeam,
     String? userName,
   }) async {
     await loadTeamData(
       userId,
       cityHex: cityHex,
+      provinceHex: provinceHex,
       userTeam: userTeam,
       userName: userName,
     );

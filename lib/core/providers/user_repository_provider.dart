@@ -28,6 +28,19 @@ class UserRepositoryNotifier extends Notifier<UserModel?> {
     state = _repo.currentUser;
   }
 
+  void updateAfterRun({
+    required double distanceKm,
+    required int durationSeconds,
+    required double? cv,
+  }) {
+    _repo.updateAfterRun(
+      distanceKm: distanceKm,
+      durationSeconds: durationSeconds,
+      cv: cv,
+    );
+    state = _repo.currentUser;
+  }
+
   void defectToPurple() {
     _repo.defectToPurple();
     state = _repo.currentUser;

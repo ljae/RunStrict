@@ -162,7 +162,7 @@ class RunTracker {
 
     _currentRun = Run(
       id: runId,
-      startTime: DateTime.now(),
+      startTime: DateTime.now().toUtc(),
       distanceMeters: 0,
       isActive: true,
       teamAtRun: team ?? Team.blue,

@@ -1,15 +1,16 @@
 import 'package:flutter/foundation.dart';
+import '../../data/models/app_config.dart';
 import 'remote_config_service.dart';
 
-/// Service to manage the 40-day season cycle.
+/// Service to manage the recurring season cycle.
 ///
-/// The season runs for exactly 40 days (configurable via RemoteConfig).
-/// On D-Day (day 0), all territories and scores are reset (The Void).
+/// Seasons run for [seasonDurationDays] (configurable via RemoteConfig).
+/// When a season's D-Day passes, the next season starts automatically.
 /// Server timezone: GMT+2 (Israel Standard Time).
 ///
-/// Season start date and number are read from [RemoteConfigService]
-/// (app_config table in Supabase). Falls back to hardcoded defaults
-/// when server config is unavailable.
+/// The config's `startDate` and `seasonNumber` define the first season.
+/// Subsequent seasons are computed by advancing the start date by
+/// [seasonDurationDays] for each completed season.
 class SeasonService {
   /// Total duration of a season in days (read from RemoteConfigService)
   static int get seasonDurationDays =>
@@ -19,7 +20,7 @@ class SeasonService {
   static int get serverTimezoneOffsetHours =>
       RemoteConfigService().config.seasonConfig.serverTimezoneOffsetHours;
 
-  /// Current season number (from RemoteConfig or constructor override)
+  /// Current season number (auto-advances after each D-Day).
   final int seasonNumber;
 
   /// The start date of the current season.
@@ -27,22 +28,58 @@ class SeasonService {
 
   /// Creates a SeasonService.
   ///
-  /// If no [startDate] or [seasonNumber] is provided, reads from
-  /// [RemoteConfigService]. Falls back to hardcoded Season 1 defaults.
-  SeasonService({DateTime? startDate, int? seasonNumber})
-    : seasonStartDate = startDate ?? _resolveStartDate(),
-      seasonNumber = seasonNumber ?? _resolveSeasonNumber();
+  /// If no [startDate] or [seasonNumber] is provided, computes the
+  /// current season from [RemoteConfigService] config by rolling forward
+  /// from the configured first season start date.
+  factory SeasonService({DateTime? startDate, int? seasonNumber}) {
+    if (startDate != null && seasonNumber != null) {
+      return SeasonService._(
+        seasonStartDate: startDate,
+        seasonNumber: seasonNumber,
+      );
+    }
+    final resolved = _resolveCurrentSeason();
+    return SeasonService._(
+      seasonStartDate: startDate ?? resolved.startDate,
+      seasonNumber: seasonNumber ?? resolved.seasonNumber,
+    );
+  }
 
-  /// Resolves start date from RemoteConfig, falling back to default.
-  static DateTime _resolveStartDate() {
+  SeasonService._({required this.seasonStartDate, required this.seasonNumber});
+
+  /// Computes the current season by rolling forward from the config's
+  /// initial start date. Each season lasts [seasonDurationDays].
+  static ({DateTime startDate, int seasonNumber}) _resolveCurrentSeason() {
     final config = RemoteConfigService().config.seasonConfig;
+    final duration = config.durationDays;
+    final baseSeasonNumber = config.seasonNumber;
+
+    final firstSeasonStart = _parseStartDate(config);
+
+    final now = DateTime.now().toUtc();
+    final elapsed = now.difference(firstSeasonStart).inDays;
+
+    if (elapsed < 0) {
+      // Before the first season starts
+      return (startDate: firstSeasonStart, seasonNumber: baseSeasonNumber);
+    }
+
+    final completedSeasons = elapsed ~/ duration;
+    final currentStart = firstSeasonStart.add(
+      Duration(days: completedSeasons * duration),
+    );
+    final currentSeasonNumber = baseSeasonNumber + completedSeasons;
+
+    return (startDate: currentStart, seasonNumber: currentSeasonNumber);
+  }
+
+  /// Parses the start date from config, falling back to default.
+  static DateTime _parseStartDate(SeasonConfig config) {
     final startDateStr = config.startDate;
 
     if (startDateStr != null && startDateStr.isNotEmpty) {
       try {
-        // Parse ISO 8601 date string (e.g., "2026-02-11")
         final parsed = DateTime.parse(startDateStr);
-        // Convert to UTC adjusted for server timezone
         return DateTime.utc(
           parsed.year,
           parsed.month,
@@ -56,16 +93,9 @@ class SeasonService {
     return _defaultSeasonStart();
   }
 
-  /// Resolves season number from RemoteConfig.
-  static int _resolveSeasonNumber() {
-    return RemoteConfigService().config.seasonConfig.seasonNumber;
-  }
-
   /// Default season start for development/testing.
   /// Season 1 starts January 1, 2026 (GMT+2).
   static DateTime _defaultSeasonStart() {
-    // Season 1: January 1, 2026 00:00:00 GMT+2
-    // D-40 is the first day, D-Day (season end) is February 10, 2026
     return DateTime.utc(
       2026,
       1,
