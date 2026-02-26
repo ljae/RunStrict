@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../data/models/location_point.dart';
@@ -37,9 +38,14 @@ class LocationService {
   Timer? _pollingTimer;
   final StreamController<LocationPoint> _locationController =
       StreamController<LocationPoint>.broadcast();
+  final StreamController<String> _errorController =
+      StreamController<String>.broadcast();
 
   /// Stream of location updates
   Stream<LocationPoint> get locationStream => _locationController.stream;
+
+  /// Stream of GPS error messages for consumers to observe
+  Stream<String> get errorStream => _errorController.stream;
 
   bool _isTracking = false;
   bool get isTracking => _isTracking;
@@ -160,7 +166,8 @@ class LocationService {
 
       _locationController.add(locationPoint);
     } catch (e) {
-      // Silently handle polling errors
+      debugPrint('LocationService: GPS polling error - $e');
+      _errorController.add('GPS signal lost: $e');
     }
   }
 
@@ -200,7 +207,8 @@ class LocationService {
             _locationController.add(locationPoint);
           },
           onError: (error) {
-            // Ignore errors
+            debugPrint('LocationService: Distance-based tracking error - $error');
+            _errorController.add('GPS signal lost: $error');
           },
         );
   }
@@ -250,6 +258,7 @@ class LocationService {
   void dispose() {
     _pollingTimer?.cancel();
     _positionSubscription?.cancel();
+    _errorController.close();
     _locationController.close();
   }
 }

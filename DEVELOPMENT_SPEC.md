@@ -23,10 +23,17 @@ A location-based running game that gamifies territory control through hexagonal 
 
 ### Two Data Domains (NEVER mix)
 
+**Rule 1 — Running History = Client-side (cross-season):**
+- ALL TIME stats computed from local SQLite `runs` table — NOT from server `UserModel` fields
+- Survives season resets (The Void). Period stats (DAY/WEEK/MONTH/YEAR) also client-side.
+
+**Rule 2 — Hexes + TeamScreen + Leaderboard = Server-side (season-based):**
+- Downloaded on app launch/OnResume. Reset each season.
+
 | Domain | Source | Trigger | Used By |
 |--------|--------|---------|---------|
-| **Snapshot** | Server → Local (read-only) | App launch, OnResume | TeamScreen, LeaderboardScreen, ALL TIME stats |
-| **Live** | Local creation → Upload | Running, Final Sync | FlipPointsWidget, RunHistory period stats |
+| **Client (cross-season)** | Local SQLite `runs` table | Run completion | RunHistoryScreen ALL TIME + period stats |
+| **Server (season-based)** | Server → Local (read-only) | App launch, OnResume | TeamScreen, LeaderboardScreen, hex map |
 
 **Only hybrid value**: `PointsService.totalSeasonPoints` = server `season_points` + local unsynced.
 

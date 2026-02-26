@@ -727,7 +727,22 @@ $$ LANGUAGE plpgsql;
 
 All app data belongs to exactly one of two domains. **Never mix them.**
 
-### Domain 1: Snapshot (Server → Local, read-only until next midnight)
+### Rule 1 — Running History = Client-side (cross-season, never reset)
+
+- ALL TIME stats computed from local SQLite `runs` table
+- Survives season resets (The Void) — personal running history is permanent
+- Source: `allRuns.fold()` in `run_history_screen.dart` (synchronous from `runProvider`)
+- Also available: `LocalStorage.getAllTimeStats()` (async, for non-UI contexts)
+- Period stats (DAY/WEEK/MONTH/YEAR) also from local SQLite `runs` table
+
+| Data | Source | Used By |
+|------|--------|---------|
+| ALL TIME distance, pace, stability, run count | `allRuns.fold()` from SQLite | RunHistoryScreen ALL TIME panel |
+| ALL TIME flip points | `allRuns.fold((sum, run) => sum + run.flipPoints)` | RunHistoryScreen ALL TIME panel |
+| Period stats (DAY/WEEK/MONTH/YEAR) | `statsRuns.fold()` from SQLite | RunHistoryScreen period panel |
+| Run records | Local SQLite `runs` table | RunHistoryScreen list/calendar |
+
+### Rule 2 — Hexes + TeamScreen + Leaderboard = Server-side (season-based, reset each season)
 
 - Downloaded on app launch / OnResume via prefetch
 - Created by server at midnight GMT+2 from all runners' uploaded data
@@ -740,41 +755,30 @@ All app data belongs to exactly one of two domains. **Never mix them.**
 | Leaderboard rankings + season record | `get_leaderboard` RPC → `season_leaderboard_snapshot` (NOT live `users`) | LeaderboardScreen |
 | Team rankings / dominance | `get_team_rankings` / `get_hex_dominance` RPC | TeamScreen |
 | Buff multiplier | `get_user_buff` RPC (yesterday's data) | BuffService (frozen at run start) |
-| User aggregates | `app_launch_sync` → `UserModel` | ALL TIME stats, profile |
-
-### Domain 2: Live (Local creation → Upload to server)
-
-- Created by user's running actions
-- Changes during/after each run
-- Uploaded to server via "The Final Sync"
-
-| Data | Source | Used By |
-|------|--------|---------|
-| Header FlipPoints | `PointsService` (server season_points + local unsynced) | FlipPointsWidget |
-| Run records | Local SQLite (created per run) | RunHistoryScreen (recent runs, period stats) |
-| Hex overlay (own runs) | Local SQLite + HexRepository | MapScreen (own flips on top of snapshot) |
 
 ### Domain Assignment Table
 
 | Screen/Widget | Domain | Data Source |
 |--------------|--------|-------------|
 | Header FlipPoints | Live (hybrid) | `PointsService.totalSeasonPoints` |
-| Run History ALL TIME | Snapshot + hybrid points | `UserModel` aggregates + `totalSeasonPoints` |
-| Run History period stats | Live | Local SQLite runs (run-level granularity) |
-| TeamScreen | Snapshot | Server RPCs only (home hex anchored) |
-| LeaderboardScreen | Snapshot | `season_leaderboard_snapshot` via `get_leaderboard` RPC (NOT live `users` or `currentUser`) |
-| MapScreen display | Snapshot + GPS | GPS hex for camera/territory when outside province; home hex otherwise |
-| Hex Map | Snapshot + Live overlay | `hex_snapshot` + own local flips |
+| Run History ALL TIME | **Client-side** | Local SQLite `allRuns.fold()` — NOT `UserModel` server fields |
+| Run History period stats | Client-side | Local SQLite runs (run-level granularity) |
+| TeamScreen | Server (season) | Server RPCs only (home hex anchored) |
+| LeaderboardScreen | Server (season) | `season_leaderboard_snapshot` via `get_leaderboard` RPC (NOT live `users` or `currentUser`) |
+| LeaderboardScreen Season Record | Server (season) | Snapshot `LeaderboardEntry` (NOT live `currentUser`) |
+| MapScreen display | Server + GPS | GPS hex for camera/territory when outside province; home hex otherwise |
+| Hex Map | Server + Client overlay | `hex_snapshot` + own local flips |
 
 **Domain Rules:**
 1. `PointsService.totalSeasonPoints` is the ONLY hybrid value (server + local unsynced)
-2. ALL TIME stats use server `UserModel` aggregates + `totalSeasonPoints` for points
+2. ALL TIME stats use local SQLite `runs` table — **NOT server `UserModel` aggregate fields**
 3. Period stats (DAY/WEEK/MONTH/YEAR) use local SQLite runs (run-level granularity)
-4. TeamScreen and LeaderboardScreen use ONLY snapshot domain — never compute from local runs
+4. TeamScreen and LeaderboardScreen use ONLY server (season) domain — never compute from local runs
 5. Server processes all runners' uploads at midnight to create next day's snapshot
-6. LeaderboardScreen Season Record stats (points, distance, pace) come from snapshot `LeaderboardEntry`, NOT live `currentUser`
+6. LeaderboardScreen Season Record stats come from snapshot `LeaderboardEntry`, NOT live `currentUser`
 7. `get_leaderboard` RPC reads from `season_leaderboard_snapshot` table, NOT from live `users` table
 8. Snapshot downloads always use **home hex** — MapScreen uses **GPS hex** for display only when outside province
+9. `UserModel` aggregate fields (`totalDistanceKm`, `avgPaceMinPerKm`, `avgCv`, `totalRuns`) exist on server but are NOT the source of truth for Running History display
 
 ### Location Domain Separation (Home vs GPS)
 

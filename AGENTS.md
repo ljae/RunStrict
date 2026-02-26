@@ -410,26 +410,29 @@ flip_points = flips_against_snapshot × buff_multiplier
 
 ### Two Data Domains (CRITICAL — Never Mix)
 
-**Snapshot Domain** (Server → Local, read-only until next midnight):
-- Hex map base, leaderboard rankings + season record, team stats, buff multiplier, user aggregates (`UserModel`)
-- Downloaded on app launch/OnResume. NEVER changes from running.
+**Rule 1 — Running History = Client-side (cross-season, never reset):**
+- ALL TIME stats computed from local SQLite `runs` table (`allRuns.fold()`)
+- Survives season resets (The Void) — personal running history is permanent
+- Includes: distance, pace, stability, run count, flip points
+- Source of truth: `LocalStorage.getAllTimeStats()` or synchronous `allRuns.fold()` in UI
+- Period stats (DAY/WEEK/MONTH/YEAR) also from local SQLite
+
+**Rule 2 — Hexes + TeamScreen + Leaderboard = Server-side (season-based, reset each season):**
+- Downloaded on app launch/OnResume via PrefetchService. NEVER changes from running.
 - **Always anchored to home hex** — `PrefetchService` uses `homeHex`/`homeHexAll` (never GPS)
 - Leaderboard: `get_leaderboard` reads from `season_leaderboard_snapshot` (NOT live `users`)
 - Season Record on LeaderboardScreen uses snapshot `LeaderboardEntry`, NOT live `currentUser`
+- Includes: hex map base, leaderboard rankings, team stats, buff multiplier
 
-**Live Domain** (Local creation → Upload):
-- Header FlipPoints, run records, hex overlay (own runs only)
-- Created/updated by running. Uploaded via Final Sync.
-
-**Only hybrid value**: `PointsService.totalSeasonPoints` = server `season_points` + local unsynced. Used for BOTH header AND ALL TIME points.
+**Only hybrid value**: `PointsService.totalSeasonPoints` = server `season_points` + local unsynced. Used for header FlipPoints only.
 
 | Screen | Domain | Rule |
 |--------|--------|------|
-| TeamScreen | Snapshot | Server RPCs only (home hex anchored) |
-| LeaderboardScreen | Snapshot | `season_leaderboard_snapshot` via RPC (NOT live `users` or `currentUser`) |
-| MapScreen display | Snapshot + GPS | GPS hex for camera/territory when outside province |
-| ALL TIME stats | Snapshot + hybrid | `UserModel` aggregates + `totalSeasonPoints` |
-| Period stats | Live | Local SQLite runs (DAY/WEEK/MONTH/YEAR) |
+| TeamScreen | Server (season) | Server RPCs only (home hex anchored) |
+| LeaderboardScreen | Server (season) | `season_leaderboard_snapshot` via RPC (NOT live `users` or `currentUser`) |
+| MapScreen display | Server + GPS | GPS hex for camera/territory when outside province |
+| ALL TIME stats | **Client-side** | Local SQLite `runs` table (`allRuns.fold()`) — NOT `UserModel` server fields |
+| Period stats | Client-side | Local SQLite runs (DAY/WEEK/MONTH/YEAR) |
 | Header FlipPoints | Live (hybrid) | `PointsService.totalSeasonPoints` |
 
 ### Location Domain Separation (Home vs GPS)
@@ -787,7 +790,8 @@ season_leaderboard_snapshot -- user_id, season_number, rank, name, team, season_
 - Don't create new state management patterns
 - Don't store derived/calculated data in database (calculate on-demand)
 - Don't create backend API endpoints — use RLS + Edge Functions
-- Don't mix Snapshot Domain and Live Domain data
+- Don't mix client-side (Running History) and server-side (Season) data domains
+- Don't use `UserModel` server aggregate fields for ALL TIME stats — use local SQLite `runs` table
 
 ---
 

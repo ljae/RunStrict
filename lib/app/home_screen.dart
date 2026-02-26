@@ -9,6 +9,7 @@ import '../features/leaderboard/providers/leaderboard_provider.dart';
 import '../features/map/providers/hex_data_provider.dart';
 import '../features/team/providers/buff_provider.dart';
 import '../core/providers/user_repository_provider.dart';
+import '../core/providers/connectivity_provider.dart';
 import '../core/widgets/season_countdown_widget.dart';
 import '../core/widgets/flip_points_widget.dart';
 import '../core/services/season_service.dart';
@@ -214,6 +215,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               index: _currentIndex,
               children: _screens,
             ),
+            _OfflineBanner(),
           ],
         ),
         bottomNavigationBar: _buildIconNavigationBar(
@@ -359,7 +361,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isSelected = _currentIndex == index;
 
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () {
+        final previousIndex = _currentIndex;
+        setState(() => _currentIndex = index);
+        // Force hex map re-render when switching to map tab (index 0).
+        // GeoJSON updates made while the Mapbox view was offscreen
+        // (e.g., after stopRun bumps hex version) may not take effect
+        // because the native renderer skips invisible views.
+        if (index == 0 && previousIndex != 0) {
+          ref.read(hexDataProvider.notifier).notifyHexDataChanged();
+        }
+      },
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -430,6 +442,82 @@ class _BuffBadge extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Offline connectivity banner that slides in/out when network changes.
+class _OfflineBanner extends ConsumerWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connectivityState = ref.watch(connectivityProvider);
+    final isOnline = connectivityState.maybeWhen(
+      data: (online) => online,
+      orElse: () => true, // Default to online if loading
+    );
+
+    final topPadding = MediaQuery.of(context).padding.top;
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+    final appBarHeight = topPadding + (isLandscape ? 60 : 90);
+
+    return Positioned(
+      top: appBarHeight + 12,
+      left: 24,
+      right: 24,
+      child: AnimatedSlide(
+        offset: isOnline ? const Offset(0, -1.5) : Offset.zero,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+        child: AnimatedOpacity(
+          opacity: isOnline ? 0 : 1,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+          child: IgnorePointer(
+            ignoring: isOnline,
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.amber.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.wifi_off_rounded,
+                    size: 16,
+                    color: Colors.amber,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'No internet connection',
+                    style: GoogleFonts.sora(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -25,7 +25,7 @@ class LocalStorage implements StorageService {
   LocalStorage._internal();
 
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 15; // v15: add config_snapshot to run_checkpoint
+  static const int _databaseVersion = 16; // v16: add retry_count, next_retry_at to runs
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -79,7 +79,9 @@ class LocalStorage implements StorageService {
         buff_multiplier INTEGER DEFAULT 1,
         cv REAL,
         sync_status TEXT DEFAULT 'pending',
-        run_date TEXT
+        run_date TEXT,
+        retry_count INTEGER DEFAULT 0,
+        next_retry_at INTEGER
       )
     ''');
 
@@ -446,6 +448,23 @@ class LocalStorage implements StorageService {
         );
       } catch (e) {
         debugPrint('LocalStorage: v15 migration skipped: $e');
+      }
+    }
+    if (oldVersion < 16) {
+      // v15 → v16: Add retry tracking columns for exponential backoff
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN retry_count INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        debugPrint('LocalStorage: v16 migration retry_count skipped: $e');
+      }
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN next_retry_at INTEGER',
+        );
+      } catch (e) {
+        debugPrint('LocalStorage: v16 migration next_retry_at skipped: $e');
       }
     }
   }
@@ -992,6 +1011,92 @@ class LocalStorage implements StorageService {
     );
   }
 
+  // ============ RETRY BACKOFF ============
+
+  /// Backoff delays in seconds: 30s → 2min → 10min → 1hr → 6hr
+  static const List<int> _backoffDelays = [30, 120, 600, 3600, 21600];
+
+  /// Get pending runs eligible for retry (next_retry_at <= now OR null).
+  ///
+  /// Excludes runs that have been marked 'failed' (dead-lettered).
+  Future<List<Map<String, dynamic>>> getRetryableRuns() async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    return await _database!.query(
+      _tableRuns,
+      where: "sync_status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= ?)",
+      whereArgs: [nowMs],
+      orderBy: 'endTime ASC',
+    );
+  }
+
+  /// Increment retry_count and calculate next_retry_at with exponential backoff.
+  ///
+  /// Backoff schedule: 30s, 2min, 10min, 1hr, 6hr (capped at last value).
+  Future<void> incrementRetryCount(String runId) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    // Read current retry_count
+    final rows = await _database!.query(
+      _tableRuns,
+      columns: ['retry_count'],
+      where: 'id = ?',
+      whereArgs: [runId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+
+    final currentCount = (rows.first['retry_count'] as num?)?.toInt() ?? 0;
+    final newCount = currentCount + 1;
+
+    // Pick delay: clamp index to backoff list length
+    final delayIndex = currentCount.clamp(0, _backoffDelays.length - 1);
+    final delaySec = _backoffDelays[delayIndex];
+    final nextRetryMs =
+        DateTime.now().millisecondsSinceEpoch + (delaySec * 1000);
+
+    await _database!.update(
+      _tableRuns,
+      {'retry_count': newCount, 'next_retry_at': nextRetryMs},
+      where: 'id = ?',
+      whereArgs: [runId],
+    );
+  }
+
+  /// Count pending runs that have exceeded max retries (dead-lettered).
+  Future<int> getFailedRunCount({int maxRetries = 10}) async {
+    if (_database == null) return 0;
+
+    final result = await _database!.rawQuery(
+      '''
+      SELECT COUNT(*) as cnt FROM $_tableRuns
+      WHERE sync_status IN ('pending', 'failed')
+        AND retry_count >= ?
+      ''',
+      [maxRetries],
+    );
+    return (result.first['cnt'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Mark a run as permanently failed (dead-letter).
+  Future<void> markRunFailed(String runId) async {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+
+    await _database!.update(
+      _tableRuns,
+      {'sync_status': 'failed'},
+      where: 'id = ?',
+      whereArgs: [runId],
+    );
+  }
+
   // ============ RUN CHECKPOINT (CRASH RECOVERY) ============
 
   /// Save a run checkpoint for crash recovery.
@@ -1183,6 +1288,75 @@ class LocalStorage implements StorageService {
     ''');
 
     return (result.first['total'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Compute ALL TIME aggregate stats from all local runs (cross-season).
+  ///
+  /// Returns a map with:
+  ///   - totalDistanceKm: sum of all run distances
+  ///   - totalRuns: count of all runs
+  ///   - avgPaceMinPerKm: weighted average pace (total_minutes / total_km)
+  ///   - avgCv: simple average of CV values (runs with non-null CV only)
+  ///   - stabilityScore: 100 - avgCv (clamped 0-100), or null if no CV data
+  ///
+  /// This is the source of truth for Running History ALL TIME stats.
+  /// Independent of season resets — survives The Void.
+  Future<Map<String, dynamic>> getAllTimeStats() async {
+    if (_database == null) {
+      return {
+        'totalDistanceKm': 0.0,
+        'totalRuns': 0,
+        'avgPaceMinPerKm': 0.0,
+        'avgCv': null,
+        'stabilityScore': null,
+      };
+    }
+
+    final result = await _database!.rawQuery('''
+      SELECT
+        COUNT(*) as total_runs,
+        COALESCE(SUM(distance_meters), 0) as total_distance_meters,
+        COALESCE(SUM(durationSeconds), 0) as total_duration_seconds,
+        AVG(CASE WHEN cv IS NOT NULL THEN cv END) as avg_cv
+      FROM $_tableRuns
+    ''');
+
+    if (result.isEmpty || (result.first['total_runs'] as int) == 0) {
+      return {
+        'totalDistanceKm': 0.0,
+        'totalRuns': 0,
+        'avgPaceMinPerKm': 0.0,
+        'avgCv': null,
+        'stabilityScore': null,
+      };
+    }
+
+    final row = result.first;
+    final totalRuns = (row['total_runs'] as num).toInt();
+    final totalDistanceKm =
+        ((row['total_distance_meters'] as num).toDouble()) / 1000;
+    final totalDurationSec =
+        (row['total_duration_seconds'] as num).toDouble();
+
+    // Weighted average pace: total_minutes / total_km
+    double avgPaceMinPerKm = 0.0;
+    if (totalDistanceKm > 0 && totalDurationSec > 0) {
+      avgPaceMinPerKm = (totalDurationSec / 60.0) / totalDistanceKm;
+    }
+
+    final avgCv = (row['avg_cv'] as num?)?.toDouble();
+    int? stabilityScore;
+    if (avgCv != null) {
+      stabilityScore = (100 - avgCv).round().clamp(0, 100);
+    }
+
+    return {
+      'totalDistanceKm': totalDistanceKm,
+      'totalRuns': totalRuns,
+      'avgPaceMinPerKm': avgPaceMinPerKm,
+      'avgCv': avgCv,
+      'stabilityScore': stabilityScore,
+    };
   }
 
   /// Get today's flipped hex IDs and teams from local runs (for overlay).

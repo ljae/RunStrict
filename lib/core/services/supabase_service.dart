@@ -29,7 +29,7 @@ class SupabaseService {
 
   Future<List<Map<String, dynamic>>> getSeasonLeaderboard(
     int seasonNumber, {
-    int limit = 200,
+    int limit = 50,
   }) async {
     final result = await client.rpc(
       'get_season_leaderboard',
@@ -101,13 +101,18 @@ class SupabaseService {
   }
 
   /// Fetch user's run history from Supabase for local backfill.
-  /// Returns runs ordered by start_time ASC.
-  Future<List<Map<String, dynamic>>> fetchRunHistory(String userId) async {
+  /// Returns runs ordered by start_time DESC (most recent first).
+  Future<List<Map<String, dynamic>>> fetchRunHistory(
+    String userId, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
     final result = await client
         .from('run_history')
         .select()
         .eq('user_id', userId)
-        .order('start_time', ascending: true);
+        .order('start_time', ascending: false)
+        .range(offset, offset + limit - 1);
     return List<Map<String, dynamic>>.from(result as List);
   }
 

@@ -12,6 +12,7 @@ import '../../../core/services/storage_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/hex_service.dart';
 import '../../../core/services/app_lifecycle_manager.dart';
+import '../../../core/services/prefetch_service.dart';
 import '../../../core/providers/user_repository_provider.dart';
 import '../services/voice_announcement_service.dart';
 import '../../../data/models/team.dart';
@@ -98,6 +99,8 @@ class RunNotifier extends Notifier<RunState> {
 
   StreamSubscription<LocationPoint>? _locationSubscription;
   Timer? _tickTimer;
+  Timer? _checkpointTimer;
+  StreamSubscription<String>? _errorSubscription;
   final _eventController = StreamController<RunEvent>.broadcast();
 
   Stream<RunEvent> get eventStream => _eventController.stream;
@@ -110,6 +113,15 @@ class RunNotifier extends Notifier<RunState> {
     _supabaseService = SupabaseService();
 
     ref.onDispose(() {
+      // Emergency checkpoint save if run is active
+      if (state.activeRun != null && state.activeRun!.isActive) {
+        debugPrint('RunNotifier: Emergency checkpoint save on dispose');
+        _savePeriodicCheckpoint();
+      }
+      _checkpointTimer?.cancel();
+      _checkpointTimer = null;
+      _errorSubscription?.cancel();
+      _errorSubscription = null;
       _stopTimer();
       _locationSubscription?.cancel();
       _locationService.dispose();
@@ -346,6 +358,16 @@ class RunNotifier extends Notifier<RunState> {
           );
         }
       });
+
+      // Listen to GPS errors (log only, don't stop run)
+      _errorSubscription = _locationService.errorStream.listen((error) {
+        debugPrint('RunNotifier: GPS error during run - $error');
+      });
+
+      // Periodic checkpoint every 60s for crash recovery (even with 0 flips)
+      _checkpointTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+        _savePeriodicCheckpoint();
+      });
     } on LocationPermissionException {
       _stopTimer();
       ref.read(buffProvider.notifier).unfreezeAfterRun();
@@ -403,6 +425,39 @@ class RunNotifier extends Notifier<RunState> {
     _tickTimer = null;
   }
 
+  /// Save a periodic checkpoint for crash recovery (runs with 0 flips too)
+  void _savePeriodicCheckpoint() {
+    final currentRun = _runTracker.currentRun;
+    if (currentRun == null) return;
+
+    final localDb = _storageService is LocalStorage
+        ? _storageService as LocalStorage
+        : null;
+    if (localDb == null) return;
+
+    try {
+      final checkpoint = <String, dynamic>{
+        'run_id': currentRun.id,
+        'team_at_run': currentRun.teamAtRun.name,
+        'start_time': currentRun.startTime.millisecondsSinceEpoch,
+        'distance_meters': currentRun.distanceMeters,
+        'hexes_colored': currentRun.hexesColored,
+        'captured_hex_ids': currentRun.hexPath.join(','),
+        'buff_multiplier': ref.read(buffProvider).effectiveMultiplier,
+        'last_updated': DateTime.now().millisecondsSinceEpoch,
+      };
+      localDb.saveRunCheckpoint(checkpoint);
+      debugPrint(
+        'RunNotifier: Periodic checkpoint saved '
+        '(${currentRun.distanceMeters.toStringAsFixed(0)}m, '
+        '${currentRun.hexesColored} flips)',
+      );
+    } catch (e) {
+      debugPrint('RunNotifier: Periodic checkpoint save failed - $e');
+    }
+  }
+
+
   /// Stop the current run and save to history
   Future<List<String>> stopRun() async {
     if (!isRunning) return [];
@@ -416,6 +471,11 @@ class RunNotifier extends Notifier<RunState> {
 
       await _locationSubscription?.cancel();
       _locationSubscription = null;
+
+      _checkpointTimer?.cancel();
+      _checkpointTimer = null;
+      _errorSubscription?.cancel();
+      _errorSubscription = null;
 
       await VoiceAnnouncementService().dispose();
 
@@ -480,6 +540,14 @@ class RunNotifier extends Notifier<RunState> {
             await storageService.clearRunCheckpoint();
           }
           await ref.read(hexDataProvider.notifier).loadTodayRoutes();
+          // Defensive: ensure hex cache is populated after run
+          try {
+            await PrefetchService().refresh();
+            ref.read(hexDataProvider.notifier).notifyHexDataChanged();
+            debugPrint('RunNotifier: Guest post-run hex refresh done');
+          } catch (e) {
+            debugPrint('RunNotifier: Guest post-run hex refresh failed: $e');
+          }
           ref.read(hexDataProvider.notifier).clearUserLocation();
           state = state.copyWith(activeRun: () => null, liveLocation: () => null, routeVersion: 0);
           await AppLifecycleManager().onRunCompleted();
@@ -488,6 +556,7 @@ class RunNotifier extends Notifier<RunState> {
 
         // === THE FINAL SYNC ===
         bool syncSucceeded = false;
+        int serverValidatedPoints = flipPoints; // fallback to client calc
 
         final connectivityResults = await Connectivity().checkConnectivity();
         final hasNetwork = !connectivityResults.contains(ConnectivityResult.none);
@@ -495,10 +564,12 @@ class RunNotifier extends Notifier<RunState> {
         if (hasNetwork && capturedHexIds.isNotEmpty) {
           try {
             final syncResult = await _supabaseService.finalizeRun(completedRun);
+            serverValidatedPoints =
+                (syncResult['points_earned'] as num?)?.toInt() ?? flipPoints;
             debugPrint(
               'RunNotifier: Final Sync completed - '
               'flips=${syncResult['flips']}, '
-              'points=${syncResult['points_earned']}, '
+              'points=$serverValidatedPoints (client=$flipPoints), '
               'multiplier=${syncResult['multiplier']}',
             );
             syncSucceeded = true;
@@ -516,7 +587,8 @@ class RunNotifier extends Notifier<RunState> {
 
         if (syncSucceeded && storageService is LocalStorage) {
           await storageService.updateRunSyncStatus(completedRun.id, 'synced');
-          ref.read(pointsProvider.notifier).onRunSynced(flipPoints);
+          // Use server-validated points (may be capped by anti-cheat)
+          ref.read(pointsProvider.notifier).onRunSynced(serverValidatedPoints);
         }
 
         // Update ALL TIME aggregates from completed run (mirrors finalize_run server-side).
@@ -536,6 +608,16 @@ class RunNotifier extends Notifier<RunState> {
         // Reload today's routes so the just-completed run persists on the map
         await ref.read(hexDataProvider.notifier).loadTodayRoutes();
 
+        // Defensive: refresh hex cache from server + local overlay
+        // Ensures map shows correct data even if cache was unexpectedly cleared
+        try {
+          await PrefetchService().refresh();
+          ref.read(hexDataProvider.notifier).notifyHexDataChanged();
+          debugPrint('RunNotifier: Post-run hex refresh done (cache=${HexRepository().cacheStats['size']})');
+        } catch (e) {
+          debugPrint('RunNotifier: Post-run hex refresh failed: $e');
+        }
+
         ref.read(hexDataProvider.notifier).clearUserLocation();
 
         state = state.copyWith(
@@ -551,6 +633,14 @@ class RunNotifier extends Notifier<RunState> {
 
       // Reload today's routes for runs with no result
       await ref.read(hexDataProvider.notifier).loadTodayRoutes();
+      // Defensive: refresh hex cache for no-result runs too
+      try {
+        await PrefetchService().refresh();
+        ref.read(hexDataProvider.notifier).notifyHexDataChanged();
+        debugPrint('RunNotifier: Post-run hex refresh done (no result)');
+      } catch (e) {
+        debugPrint('RunNotifier: Post-run hex refresh failed: $e');
+      }
 
       ref.read(hexDataProvider.notifier).clearUserLocation();
 
@@ -601,7 +691,7 @@ class RunNotifier extends Notifier<RunState> {
       final userId = _supabaseService.client.auth.currentUser?.id;
       if (userId == null) return;
 
-      final rows = await _supabaseService.fetchRunHistory(userId);
+      final rows = await _supabaseService.fetchRunHistory(userId, limit: 50);
       if (rows.isEmpty) return;
 
       debugPrint('RunNotifier._backfillFromServer: Found ${rows.length} runs on server, importing...');

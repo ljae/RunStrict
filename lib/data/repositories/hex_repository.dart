@@ -165,6 +165,7 @@ class HexRepository {
       }
     }
     _lastPrefetchTime = DateTime.now();
+    debugPrint('HexRepository: bulkLoadFromServer - loaded ${hexes.length}, cache now ${_hexCache.size}');
   }
 
   /// Load hex data from the daily snapshot (frozen at midnight GMT+2).
@@ -174,6 +175,7 @@ class HexRepository {
   /// After calling this, use [applyLocalOverlay] to add the user's own
   /// today's flips on top.
   void bulkLoadFromSnapshot(List<Map<String, dynamic>> hexes) {
+    debugPrint('HexRepository: bulkLoadFromSnapshot - clearing ${_hexCache.size} hexes, loading ${hexes.length} from snapshot');
     _hexCache.clear();
     final hexService = HexService();
     for (final hexData in hexes) {

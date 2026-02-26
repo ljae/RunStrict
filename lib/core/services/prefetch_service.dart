@@ -11,6 +11,7 @@ import '../storage/local_storage.dart';
 import 'buff_service.dart';
 import 'hex_service.dart';
 import 'supabase_service.dart';
+import 'season_service.dart';
 
 /// Status of the prefetch operation
 enum PrefetchStatus {
@@ -354,6 +355,18 @@ class PrefetchService {
   /// the snapshot is immutable for the day.
   /// After loading, applies local overlay (user's own today's flips from SQLite).
   Future<void> _downloadHexData() async {
+    // On Season Day 1, no snapshot exists and hexes table is empty after reset.
+    // Skip all network calls — just clear the cache and apply local overlay.
+    if (SeasonService().isFirstDay) {
+      debugPrint('PrefetchService: Day 1 — skipping snapshot download');
+      final repo = HexRepository();
+      repo.clearAll();
+      await _applyLocalOverlay(repo);
+      _lastPrefetchTime = DateTime.now();
+      await _saveLastPrefetchTime(_lastPrefetchTime!);
+      return;
+    }
+
     // Always download for home province (server data = home-anchored)
     final provinceHex = _homeHexAll;
     if (provinceHex == null) return;
@@ -381,6 +394,7 @@ class PrefetchService {
 
       // Apply local overlay: user's own today's flips from SQLite
       await _applyLocalOverlay(repo);
+      debugPrint('PrefetchService: Hex cache final size: ${repo.cacheStats['size']}');
 
       _lastPrefetchTime = DateTime.now();
       await _saveLastPrefetchTime(_lastPrefetchTime!);
@@ -391,6 +405,7 @@ class PrefetchService {
         final hexes = await _supabase.getHexesDelta(provinceHex);
         repo.bulkLoadFromServer(hexes);
         await _applyLocalOverlay(repo);
+        debugPrint('PrefetchService: Fallback hex cache size: ${repo.cacheStats['size']}');
         _lastPrefetchTime = DateTime.now();
         await _saveLastPrefetchTime(_lastPrefetchTime!);
         debugPrint(
@@ -423,6 +438,12 @@ class PrefetchService {
 
   /// Download leaderboard data for all scopes
   Future<void> _downloadLeaderboardData() async {
+    // On Day 1, no one has points yet — skip network call.
+    if (SeasonService().isFirstDay) {
+      debugPrint('PrefetchService: Day 1 — skipping leaderboard download');
+      _leaderboardCache.clear();
+      return;
+    }
     if (_homeHexAll == null) return;
 
     debugPrint('PrefetchService: Downloading leaderboard data...');

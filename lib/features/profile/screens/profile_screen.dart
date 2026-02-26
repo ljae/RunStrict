@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../theme/app_theme.dart';
 import '../../auth/providers/app_state_provider.dart';
 import '../../auth/services/auth_service.dart';
@@ -47,6 +48,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   DateTime? _selectedBirthday;
   String? _selectedNationality;
   bool _voiceMuted = false;
+
+  /// OAuth profile photo URL from Supabase auth metadata.
+  String? get _oauthAvatarUrl {
+    final meta = Supabase.instance.client.auth.currentUser?.userMetadata;
+    if (meta == null) return null;
+    return (meta['avatar_url'] as String?) ?? (meta['picture'] as String?);
+  }
 
   // Registration mode state
   late final TextEditingController _usernameController;
@@ -402,9 +410,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     width: 2,
                   ),
                 ),
-                child: Center(
-                  child: Text(flag, style: const TextStyle(fontSize: 40)),
-                ),
+                clipBehavior: Clip.antiAlias,
+                child: _oauthAvatarUrl != null
+                    ? Image.network(
+                        _oauthAvatarUrl!,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            Center(child: Text(flag, style: const TextStyle(fontSize: 40))),
+                      )
+                    : Center(child: Text(flag, style: const TextStyle(fontSize: 40))),
               ),
               const SizedBox(height: AppTheme.spacingM),
 
@@ -717,6 +733,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               teamColor: teamColor,
                               nationality:
                                   _selectedNationality ?? user.nationality,
+                              avatarUrl: _oauthAvatarUrl,
                             ),
                             const SizedBox(height: AppTheme.spacingL),
                             _ManifestoCard(
@@ -813,6 +830,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         user: user,
                         teamColor: teamColor,
                         nationality: _selectedNationality ?? user.nationality,
+                        avatarUrl: _oauthAvatarUrl,
                       ),
                       const SizedBox(height: AppTheme.spacingL),
                       _ManifestoCard(
@@ -904,11 +922,13 @@ class _ProfileHeader extends StatelessWidget {
   final UserModel user;
   final Color teamColor;
   final String? nationality;
+  final String? avatarUrl;
 
   const _ProfileHeader({
     required this.user,
     required this.teamColor,
     this.nationality,
+    this.avatarUrl,
   });
 
   @override
@@ -928,9 +948,17 @@ class _ProfileHeader extends StatelessWidget {
               width: 2,
             ),
           ),
-          child: Center(
-            child: Text(flag, style: const TextStyle(fontSize: 40)),
-          ),
+          clipBehavior: Clip.antiAlias,
+          child: avatarUrl != null
+              ? Image.network(
+                  avatarUrl!,
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      Center(child: Text(flag, style: const TextStyle(fontSize: 40))),
+                )
+              : Center(child: Text(flag, style: const TextStyle(fontSize: 40))),
         ),
         const SizedBox(height: AppTheme.spacingM),
         Text(

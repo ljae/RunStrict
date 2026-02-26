@@ -5,6 +5,7 @@ import '../../../core/services/hex_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/gmt2_date_utils.dart';
 import 'buff_provider.dart';
+import '../../../core/services/season_service.dart';
 
 export '../../../data/models/team_stats.dart';
 
@@ -68,13 +69,26 @@ class TeamStatsNotifier extends Notifier<TeamStatsState> {
 
     try {
       final supabase = SupabaseService();
+
+      // On Season Day 1, yesterday was the previous season's last day.
+      // Skip yesterday stats AND rankings to avoid stale cross-season data.
+      // Server RPCs also have season boundary checks (belt + suspenders).
+      final isDay1 = SeasonService().isFirstDay;
+
       final serverYesterday = Gmt2DateUtils.todayGmt2.subtract(const Duration(days: 1));
       final yesterdayStr =
           '${serverYesterday.year}-${serverYesterday.month.toString().padLeft(2, '0')}-${serverYesterday.day.toString().padLeft(2, '0')}';
 
       final results = await Future.wait([
-        supabase.getUserYesterdayStats(userId, date: yesterdayStr),
-        supabase.getTeamRankings(userId, cityHex: cityHex),
+        if (!isDay1)
+          supabase.getUserYesterdayStats(userId, date: yesterdayStr)
+        else
+          Future.value(<String, dynamic>{'has_data': false}),
+        // Rankings also skipped on Day 1 — yesterday's rankings are cross-season
+        if (!isDay1)
+          supabase.getTeamRankings(userId, cityHex: cityHex)
+        else
+          Future.value(<String, dynamic>{}),
         supabase.getHexDominance(parentHex: provinceHex),
       ]);
 

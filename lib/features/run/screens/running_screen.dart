@@ -206,13 +206,73 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
     // Watch state for reactivity, read notifier for computed getters
     ref.watch(runProvider);
     final run = ref.read(runProvider.notifier);
+    final runState = ref.read(runProvider);
 
     // Use team's color directly (supports red, blue, AND purple)
     final userTeam = ref.watch(userRepositoryProvider)?.team;
     final teamColor = userTeam?.color ?? AppTheme.electricBlue;
     final isRed = userTeam == Team.red;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !runState.isRunning,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (runState.isRunning && !didPop) {
+          final shouldStop = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                backgroundColor: AppTheme.surfaceColor,
+                title: Text(
+                  'Stop current run?',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                content: Text(
+                  'Your progress will be saved.',
+                  style: GoogleFonts.outfit(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.outfit(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    child: Text(
+                      'Stop',
+                      style: GoogleFonts.outfit(
+                        color: AppTheme.athleticRed,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ) ?? false;
+
+          if (shouldStop && mounted) {
+            await _stopRun();
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppTheme.backgroundStart,
       body: Stack(
         children: [
@@ -234,6 +294,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
               child: _buildErrorBanner(),
             ),
         ],
+      ),
       ),
     );
   }

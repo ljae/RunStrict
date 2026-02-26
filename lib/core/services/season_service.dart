@@ -157,6 +157,10 @@ class SeasonService {
   /// Whether the season has ended (past D-Day).
   bool get isSeasonEnded => daysRemaining < 0;
 
+  /// Whether it's the first day of the season (Day 1).
+  /// On Day 1: no snapshot to download, no yesterday stats, empty leaderboard.
+  bool get isFirstDay => currentSeasonDay == 1;
+
   /// Formatted display string for the countdown.
   /// Returns "D-40" through "D-1", then "D-DAY", then "VOID" if past.
   String get displayString {

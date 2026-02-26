@@ -137,6 +137,15 @@ class HexDataNotifier extends Notifier<HexDataState> {
       }
     }
 
+
+    // Debug: warn if all hexes are neutral (cache may be empty)
+    if (neutralCount == hexIds.length && hexIds.length > 100) {
+      debugPrint(
+        'HexDataNotifier: WARNING - All ${hexIds.length} hexes neutral! '
+        'Cache size: ${_hexRepository.cacheStats['size']}',
+      );
+    }
+
     return HexAggregatedStats(
       blueCount: blueCount,
       redCount: redCount,

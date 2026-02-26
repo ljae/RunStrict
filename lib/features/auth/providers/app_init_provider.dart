@@ -237,8 +237,6 @@ class AppInitNotifier extends Notifier<AppInitState> {
     }
 
     final cityHex = PrefetchService().homeHexCity;
-    await ref.read(buffProvider.notifier).refresh(userId, districtHex: cityHex);
-
     try {
       final supabase = SupabaseService();
       final result = await supabase.appLaunchSync(
@@ -263,6 +261,10 @@ class AppInitNotifier extends Notifier<AppInitState> {
           ),
         );
       }
+
+      // Use buff data from appLaunchSync instead of separate getUserBuff RPC
+      final userBuff = result['user_buff'] as Map<String, dynamic>?;
+      ref.read(buffProvider.notifier).setBuffFromLaunchSync(userBuff);
 
       await points.refreshFromLocalTotal();
     } catch (e) {

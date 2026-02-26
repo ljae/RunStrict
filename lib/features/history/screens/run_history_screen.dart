@@ -5,7 +5,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../data/models/run.dart';
 import '../../run/providers/run_provider.dart';
-import '../../../core/providers/points_provider.dart';
 import '../../../core/providers/user_repository_provider.dart';
 import '../../../core/services/remote_config_service.dart';
 import '../../../core/services/timezone_preference_service.dart';
@@ -219,18 +218,31 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
             final statsRuns = _filterRunsForStats(allRuns, _selectedPeriod);
 
             // Calculate OVERALL (all-time) Stats
-            // Server aggregates (UserModel) are the source of truth for ALL TIME.
-            // PointsService.totalSeasonPoints is the only hybrid value (server
-            // season_points + local unsynced today) — this ensures the header
-            // and ALL TIME points stay in sync and reflect live running.
-            // All other aggregates come from server (updated by finalize_run).
-            final user = ref.read(userRepositoryProvider);
-            final points = ref.read(pointsProvider.notifier);
-            final overallDistance = user?.totalDistanceKm ?? 0.0;
-            final overallPoints = points.totalSeasonPoints;
-            final overallRunCount = user?.totalRuns ?? 0;
-            final overallPace = user?.avgPaceMinPerKm ?? 0.0;
-            final overallStability = user?.stabilityScore;
+            // ALL TIME stats are computed from local SQLite runs (cross-season).
+            // This data survives season resets (The Void) — it is the
+            // permanent running history, independent of server season data.
+            final overallDistance = allRuns.fold(
+              0.0,
+              (sum, run) => sum + run.distanceKm,
+            );
+            final overallPoints = allRuns.fold(
+              0,
+              (sum, run) => sum + run.flipPoints,
+            );
+            final overallRunCount = allRuns.length;
+
+            // Weighted average pace: total_minutes / total_km
+            double overallPace = 0.0;
+            if (overallDistance > 0) {
+              final totalSec = allRuns.fold(
+                0,
+                (sum, run) => sum + run.durationSeconds,
+              );
+              overallPace = (totalSec / 60.0) / overallDistance;
+            }
+            // Weighted avg stability for ALL TIME (runs >= 1km only)
+            final overallStability =
+                _calculateWeightedStability(allRuns);
 
             // Calculate PERIOD Stats (from statsRuns - actual period)
             final totalDistance = statsRuns.fold(
