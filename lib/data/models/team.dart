@@ -30,6 +30,18 @@ enum Team {
     }
   }
 
+  /// Asset path for the team's webp icon image.
+  String get imagePath {
+    switch (this) {
+      case Team.red:
+        return 'assets/images/flame.webp';
+      case Team.blue:
+        return 'assets/images/wave.webp';
+      case Team.purple:
+        return 'assets/images/chaos.webp';
+    }
+  }
+
   String get description {
     switch (this) {
       case Team.red:

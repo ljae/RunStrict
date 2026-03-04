@@ -156,6 +156,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         manifesto: _manifestoController.text.trim().isEmpty
             ? null
             : _manifestoController.text.trim(),
+        termsAcceptedAt: DateTime.now().toUtc(),
       );
       // go_router redirect handles navigation
     } catch (e) {

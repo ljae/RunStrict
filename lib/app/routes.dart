@@ -12,6 +12,7 @@ import '../features/profile/screens/profile_screen.dart';
 import '../features/auth/screens/season_register_screen.dart';
 import '../features/auth/screens/team_selection_screen.dart';
 import '../features/team/screens/traitor_gate_screen.dart';
+import '../features/auth/screens/terms_screen.dart';
 import '../theme/app_theme.dart';
 
 /// A [Listenable] that notifies when any of the watched providers change.
@@ -127,6 +128,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/traitor-gate',
         builder: (context, state) => const TraitorGateScreen(),
+      ),
+      GoRoute(
+        path: '/terms',
+        builder: (context, state) {
+          final tab = int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
+          return TermsScreen(initialTab: tab);
+        },
       ),
     ],
   );

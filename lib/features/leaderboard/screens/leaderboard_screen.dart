@@ -250,7 +250,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
               isLandscape
                   // Landscape: everything scrolls together
                   ? runners.isEmpty
-                      ? _buildEmptyState()
+                      ? (_isViewingCurrentSeason && SeasonService().isFirstDay
+                          ? _buildDay1EmptyState()
+                          : _buildEmptyState())
                       : CustomScrollView(
                           physics: const BouncingScrollPhysics(),
                           slivers: [
@@ -320,7 +322,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                         const SizedBox(height: 16),
                         Expanded(
                           child: runners.isEmpty
-                              ? _buildEmptyState()
+                              ? (_isViewingCurrentSeason &&
+                                      SeasonService().isFirstDay
+                                  ? _buildDay1EmptyState()
+                                  : _buildEmptyState())
                               : CustomScrollView(
                                   physics: const BouncingScrollPhysics(),
                                   slivers: [
@@ -390,17 +395,42 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   // SEASON STATS & CONTROLS (Matching History Screen Design)
   // ---------------------------------------------------------------------------
 
-  String _seasonRecordLabel() {
+  Widget _buildSeasonRecordLabel() {
     final season = SeasonService();
     final remaining = season.daysRemaining;
     final yesterdayDDay = remaining + 1;
-    if (remaining >= 0 && yesterdayDDay <= SeasonService.seasonDurationDays) {
-      return 'SEASON RECORD  until D-$yesterdayDDay';
+    final showYesterday =
+        remaining >= 0 && yesterdayDDay < SeasonService.seasonDurationDays;
+
+    final baseStyle = GoogleFonts.inter(
+      fontSize: 9,
+      fontWeight: FontWeight.w600,
+      color: Colors.white.withOpacity(0.2),
+      letterSpacing: 2.0,
+    );
+
+    if (!showYesterday) {
+      return Text('SEASON RECORD', style: baseStyle);
     }
-    return 'SEASON RECORD';
+
+    return RichText(
+      text: TextSpan(
+        style: baseStyle,
+        children: [
+          const TextSpan(text: 'SEASON RECORD until '),
+          TextSpan(
+            text: 'yesterday',
+            style: baseStyle.copyWith(
+              color: const Color(0xFFFF8A30),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  /// Season stats section - "SEASON RECORD until D-XX"
+  /// Season stats section - "SEASON RECORD until yesterday"
   /// Shows cumulative stats through YESTERDAY (midnight GMT+2), not live.
   /// Points = totalSeasonPoints - todayFlipPoints (subtracts today's contribution).
   /// Rank derived from leaderboard entries (live users table).
@@ -429,6 +459,12 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     final liveDistance = leaderboardEntry?.totalDistanceKm ?? 0.0;
     final livePace = leaderboardEntry?.avgPaceMinPerKm;
 
+    // Day 1: no yesterday data in this season — show a contextual banner instead
+    // of zeros, which would imply the user hasn't run yet.
+    if (SeasonService().isFirstDay && _isViewingCurrentSeason) {
+      return _buildDay1SeasonRecord();
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
@@ -441,15 +477,13 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Season label (matching ALL TIME style)
-            Text(
-              _seasonRecordLabel(),
-              style: GoogleFonts.inter(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withOpacity(0.2),
-                letterSpacing: 2.0,
-              ),
+            // Season label + snapshot badge
+            Row(
+              children: [
+                Flexible(child: _buildSeasonRecordLabel()),
+                const SizedBox(width: 4),
+                _buildSnapshotBadge(),
+              ],
             ),
             const SizedBox(height: 12),
             // Stats in a row with separators (matching ALL TIME layout)
@@ -523,6 +557,36 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     );
   }
 
+  /// Badge showing data is from yesterday's snapshot (mirrors TeamScreen version).
+  Widget _buildSnapshotBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.schedule,
+            size: 10,
+            color: Colors.white.withOpacity(0.3),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            "Yesterday's snapshot",
+            style: GoogleFonts.inter(
+              fontSize: 8,
+              color: Colors.white.withOpacity(0.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Mini stat for season stats panel
   Widget _buildSeasonMiniStat(String value, String label) {
     return Column(
@@ -546,6 +610,65 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
           ),
         ),
       ],
+    );
+  }
+
+  /// Day 1 season record panel — replaces the zero-filled SEASON RECORD
+  /// card so users understand the season just started (not that they haven't run).
+  Widget _buildDay1SeasonRecord() {
+    final seasonNumber = SeasonService().seasonNumber;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.03)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF8A30).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.rocket_launch_rounded,
+                color: Color(0xFFFF8A30),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SEASON $seasonNumber RECORD',
+                    style: GoogleFonts.inter(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.2),
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Season just started — your first run will open the record.',
+                    style: GoogleFonts.sora(
+                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.55),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1228,6 +1351,45 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDay1EmptyState() {
+    final seasonNumber = SeasonService().seasonNumber;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.rocket_launch_rounded,
+              size: 56,
+              color: Colors.white.withValues(alpha: 0.12),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'SEASON $seasonNumber HAS STARTED!',
+              style: GoogleFonts.bebasNeue(
+                fontSize: 22,
+                color: Colors.white,
+                letterSpacing: 2.0,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Be the first to run and\nclaim the #1 spot.',
+              style: GoogleFonts.sora(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

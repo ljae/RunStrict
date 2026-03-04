@@ -326,7 +326,7 @@ class RunNotifier extends Notifier<RunState> {
         isStartingRun: false,
       );
 
-      VoiceAnnouncementService().announceRunStart();
+      await VoiceAnnouncementService().announceRunStart();
 
       _locationSubscription = _locationService.locationStream.listen((point) {
         final location = LatLng(point.latitude, point.longitude);
@@ -492,6 +492,7 @@ class RunNotifier extends Notifier<RunState> {
           hexParents: result.capturedHexParents,
           buffMultiplier: effectiveMultiplier,
           runDate: Gmt2DateUtils.toGmt2DateString(DateTime.now()),
+          hasFlips: capturedHexIds.isNotEmpty,
         );
 
         final flipPoints = completedRun.hexesColored * effectiveMultiplier;
@@ -561,7 +562,7 @@ class RunNotifier extends Notifier<RunState> {
         final connectivityResults = await Connectivity().checkConnectivity();
         final hasNetwork = !connectivityResults.contains(ConnectivityResult.none);
 
-        if (hasNetwork && capturedHexIds.isNotEmpty) {
+        if (hasNetwork) {
           try {
             final syncResult = await _supabaseService.finalizeRun(completedRun);
             serverValidatedPoints =
@@ -576,13 +577,15 @@ class RunNotifier extends Notifier<RunState> {
           } catch (e) {
             debugPrint('RunNotifier: Final Sync failed - $e');
           }
-        } else if (!hasNetwork && capturedHexIds.isNotEmpty) {
-          debugPrint(
-            'RunNotifier: No network - skipping Final Sync '
-            '(${capturedHexIds.length} hexes pending)',
-          );
         } else {
-          syncSucceeded = true;
+          if (capturedHexIds.isNotEmpty) {
+            debugPrint(
+              'RunNotifier: No network - skipping Final Sync '
+              '(${capturedHexIds.length} hexes pending)',
+            );
+          } else {
+            debugPrint('RunNotifier: No network - 0-flip run pending sync');
+          }
         }
 
         if (syncSucceeded && storageService is LocalStorage) {

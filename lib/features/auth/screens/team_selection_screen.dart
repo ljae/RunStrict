@@ -204,7 +204,7 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                 team: Team.red,
                 title: 'RED TEAM',
                 subtitle: 'Passion & Power',
-                icon: Icons.local_fire_department_rounded,
+                iconWidget: Image.asset(Team.red.imagePath, width: 52, height: 52, fit: BoxFit.contain),
                 onSelect: () => _handleTeamSelection(context, Team.red),
               ),
               const SizedBox(width: 40),
@@ -212,7 +212,7 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                 team: Team.blue,
                 title: 'BLUE TEAM',
                 subtitle: 'Speed & Flow',
-                icon: Icons.waves_rounded,
+                iconWidget: Image.asset(Team.blue.imagePath, width: 52, height: 52, fit: BoxFit.contain),
                 onSelect: () => _handleTeamSelection(context, Team.blue),
               ),
             ],
@@ -224,7 +224,7 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                 team: Team.red,
                 title: 'RED TEAM',
                 subtitle: 'Passion & Power',
-                icon: Icons.local_fire_department_rounded,
+                iconWidget: Image.asset(Team.red.imagePath, width: 52, height: 52, fit: BoxFit.contain),
                 onSelect: () => _handleTeamSelection(context, Team.red),
               ),
               const SizedBox(height: 24),
@@ -232,7 +232,7 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                 team: Team.blue,
                 title: 'BLUE TEAM',
                 subtitle: 'Speed & Flow',
-                icon: Icons.waves_rounded,
+                iconWidget: Image.asset(Team.blue.imagePath, width: 52, height: 52, fit: BoxFit.contain),
                 onSelect: () => _handleTeamSelection(context, Team.blue),
               ),
             ],
@@ -265,14 +265,14 @@ class _TeamCard extends StatefulWidget {
   final Team team;
   final String title;
   final String subtitle;
-  final IconData icon;
+  final Widget iconWidget;
   final VoidCallback onSelect;
 
   const _TeamCard({
     required this.team,
     required this.title,
     required this.subtitle,
-    required this.icon,
+    required this.iconWidget,
     required this.onSelect,
   });
 
@@ -384,11 +384,7 @@ class _TeamCardState extends State<_TeamCard>
                                 intensity: 0.5 + (_hoverController.value * 0.5),
                               ),
                             ),
-                            child: Icon(
-                              widget.icon,
-                              size: 48,
-                              color: Colors.white,
-                            ),
+                            child: widget.iconWidget,
                           ),
                           const SizedBox(height: 32),
 

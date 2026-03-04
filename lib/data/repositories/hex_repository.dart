@@ -37,6 +37,12 @@ class HexRepository {
   // Single LRU cache (consolidates HexDataProvider + PrefetchService caches)
   late LruCache<String, HexModel> _hexCache;
 
+  // Local overlay: user's own today's flips — eviction-immune, never cleared by
+  // bulkLoadFromSnapshot(). Keyed by hex_id → Team. Cleared only by clearAll()
+  // (explicit full reset, e.g. home province change) or clearLocalOverlay().
+  // getHex() merges this on top of the LRU result so today's flips always show.
+  final Map<String, Team> _localOverlayHexes = {};
+
   void _initializeCache() {
     _hexCache = LruCache<String, HexModel>(
       maxSize: RemoteConfigService().config.hexConfig.maxCacheSize,
@@ -62,9 +68,27 @@ class HexRepository {
   Stream<LatLng> get locationStream => _locationController.stream;
   DateTime? get lastPrefetchTime => _lastPrefetchTime;
 
-  /// Get cached hex if exists
+  /// Get cached hex if exists.
+  ///
+  /// Merges the eviction-immune local overlay on top: if the user flipped
+  /// this hex today, their team color is always returned regardless of whether
+  /// the LRU cache entry was evicted or overwritten by a snapshot reload.
   HexModel? getHex(String hexId) {
-    return _hexCache.get(hexId);
+    final cached = _hexCache.get(hexId);
+    final overlayTeam = _localOverlayHexes[hexId];
+    if (overlayTeam == null) return cached;
+    // Overlay wins — apply team on top of cached model (or create one).
+    if (cached != null) return cached.copyWith(lastRunnerTeam: overlayTeam);
+    try {
+      final center = HexService().getHexCenter(hexId);
+      return HexModel(id: hexId, center: center, lastRunnerTeam: overlayTeam);
+    } catch (_) {
+      return HexModel(
+        id: hexId,
+        center: const LatLng(0, 0),
+        lastRunnerTeam: overlayTeam,
+      );
+    }
   }
 
   /// Update hex with runner's color
@@ -75,7 +99,9 @@ class HexRepository {
   /// This prevents double-counting when re-entering a hex.
   HexUpdateResult updateHexColor(String hexId, Team runnerTeam) {
     final newTeam = runnerTeam;
-    final existing = _hexCache.get(hexId);
+    // Use getHex() which merges _hexCache + _localOverlayHexes so that
+    // a hex flipped earlier today (in overlay) is not re-counted as a flip.
+    final existing = getHex(hexId);
 
     // Check if this hex was already captured this session
     // This prevents double-counting when re-entering a hex
@@ -85,7 +111,7 @@ class HexRepository {
     }
 
     if (existing != null) {
-      // Hex exists in cache - check if color actually changes (flip)
+      // Hex exists - check if color actually changes (flip)
       if (existing.lastRunnerTeam != newTeam) {
         debugPrint(
           'HEX FLIPPED: $hexId from ${existing.lastRunnerTeam} -> $newTeam',
@@ -93,14 +119,15 @@ class HexRepository {
         _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: newTeam));
         _capturedHexesThisSession.add(hexId);
         _capturedHexTeams[hexId] = newTeam;
+        _localOverlayHexes[hexId] = newTeam; // persist through snapshot reloads
         return HexUpdateResult.flipped; // Color changed (flipped)
       }
-      // Same team as current owner — no color change, no flip
+      // Same team as current owner (snapshot or overlay) — no color change, no flip
       debugPrint('HEX SAME TEAM: $hexId already $newTeam (no flip)');
       _capturedHexesThisSession.add(hexId);
       return HexUpdateResult.sameTeam; // No color change = not a flip
     } else {
-      // Hex not in cache - create it with the runner's color
+      // Hex not in cache or overlay - create it with the runner's color
       try {
         final hexCenter = HexService().getHexCenter(hexId);
         _hexCache.put(
@@ -109,6 +136,7 @@ class HexRepository {
         );
         _capturedHexesThisSession.add(hexId);
         _capturedHexTeams[hexId] = newTeam;
+        _localOverlayHexes[hexId] = newTeam; // persist through snapshot reloads
         debugPrint('HEX CREATED & CAPTURED: $hexId -> $newTeam');
         return HexUpdateResult.flipped; // New hex, counts as capture
       } catch (e) {
@@ -213,43 +241,35 @@ class HexRepository {
 
   /// Apply local overlay: user's own today's flips on top of snapshot.
   ///
+  /// Writes into the eviction-immune [_localOverlayHexes] map so the overlay
+  /// survives LRU eviction and subsequent [bulkLoadFromSnapshot] calls.
   /// [todayFlips] - List of {hex_id, team} maps from LocalStorage.
-  /// This ensures the map shows the user's personal progress for today,
-  /// even though the snapshot only reflects yesterday's state.
   void applyLocalOverlay(List<Map<String, dynamic>> todayFlips) {
-    final hexService = HexService();
     for (final flipData in todayFlips) {
       try {
         final hexId = flipData['hex_id'] as String;
         final teamName = flipData['team'] as String;
         final team = Team.values.byName(teamName);
-
-        final existing = _hexCache.get(hexId);
-        if (existing != null) {
-          // Update existing hex with user's flip
-          _hexCache.put(hexId, existing.copyWith(lastRunnerTeam: team));
-        } else {
-          // New hex not in snapshot — create it
-          LatLng hexCenter;
-          try {
-            hexCenter = hexService.getHexCenter(hexId);
-          } catch (_) {
-            hexCenter = const LatLng(0, 0);
-          }
-          _hexCache.put(
-            hexId,
-            HexModel(id: hexId, center: hexCenter, lastRunnerTeam: team),
-          );
-        }
+        _localOverlayHexes[hexId] = team;
       } catch (e) {
         debugPrint('HexRepository: Failed to apply overlay hex: $e');
       }
     }
     if (todayFlips.isNotEmpty) {
       debugPrint(
-        'HexRepository: Applied ${todayFlips.length} local overlay hexes',
+        'HexRepository: Applied ${todayFlips.length} local overlay hexes'
+        ' (total overlay=${_localOverlayHexes.length})',
       );
     }
+  }
+
+  /// Clear only the local overlay (called at midnight when today becomes yesterday).
+  ///
+  /// After this, [bulkLoadFromSnapshot] will load tomorrow's snapshot and
+  /// [applyLocalOverlay] will re-populate from the new day's SQLite runs.
+  void clearLocalOverlay() {
+    _localOverlayHexes.clear();
+    debugPrint('HexRepository: Cleared local overlay');
   }
 
   void mergeFromServer(List<Map<String, dynamic>> hexes) {
@@ -314,15 +334,20 @@ class HexRepository {
     debugPrint('HexRepository: Cleared captured hexes for new session');
   }
 
-  /// Full reset (clears all state including cache)
+  /// Full reset (clears all state including cache AND local overlay).
+  ///
+  /// Use only for explicit province changes or season resets.
+  /// For normal refreshes, [bulkLoadFromSnapshot] + [applyLocalOverlay] is
+  /// sufficient and preserves today's flips via [_localOverlayHexes].
   void clearAll() {
     _hexCache.clear();
+    _localOverlayHexes.clear();
     _userLocation = null;
     _currentUserHexId = null;
     _capturedHexesThisSession.clear();
     _capturedHexTeams.clear();
     _lastPrefetchTime = null;
-    debugPrint('HexRepository: Cleared all state');
+    debugPrint('HexRepository: Cleared all state (including local overlay)');
   }
 
   /// Compute hex dominance from cached data for given scope parents.
@@ -330,6 +355,7 @@ class HexRepository {
   Map<String, Map<String, int>> computeHexDominance({
     required String homeHexAll,
     String? homeHexCity,
+    bool includeLocalOverlay = true,
   }) {
     int allRed = 0, allBlue = 0, allPurple = 0, allTotal = 0;
     int cityRed = 0, cityBlue = 0, cityPurple = 0, cityTotal = 0;
@@ -337,13 +363,15 @@ class HexRepository {
     final hexService = HexService();
 
     _hexCache.forEach((hexId, hex) {
+      // Local overlay wins over LRU cache for dominance counting
+      final effectiveTeam = (includeLocalOverlay ? _localOverlayHexes[hexId] : null) ?? hex.lastRunnerTeam;
       final parentAll = hexService.getParentHexId(
         hexId,
         H3Config.allResolution,
       );
       if (parentAll == homeHexAll) {
         allTotal++;
-        switch (hex.lastRunnerTeam) {
+        switch (effectiveTeam) {
           case Team.red:
             allRed++;
           case Team.blue:
@@ -361,7 +389,7 @@ class HexRepository {
           );
           if (parentCity == homeHexCity) {
             cityTotal++;
-            switch (hex.lastRunnerTeam) {
+            switch (effectiveTeam) {
               case Team.red:
                 cityRed++;
               case Team.blue:
@@ -375,6 +403,46 @@ class HexRepository {
         }
       }
     });
+
+    // Also count overlay-only hexes not present in the LRU cache
+    if (includeLocalOverlay) {
+    for (final entry in _localOverlayHexes.entries) {
+      if (_hexCache.get(entry.key) != null) continue; // already counted above
+      final parentAll = hexService.getParentHexId(
+        entry.key,
+        H3Config.allResolution,
+      );
+      if (parentAll == homeHexAll) {
+        allTotal++;
+        switch (entry.value) {
+          case Team.red:
+            allRed++;
+          case Team.blue:
+            allBlue++;
+          case Team.purple:
+            allPurple++;
+        }
+
+        if (homeHexCity != null) {
+          final parentCity = hexService.getParentHexId(
+            entry.key,
+            H3Config.cityResolution,
+          );
+          if (parentCity == homeHexCity) {
+            cityTotal++;
+            switch (entry.value) {
+              case Team.red:
+                cityRed++;
+              case Team.blue:
+                cityBlue++;
+              case Team.purple:
+                cityPurple++;
+            }
+          }
+        }
+      }
+    } // end for loop
+    } // end if (includeLocalOverlay)
 
     return {
       'allRange': {
@@ -399,6 +467,7 @@ class HexRepository {
       'maxSize': _hexCache.maxSize,
       'hits': _hexCache.hits,
       'misses': _hexCache.misses,
+      'overlay': _localOverlayHexes.length,
     };
   }
 

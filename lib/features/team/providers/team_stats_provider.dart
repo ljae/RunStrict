@@ -6,6 +6,7 @@ import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/gmt2_date_utils.dart';
 import 'buff_provider.dart';
 import '../../../core/services/season_service.dart';
+import '../../../data/repositories/hex_repository.dart';
 
 export '../../../data/models/team_stats.dart';
 
@@ -84,22 +85,49 @@ class TeamStatsNotifier extends Notifier<TeamStatsState> {
           supabase.getUserYesterdayStats(userId, date: yesterdayStr)
         else
           Future.value(<String, dynamic>{'has_data': false}),
-        // Rankings also skipped on Day 1 — yesterday's rankings are cross-season
-        if (!isDay1)
-          supabase.getTeamRankings(userId, cityHex: cityHex)
-        else
-          Future.value(<String, dynamic>{}),
-        supabase.getHexDominance(parentHex: provinceHex),
+        // Rankings always fetched — server RPC handles season boundary internally.
+        // On Day 1, yesterday may be previous season's last day; the RPC returns
+        // empty [] if v_yesterday < current_season_start (server-side guard).
+        supabase.getTeamRankings(userId, cityHex: cityHex),
+
       ]);
 
       final yesterdayData = results[0];
       final rankingsData = results[1];
-      final dominanceData = results[2];
 
       final yesterdayStats = YesterdayStats.fromJson(yesterdayData);
       final rankings = TeamRankings.fromJson(rankingsData);
+      debugPrint(
+        'TeamStatsNotifier: cityHex=$cityHex | elite=${rankings.redEliteTop3.length} | '
+        'threshold=${rankings.eliteThreshold} | count=${rankings.redRunnerCountCity}',
+      );
 
-      var dominance = HexDominance.fromJson(dominanceData);
+      // Compute dominance from locally-downloaded hex data (HexRepository).
+      // The Supabase RPC returns wrong JSON structure (flat keys vs nested),
+      // and hexes table has no district_hex column for city-range filtering.
+      // HexRepository already has the full snapshot downloaded on app launch.
+      final localDominance = HexRepository().computeHexDominance(
+        homeHexAll: provinceHex ?? '',
+        homeHexCity: cityHex,
+        includeLocalOverlay: false, // Territory = snapshot-only (yesterday's state)
+      );
+      final allRangeMap = localDominance['allRange']!;
+      final cityRangeMap = localDominance['cityRange']!;
+      final hasCityData = cityHex != null && cityHex.isNotEmpty;
+      var dominance = HexDominance(
+        allRange: HexDominanceScope(
+          redHexCount: allRangeMap['red'] ?? 0,
+          blueHexCount: allRangeMap['blue'] ?? 0,
+          purpleHexCount: allRangeMap['purple'] ?? 0,
+        ),
+        cityRange: hasCityData
+            ? HexDominanceScope(
+                redHexCount: cityRangeMap['red'] ?? 0,
+                blueHexCount: cityRangeMap['blue'] ?? 0,
+                purpleHexCount: cityRangeMap['purple'] ?? 0,
+              )
+            : null,
+      );
       if (cityHex != null && cityHex.isNotEmpty) {
         final hexService = HexService();
         dominance = dominance.copyWith(

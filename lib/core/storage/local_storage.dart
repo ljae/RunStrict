@@ -25,7 +25,7 @@ class LocalStorage implements StorageService {
   LocalStorage._internal();
 
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 16; // v16: add retry_count, next_retry_at to runs
+  static const int _databaseVersion = 17; // v17: add has_flips to runs
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -81,7 +81,8 @@ class LocalStorage implements StorageService {
         sync_status TEXT DEFAULT 'pending',
         run_date TEXT,
         retry_count INTEGER DEFAULT 0,
-        next_retry_at INTEGER
+        next_retry_at INTEGER,
+        has_flips INTEGER NOT NULL DEFAULT 1
       )
     ''');
 
@@ -465,6 +466,16 @@ class LocalStorage implements StorageService {
         );
       } catch (e) {
         debugPrint('LocalStorage: v16 migration next_retry_at skipped: $e');
+      }
+    }
+    if (oldVersion < 17) {
+      // v16 → v17: Add has_flips column to runs
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns ADD COLUMN has_flips INTEGER NOT NULL DEFAULT 1',
+        );
+      } catch (e) {
+        debugPrint('LocalStorage: v17 migration skipped: $e');
       }
     }
   }

@@ -15,6 +15,7 @@ import '../../../core/providers/points_provider.dart';
 import '../../run/providers/run_provider.dart';
 import '../../map/providers/hex_data_provider.dart';
 import '../../../core/providers/user_repository_provider.dart';
+import '../../team/providers/team_stats_provider.dart';
 import '../../../core/providers/pro_provider.dart';
 
 class AppInitState {
@@ -246,10 +247,13 @@ class AppInitNotifier extends Notifier<AppInitState> {
       final userStats = result['user_stats'] as Map<String, dynamic>?;
       final serverSeasonPoints =
           (userStats?['season_points'] as num?)?.toInt() ?? 0;
-      final safeSeasonPoints = math.max(
-        serverSeasonPoints,
-        points.totalSeasonPoints,
-      );
+      // Use server value directly on season reset (server 0 is authoritative).
+      // For read-replica lag protection, fall back to local seasonPoints only
+      // (NOT totalSeasonPoints — that includes _localUnsyncedToday which gets
+      // added again by refreshFromLocalTotal() below, causing double-counting).
+      final safeSeasonPoints = serverSeasonPoints == 0
+          ? 0 // Season reset: always trust server zero
+          : math.max(serverSeasonPoints, points.seasonPoints);
       points.setSeasonPoints(safeSeasonPoints);
 
       if (userStats != null && appState.currentUser != null) {
@@ -267,10 +271,26 @@ class AppInitNotifier extends Notifier<AppInitState> {
       ref.read(buffProvider.notifier).setBuffFromLaunchSync(userBuff);
 
       await points.refreshFromLocalTotal();
+
+      // Refresh TeamScreen rankings so other runners' yesterday runs are visible.
+      // TeamScreen only loads on initState and does not re-fetch on resume,
+      // so stale rankings (showing only the user) persist without this call.
+      final user = ref.read(userRepositoryProvider);
+      if (user != null) {
+        final provinceHex = PrefetchService().homeHexAll;
+        ref.read(teamStatsProvider.notifier).loadTeamData(
+          user.id,
+          cityHex: cityHex,
+          provinceHex: provinceHex,
+          userTeam: user.team.name,
+          userName: user.name,
+        );
+      }
     } catch (e) {
       debugPrint('OnResume: Failed to refresh points - $e');
       await points.refreshFromLocalTotal();
     }
+
   }
 
   void clearPrefetchError() {

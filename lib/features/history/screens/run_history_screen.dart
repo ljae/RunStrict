@@ -34,6 +34,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
   // Range-based navigation state
   DateTime _rangeStart = DateTime.now();
   DateTime _rangeEnd = DateTime.now();
+  int _selectedCalendarYear = DateTime.now().year;
 
   /// Returns "now" in the selected display timezone.
   DateTime get _now =>
@@ -646,7 +647,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: years.map((year) {
-              final isSelected = _rangeStart.year == year;
+              final isSelected = _selectedCalendarYear == year;
               final yearRuns = allRuns.where((run) {
                 final displayTime = _convertToDisplayTimezone(run.startTime);
                 return displayTime.year == year;
@@ -660,6 +661,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
               return GestureDetector(
                 onTap: () {
                   setState(() {
+                    _selectedCalendarYear = year;
                     _calculateRange(DateTime(year, 6, 15), HistoryPeriod.year);
                   });
                 },
@@ -771,6 +773,10 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                     _selectedPeriod = period;
                     // Recalculate range when period changes
                     _calculateRange(_selectedDate ?? _now, period);
+                    // Reset year selection to current year when entering YEAR view
+                    if (period == HistoryPeriod.year) {
+                      _selectedCalendarYear = _now.year;
+                    }
                   });
                 },
                 child: AnimatedContainer(
@@ -2010,7 +2016,8 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
   }
 
   /// Filter runs for stats panel based on the ACTUAL period meaning:
-  /// - DAY: Today only
+  /// - DAY: Today only (uses run.runDate GMT+2 when available, matching
+  ///         the same date boundary as SQLite sumAllTodayPoints())
   /// - WEEK: Selected week range (Sun-Sat)
   /// - MONTH: Current month only
   /// - YEAR: Current year only
@@ -2026,10 +2033,23 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
 
     switch (period) {
       case HistoryPeriod.day:
-        // Today only
-        statsStart = today;
-        statsEnd = today;
-        break;
+        // Today only — use GMT+2 run_date when available so stats match
+        // the points system (PointsService / sumAllTodayPoints) exactly.
+        final todayGmt2 = Gmt2DateUtils.todayGmt2String;
+        return runs.where((run) {
+          if (run.runDate != null) {
+            // run.runDate is a GMT+2 date string set from run.endTime
+            return run.runDate == todayGmt2;
+          }
+          // Fallback for legacy runs without runDate: use display timezone
+          final displayTime = _convertToDisplayTimezone(run.startTime);
+          final runDate = DateTime(
+            displayTime.year,
+            displayTime.month,
+            displayTime.day,
+          );
+          return !runDate.isBefore(today) && !runDate.isAfter(today);
+        }).toList();
       case HistoryPeriod.week:
         // Selected week range (Sun-Sat based on _rangeStart)
         statsStart = DateTime(

@@ -110,7 +110,7 @@ class SeasonService {
   /// Days remaining until D-Day (The Void).
   /// Returns 0 on D-Day, negative values after D-Day.
   int get daysRemaining {
-    final now = DateTime.now();
+    final now = serverTime;
     final difference = seasonEndDate.difference(now).inDays;
     return difference.clamp(-999, seasonDurationDays);
   }
@@ -118,7 +118,7 @@ class SeasonService {
   /// Current day of the season (1-40).
   /// Day 1 is the first day, last day is before D-Day.
   int get currentSeasonDay {
-    final now = DateTime.now();
+    final now = serverTime;
     final daysPassed = now.difference(seasonStartDate).inDays;
     return (daysPassed + 1).clamp(1, seasonDurationDays + 1);
   }

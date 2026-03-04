@@ -5,8 +5,8 @@ import 'team.dart';
 ///
 /// STORED FIELDS (persisted to database):
 /// - id, startTime, endTime, distanceMeters, durationSeconds
-/// - hexesColored, teamAtRun, hexPath, buffMultiplier, cv, syncStatus
-///
+/// - id, startTime, endTime, distanceMeters, durationSeconds
+/// - hexesColored, teamAtRun, hexPath, buffMultiplier, cv, syncStatus, hasFlips
 /// TRANSIENT FIELDS (active run only, not stored):
 /// - route, hexesPassed, currentHexId, distanceInCurrentHex, isActive
 ///
@@ -27,6 +27,7 @@ class Run {
   final double? cv; // Coefficient of Variation (null for runs < 1km)
   final String syncStatus; // 'pending', 'synced', 'failed'
   final String? runDate; // GMT+2 date string (e.g., '2026-02-13')
+  final bool hasFlips; // Whether this run had any hex flips
 
   // TRANSIENT FIELDS (active run only, not stored)
   final List<LocationPoint> route;
@@ -49,6 +50,7 @@ class Run {
     this.cv,
     this.syncStatus = 'pending',
     this.runDate,
+    this.hasFlips = true,
     List<LocationPoint>? route,
     List<String>? hexesPassed,
     this.currentHexId,
@@ -136,6 +138,7 @@ class Run {
     'cv': cv,
     'sync_status': syncStatus,
     'run_date': runDate,
+    'has_flips': hasFlips ? 1 : 0,
   };
 
   /// From local SQLite storage
@@ -199,6 +202,7 @@ class Run {
           map['syncStatus'] as String? ??
           'pending',
       runDate: map['run_date'] as String?,
+      hasFlips: (map['has_flips'] as int? ?? 1) == 1,
     );
   }
 
@@ -215,6 +219,7 @@ class Run {
     'hex_parents': hexParents,
     'buff_multiplier': buffMultiplier,
     'cv': cv,
+    'has_flips': hasFlips,
   };
 
   /// From Supabase row (snake_case)
@@ -249,6 +254,8 @@ class Run {
       hexParents: List<String>.from(row['hex_parents'] as List? ?? []),
       buffMultiplier: (row['buff_multiplier'] as num?)?.toInt() ?? 1,
       cv: (row['cv'] as num?)?.toDouble(),
+      hasFlips: (row['has_flips'] as bool?) ??
+          ((row['flip_count'] as num?)?.toInt() ?? 0) > 0,
     );
   }
 
@@ -268,6 +275,7 @@ class Run {
     Object? cv = const _Unspecified(),
     String? syncStatus,
     String? runDate,
+    bool? hasFlips,
     List<LocationPoint>? route,
     List<String>? hexesPassed,
     String? currentHexId,
@@ -288,6 +296,7 @@ class Run {
       cv: cv is _Unspecified ? this.cv : cv as double?,
       syncStatus: syncStatus ?? this.syncStatus,
       runDate: runDate ?? this.runDate,
+      hasFlips: hasFlips ?? this.hasFlips,
       route: route ?? this.route,
       hexesPassed: hexesPassed ?? this.hexesPassed,
       currentHexId: currentHexId ?? this.currentHexId,

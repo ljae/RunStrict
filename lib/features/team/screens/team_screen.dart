@@ -184,6 +184,11 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
   }
 
   String _yesterdayLabel() {
+    // Day 1: yesterday is last season — show new-season context instead
+    if (SeasonService().isFirstDay) {
+      final n = SeasonService().seasonNumber;
+      return 'SEASON $n · DAY 1';
+    }
     // Show the actual server-timezone date being queried
     final stats = ref.read(teamStatsProvider).yesterdayStats;
     final date = stats?.date;
@@ -212,27 +217,35 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _yesterdayLabel(),
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Colors.white30,
-              letterSpacing: 1.5,
-            ),
+          Row(
+            children: [
+              Text(
+                _yesterdayLabel(),
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white30,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const Spacer(),
+              _buildSnapshotBadge(),
+            ],
           ),
           const SizedBox(height: 12),
           if (!hasData)
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'No runs yesterday',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: SeasonService().isFirstDay
+                    ? _buildDay1YesterdayBody()
+                    : Text(
+                        'No flip points yesterday',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ),
               ),
             )
           else
@@ -311,6 +324,51 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  /// Day 1 body for the YESTERDAY card — shown when season just started.
+  /// Replaces the misleading "No flip points yesterday" on season Day 1.
+  Widget _buildDay1YesterdayBody() {
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF8A30).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: const Color(0xFFFF8A30).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                'NEW SEASON',
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFFF8A30),
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Buffs are calculated at midnight GMT+2.\nRun today to unlock higher multipliers.',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.4),
+            height: 1.6,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+      ],
     );
   }
 
@@ -566,7 +624,10 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (userTeam == Team.red) ...[
+              if (SeasonService().isFirstDay) ...[
+                // Day 1: no yesterday rankings exist yet
+                _buildDay1RankingsBody(),
+              ] else if (userTeam == Team.red) ...[
                 // Show Elite top 3 only
                 _buildRankingGroup(
                   'ELITE',
@@ -589,7 +650,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                   ),
                 ),
               ],
-              if (rankings != null && userTeam != Team.purple) ...[
+              if (rankings != null && userTeam != Team.purple && !SeasonService().isFirstDay) ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -654,6 +715,35 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Day 1 rankings body — no yesterday data exists yet.
+  Widget _buildDay1RankingsBody() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        children: [
+          Text(
+            'Rankings start tomorrow',
+            style: GoogleFonts.sora(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Run today → Top 20% become Elite at midnight',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: Colors.white.withValues(alpha: 0.35),
+              letterSpacing: 0.3,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -818,6 +908,20 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
               ),
             ],
           ),
+          // Day 1: explain why everyone starts at 1x
+          if (SeasonService().isFirstDay) ...[
+            const SizedBox(height: 8),
+            Text(
+              'ALL START EQUAL TODAY · RUN TO EARN TOMORROW’S BUFF',
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.25),
+                letterSpacing: 1.3,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ],
       ),
     );

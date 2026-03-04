@@ -23,13 +23,42 @@ class VoiceAnnouncementService {
 
     await _loadMuteState();
 
-    _tts = FlutterTts();
-    await _tts!.setLanguage('en-US');
-    await _tts!.setSpeechRate(0.55);
-    await _tts!.setVolume(1.0);
+    try {
+      _tts = FlutterTts();
+      await _tts!.setLanguage('en-US');
+      await _tts!.setSpeechRate(0.55);
+      await _tts!.setVolume(1.0);
 
-    _initialized = true;
-    debugPrint('VoiceAnnouncementService: initialized (muted=$_muted)');
+      // iOS: configure audio session to survive competition from GPS background
+      // audio and Google Ads SDK (which sets AVAudioSessionCategoryAmbient).
+      // Without this, TTS silently fails on iOS when another audio session is active.
+      if (Platform.isIOS) {
+        // setIosAudioCategory (setCategory) MUST come before setSharedInstance (setActive).
+        // AVAudioSession requires the category to be set before the session is activated.
+        await _tts!.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+            IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+          ],
+          IosTextToSpeechAudioMode.defaultMode,
+        );
+        await _tts!.setSharedInstance(true);
+      }
+
+      _initialized = true;
+      if (Platform.isIOS) {
+        // AVSpeechSynthesizer produces NO audio on iOS Simulator — real device only.
+        debugPrint('VoiceAnnouncementService: initialized (muted=$_muted) — NOTE: audio only works on real device, not Simulator');
+      } else {
+        debugPrint('VoiceAnnouncementService: initialized (muted=$_muted)');
+      }
+    } catch (e) {
+      debugPrint('VoiceAnnouncementService: initialization FAILED — $e');
+      _tts = null;
+      // _initialized stays false; voice silently disabled for this run.
+    }
   }
 
   /// Toggle mute on/off. Returns the new muted state.
@@ -77,8 +106,12 @@ class VoiceAnnouncementService {
 
   /// Announce run start ("Run started. Let's go!").
   Future<void> announceRunStart() async {
+    debugPrint(
+      'VoiceAnnouncementService.announceRunStart: initialized=$_initialized muted=$_muted',
+    );
     if (!_initialized || _muted) return;
     await _tts!.speak("Run started. Let's go!");
+    debugPrint('VoiceAnnouncementService.announceRunStart: speak() called');
   }
 
   /// Announce a same-team hex ("Friendly zone").

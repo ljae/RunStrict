@@ -250,6 +250,7 @@ class AppStateNotifier extends Notifier<AppState> {
     required DateTime birthday,
     String? nationality,
     String? manifesto,
+    DateTime? termsAcceptedAt,
   }) async {
     if (state.authUserId == null) {
       throw StateError('Must authenticate before creating profile');
@@ -265,6 +266,7 @@ class AppStateNotifier extends Notifier<AppState> {
         birthday: birthday,
         nationality: nationality,
         manifesto: manifesto,
+        termsAcceptedAt: termsAcceptedAt ?? DateTime.now().toUtc(),
       );
       final userRepo = ref.read(userRepositoryProvider.notifier);
       await userRepo.setUser(user);

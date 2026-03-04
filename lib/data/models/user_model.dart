@@ -29,6 +29,13 @@ class UserModel {
   /// Total number of runs completed
   final int totalRuns;
 
+  /// UTC timestamp when the user accepted the Terms of Service and Privacy Policy.
+  /// Null for users registered before terms enforcement (grandfathered).
+  final DateTime? termsAcceptedAt;
+
+  /// Version of legal documents accepted (e.g. "1.0").
+  final String? legalVersion;
+
   const UserModel({
     required this.id,
     required this.name,
@@ -46,6 +53,8 @@ class UserModel {
     this.avgPaceMinPerKm,
     this.avgCv,
     this.totalRuns = 0,
+    this.termsAcceptedAt,
+    this.legalVersion,
   });
 
   bool get isPurple => team == Team.purple;
@@ -106,6 +115,8 @@ class UserModel {
     double? avgPaceMinPerKm,
     double? avgCv,
     int? totalRuns,
+    DateTime? termsAcceptedAt,
+    String? legalVersion,
   }) {
     return UserModel(
       id: id,
@@ -126,6 +137,8 @@ class UserModel {
       avgPaceMinPerKm: avgPaceMinPerKm ?? this.avgPaceMinPerKm,
       avgCv: avgCv ?? this.avgCv,
       totalRuns: totalRuns ?? this.totalRuns,
+      termsAcceptedAt: termsAcceptedAt ?? this.termsAcceptedAt,
+      legalVersion: legalVersion ?? this.legalVersion,
     );
   }
 
@@ -149,6 +162,8 @@ class UserModel {
       avgPaceMinPerKm: avgPaceMinPerKm,
       avgCv: avgCv,
       totalRuns: totalRuns,
+      termsAcceptedAt: termsAcceptedAt,
+      legalVersion: legalVersion,
     );
   }
 
@@ -173,6 +188,10 @@ class UserModel {
     avgPaceMinPerKm: (row['avg_pace_min_per_km'] as num?)?.toDouble(),
     avgCv: (row['avg_cv'] as num?)?.toDouble(),
     totalRuns: (row['total_runs'] as num?)?.toInt() ?? 0,
+    termsAcceptedAt: row['terms_accepted_at'] != null
+        ? DateTime.parse(row['terms_accepted_at'] as String)
+        : null,
+    legalVersion: row['legal_version'] as String?,
   );
 
   Map<String, dynamic> toRow() => {
@@ -189,6 +208,8 @@ class UserModel {
     'avg_pace_min_per_km': avgPaceMinPerKm,
     'avg_cv': avgCv,
     'total_runs': totalRuns,
+    'terms_accepted_at': termsAcceptedAt?.toUtc().toIso8601String(),
+    'legal_version': legalVersion,
   };
 
   Map<String, dynamic> toJson() => {
@@ -208,6 +229,8 @@ class UserModel {
     'avgPaceMinPerKm': avgPaceMinPerKm,
     'avgCv': avgCv,
     'totalRuns': totalRuns,
+    'termsAcceptedAt': termsAcceptedAt?.toIso8601String(),
+    'legalVersion': legalVersion,
   };
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -231,5 +254,9 @@ class UserModel {
     avgPaceMinPerKm: (json['avgPaceMinPerKm'] as num?)?.toDouble(),
     avgCv: (json['avgCv'] as num?)?.toDouble(),
     totalRuns: (json['totalRuns'] as num?)?.toInt() ?? 0,
+    termsAcceptedAt: json['termsAcceptedAt'] != null
+        ? DateTime.parse(json['termsAcceptedAt'] as String)
+        : null,
+    legalVersion: json['legalVersion'] as String?,
   );
 }

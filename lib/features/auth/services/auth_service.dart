@@ -6,6 +6,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../data/models/team.dart';
 import '../../../data/models/user_model.dart';
+import '../../../core/legal/legal_content.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -118,13 +119,17 @@ class AuthService {
     required DateTime birthday,
     String? nationality,
     String? manifesto,
+    DateTime? termsAcceptedAt,
   }) async {
+    final now = termsAcceptedAt ?? DateTime.now().toUtc();
     final row = <String, dynamic>{
       'id': userId,
       'name': username,
       'sex': sex,
       'birthday': birthday.toIso8601String().substring(0, 10),
       'nationality': nationality,
+      'terms_accepted_at': now.toIso8601String(),
+      'legal_version': kLegalVersion,
     };
     if (manifesto != null) row['manifesto'] = manifesto;
 
@@ -153,6 +158,8 @@ class AuthService {
       birthday: birthday,
       nationality: nationality,
       manifesto: manifesto,
+      termsAcceptedAt: now,
+      legalVersion: kLegalVersion,
     );
 
     debugPrint('AuthService: Profile created - $userId');

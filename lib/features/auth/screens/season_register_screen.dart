@@ -367,10 +367,11 @@ class _FlameTeamHalf extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.local_fire_department_rounded,
-              size: 32,
-              color: _color,
+            child: Image.asset(
+              'assets/images/flame.webp',
+              width: 36,
+              height: 36,
+              fit: BoxFit.contain,
             ),
           ),
         );
@@ -671,7 +672,7 @@ class _WaveTeamHalf extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.waves_rounded, size: 32, color: _color),
+            child: Image.asset('assets/images/wave.webp', width: 36, height: 36, fit: BoxFit.contain),
           ),
         );
       },

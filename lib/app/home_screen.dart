@@ -154,9 +154,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   /// Refresh app data on resume (called by AppLifecycleManager).
   ///
-  /// Refreshes:
-  /// - Hex map data (clear cache to force re-fetch)
-  /// - Leaderboard rankings
+  /// Refreshes hex snapshot + overlay from server, then notifies the map.
+  /// Does NOT call clearAllHexData() — that would wipe the local overlay
+  /// (today's run flips) which must survive resume events.
   Future<void> _refreshAppData() async {
     debugPrint('HomeScreen: Refreshing app data on resume');
 
@@ -164,8 +164,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final leaderboard = ref.read(leaderboardProvider.notifier);
 
     try {
-      // Clear hex cache to force fresh data on next map view
-      ref.read(hexDataProvider.notifier).clearAllHexData();
+      // Refresh hex snapshot + local overlay from server.
+      // PrefetchService handles Day 1 (no snapshot) vs normal days correctly,
+      // and preserves today's run flips via _localOverlayHexes.
+      await PrefetchService().refresh();
+      if (mounted) {
+        ref.read(hexDataProvider.notifier).notifyHexDataChanged();
+      }
 
       // Refresh leaderboard data
       await leaderboard.refreshLeaderboard();

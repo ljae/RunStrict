@@ -20,9 +20,9 @@
 - User location shown as **person icon inside a hexagon** (team-colored)
 - Performance-optimized (no 3D rendering)
 - Serverless: No backend API server (Supabase RLS + Edge Functions)
-- **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync")
+- **No Realtime/WebSocket**: All data synced on app launch, OnResume, and run completion ("The Final Sync"). ALL completed runs are uploaded, regardless of flip count.
 - **Server verified**: Points calculated by client, validated by server (≤ hex_count × multiplier). Accepted risk: client-authoritative scoring; cap validation bounds maximum damage.
-- **Offline resilient**: Failed syncs retry automatically via `SyncRetryService` (on launch, OnResume, next run)
+- **Offline resilient**: Failed syncs retry automatically via `SyncRetryService` (on launch, OnResume, next run). 0-flip runs are now included in sync retries.
 - **Crash recovery**: `run_checkpoint` table saves state on each hex flip (including serialized `config_snapshot`); recovered on next app launch
 
 **Tech Stack**: Flutter 3.10+, Dart, Riverpod 3.0 (state management), Mapbox, Supabase (PostgreSQL), H3 (hex grid)
@@ -515,6 +515,66 @@ HexRepository().applyLocalOverlay(localFlips);
 
 ---
 
+## Timezone Architecture
+
+### The Two-Domain Rule (NEVER VIOLATE)
+
+| Domain | Timezone | Dart Source |
+|--------|----------|-------------|
+| Running History (SQLite: runs, laps, calendar display) | **Device Local Time** | `DateTime.now()` / `DateTime.fromMillisecondsSinceEpoch()` |
+| Season countdown, D-day, `daysRemaining`, `currentSeasonDay` | **GMT+2** | `SeasonService.serverTime` |
+| Daily buff calculation ("yesterday") | **GMT+2** | `Gmt2DateUtils.todayGmt2.subtract(Duration(days: 1))` |
+| Hex snapshots (`snapshot_date`) | **GMT+2** | `Gmt2DateUtils.todayGmt2String` |
+| Leaderboard rankings | **GMT+2** | Server `CURRENT_DATE` (`Etc/GMT-2`) |
+| TeamScreen FLAME RANKINGS | **GMT+2** | Server `CURRENT_DATE` (`Etc/GMT-2`) |
+| Midnight timer / daily reset trigger | **GMT+2** | `SeasonService.serverTime` |
+| `run_date` in `run_history` table | **GMT+2** | Server: `end_time AT TIME ZONE 'Etc/GMT-2'` |
+| Fallback dates in server-domain models (`YesterdayStats`) | **GMT+2** | `Gmt2DateUtils.todayGmt2` |
+
+### Client-Side GMT+2 Sources
+- **`Gmt2DateUtils.todayGmt2`** — canonical "what date is it in GMT+2?" for all game logic
+- **`Gmt2DateUtils.todayGmt2String`** — formatted `YYYY-MM-DD` for Supabase date params
+- **`Gmt2DateUtils.toGmt2DateString(dt)`** — convert any DateTime to GMT+2 date string
+- **`SeasonService.serverTime`** — full `DateTime` in GMT+2 (for countdowns, timer scheduling)
+
+### Server-Side
+All RPCs use `AT TIME ZONE 'Etc/GMT-2'` for date derivation.
+```sql
+-- run_date in finalize_run:
+(p_end_time AT TIME ZONE 'Etc/GMT-2')::DATE
+-- yesterday in get_user_buff, get_team_rankings:
+v_yesterday := (CURRENT_TIMESTAMP AT TIME ZONE 'Etc/GMT-2')::DATE - 1;
+```
+
+### When `DateTime.now()` Is CORRECT (Local / Wall-Clock Concerns)
+- Throttle/debounce timestamps (`_lastPrefetchTime`, `_lastRefreshTime`)
+- GPS timing and polling intervals
+- Cache TTL calculations
+- Animation timestamps
+- `run_calendar.dart` grouping (Running History domain — local is correct)
+- `Run.startTime` / `Run.endTime` storage (stored as UTC epoch ms, displayed in local)
+- `_resolveCurrentSeason()` elapsed-days math (UTC-to-UTC duration, not a date display)
+
+### When `DateTime.now()` Is WRONG (Must Use GMT+2)
+- "Yesterday" / "today" logic for buffs, stats, snapshots
+- Season day calculations (`currentSeasonDay`, `daysRemaining`)
+- Midnight timer scheduling (`_scheduleMidnightTimer`)
+- `run_date` derivation (use `Gmt2DateUtils.toGmt2DateString`)
+- Fallback/empty dates in server-domain models (e.g., `YesterdayStats`, `TeamRankings`)
+
+### Midnight-Crossing Runs
+A run's `end_time` (UTC) determines its GMT+2 date. A run starting 23:50 GMT+2 and ending
+00:10 GMT+2 records `run_date = tomorrow` and affects the next day's snapshot.
+`AppLifecycleManager` tracks `_midnightCrossedDuringRun` and defers snapshot refresh until
+after the run completes.
+
+### Season Boundary Math
+`_resolveCurrentSeason()` uses `DateTime.now().toUtc()` (NOT `serverTime`) because it computes
+elapsed days between two UTC-anchored epoch values. This is pure duration math, not a date
+display. Using `serverTime` here would incorrectly shift season boundaries by 2 hours.
+
+---
+
 ## Theme & Colors
 
 All colors centralized in `lib/theme/app_theme.dart` (re-exported via `lib/app/theme.dart`).
@@ -731,7 +791,7 @@ users            -- id, name, team, avatar, season_points, manifesto,
 hexes            -- id (H3 index), last_runner_team, last_flipped_at, parent_hex (Res 5 province)
 hex_snapshot     -- hex_id, last_runner_team, snapshot_date, parent_hex (frozen daily snapshot)
 runs             -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
-run_history      -- id, user_id, run_date, distance_km, duration_seconds, flip_count, flip_points, cv
+run_history      -- id, user_id, run_date, distance_km, duration_seconds, flip_count, flip_points, cv, has_flips
 daily_stats      -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
 daily_buff_stats -- stat_date, city_hex, dominant_team, red/blue/purple_hex_count,
                  -- red_elite_threshold_points, purple_participation_rate
@@ -741,7 +801,7 @@ season_leaderboard_snapshot -- user_id, season_number, rank, name, team, season_
 ```
 
 **Key RPC Functions:**
-- `finalize_run(...)` → cap-validate flip_points, update live hexes for buff/dominance, store district_hex
+- `finalize_run(...)` → cap-validate flip_points, update live hexes for buff/dominance, store district_hex. Handles 0-flip runs safely.
 - `get_user_buff(user_id)` → get user's current buff multiplier
 - `calculate_daily_buffs()` → daily cron at midnight GMT+2
 - `build_daily_hex_snapshot()` → daily cron to build tomorrow's snapshot at midnight GMT+2
@@ -820,3 +880,101 @@ flutter test --coverage                   # With coverage
 ## Domain Knowledge
 
 > For detailed game rules, data architecture, sync strategy, and UI specs → see [DEVELOPMENT_SPEC.md](./DEVELOPMENT_SPEC.md)
+
+
+---
+
+## Coding Process — Regression Prevention
+
+> **Why this exists**: Every bug in `error-fix-history.md` was caused by an edit that didn't trace the full data flow before changing code. This section encodes the hard-won lessons into a mandatory process.
+
+### Pre-Edit Checklist (MANDATORY before any code change)
+
+Run through ALL of these before touching any file:
+
+```
+[ ] 1. READ error-fix-history.md — search for the component/RPC you're about to edit.
+       Is there a prior bug related to this area? If yes, understand it before proceeding.
+
+[ ] 2. TRACE the data flow (both directions):
+       - Who WRITES the data? (which RPC, which service, which notifier)
+       - Who READS it? (which provider reads this, which screen consumes that provider)
+       - Who CALLS the function you're changing? Grep for it.
+
+[ ] 3. LIST all consumers of the function/provider you're modifying.
+       A change to get_hex_snapshot() affects: PrefetchService → HexRepository → HexDataProvider
+       → hexagon_map.dart → MapScreen. Touch one, verify all.
+
+[ ] 4. IDENTIFY the data domain (never mix):
+       - Running History = local SQLite only (allRuns, laps, cv, pace)
+       - Hex + Leaderboard + Team = server-side (hex_snapshot, season_leaderboard_snapshot)
+       - Points header = hybrid (PointsService: server baseline + local unsynced)
+
+[ ] 5. CHECK OnResume completeness — if your change adds a new stateful provider,
+       add its refresh to _onAppResume() in app_init_provider.dart.
+
+[ ] 6. RUN flutter analyze before AND after your edit. Must be 0 errors both times.
+```
+
+### Post-Edit Verification (MANDATORY before marking any task done)
+
+```
+[ ] 1. flutter analyze — 0 issues
+[ ] 2. LSP diagnostics on every modified file — 0 errors
+[ ] 3. Trace the actual app call path (not just the RPC in isolation).
+       Direct RPC test ≠ fix verified. Trace from widget → provider → service → RPC.
+[ ] 4. Update error-fix-history.md with:
+       - Problem description
+       - Root cause
+       - Fix applied (with code snippet)
+       - Verification steps taken
+       - Lesson learned
+```
+
+### Critical Invariants (Never Violate)
+
+These encode the most expensive lessons from `error-fix-history.md`:
+
+| # | Invariant | Where it applies |
+|---|-----------|-----------------|
+| 1 | **Snapshot date = D + 1** | `get_hex_snapshot()` queries `snapshot_date = GMT+2_date + 1`. The write and read must both use `+ 1`. | 
+| 2 | **Server response is truth** | After `finalize_run()`, use `syncResult['points_earned']`, NOT client-calculated `flipPoints`. | 
+| 3 | **Local overlay is eviction-immune** | `_localOverlayHexes` in HexRepository is a plain Map — NEVER put it in the LRU cache. | 
+| 4 | **clearAll() is nuclear** | Only call `HexRepository().clearAll()` on season reset or province change. Use `clearLocalOverlay()` for day rollover. | 
+| 5 | **OnResume refreshes ALL stateful providers** | `_onAppResume()` must refresh: hex, leaderboard, points, buff, teamStats. Adding a new server-derived provider? Add it here too. | 
+| 6 | **initState fires once** | `TeamScreen._loadData()` is called from `initState` — it does NOT re-fire on app resume if screen is in stack. Server data must be pushed via `_onAppResume()`. | 
+| 7 | **Two data domains — never mix** | ALL TIME stats = local SQLite `runs.fold()`. Season data = server RPCs. Never read `UserModel.totalDistanceKm` for display (it's a server aggregate, resets on season). | 
+| 8 | **Season boundary awareness** | All RPCs querying `run_history` for 'yesterday' must check if yesterday < current season start. On Day 1, yesterday = last season's last day. | 
+| 9 | **RPC shape = client parser shape** | When an RPC response changes keys, `fromJson` silently returns 0. Always verify JSON key names match between RPC and client parser. | 
+| 10 | **AppLifecycleManager singleton** | Only the first `initialize()` call wins. Do not call it from multiple places. | 
+
+### Debugging Protocol
+
+When a bug is reported:
+1. **Search `error-fix-history.md`** for the affected screen/provider/RPC first — it may be a repeat.
+2. **Trace the full call path** (widget → provider → service → RPC → DB) before forming a hypothesis.
+3. **Verify via app call path**, not direct RPC test. The bug is often in *when* the RPC is called, not *what* it returns.
+4. After 2 failed fix attempts → consult Oracle with full failure context.
+5. **Never fix + refactor simultaneously.** Fix minimally. Document. Then refactor separately if needed.
+
+### Editing a Supabase RPC
+
+Extra care when changing server-side functions:
+```
+[ ] 1. Check what client-side parser reads the response (grep for RPC name in lib/).
+[ ] 2. Verify JSON key names match between the RPC SELECT and the Dart fromJson parser.
+[ ] 3. Test the RPC directly in SQL to confirm output shape.
+[ ] 4. Re-run the app call path (not just the SQL query) to confirm end-to-end.
+[ ] 5. Write a migration (never edit existing migrations).
+[ ] 6. Document the date/offset convention if time math is involved.
+```
+
+### Editing a Provider or Notifier
+
+```
+[ ] 1. List every widget that calls ref.watch(thisProvider) or ref.read(thisProvider).
+[ ] 2. If state shape changes (new field, renamed field), update ALL consumers.
+[ ] 3. If provider holds server data: confirm it's refreshed in _onAppResume().
+[ ] 4. If provider holds local data: confirm it survives app resume (no unintended clearAll).
+[ ] 5. Check ref.mounted after every await — stale state after async ops is silent.
+```

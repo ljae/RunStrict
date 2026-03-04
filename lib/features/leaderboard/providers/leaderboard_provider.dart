@@ -80,7 +80,11 @@ class LeaderboardEntry {
   String? get provinceName {
     final hex = homeHexEnd ?? homeHex;
     if (hex == null) return null;
-    return HexService().getTerritoryName(hex);
+    try {
+      return HexService().getTerritoryName(hex);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Country code to flag emoji (e.g., 'KR' → '🇰🇷')

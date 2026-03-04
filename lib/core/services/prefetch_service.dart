@@ -356,12 +356,15 @@ class PrefetchService {
   /// After loading, applies local overlay (user's own today's flips from SQLite).
   Future<void> _downloadHexData() async {
     // On Season Day 1, no snapshot exists and hexes table is empty after reset.
-    // Skip all network calls — just clear the cache and apply local overlay.
+    // Do NOT call clearAll() here — that would wipe the local overlay (today's
+    // run flips) which is the only hex data that exists on Day 1.
+    // Instead, just refresh the local overlay from SQLite so the map shows the
+    // user's own flips without losing anything.
     if (SeasonService().isFirstDay) {
-      debugPrint('PrefetchService: Day 1 — skipping snapshot download');
+      debugPrint('PrefetchService: Day 1 — skipping snapshot download, refreshing overlay only');
       final repo = HexRepository();
-      repo.clearAll();
-      await _applyLocalOverlay(repo);
+      repo.clearLocalOverlay(); // reset overlay so SQLite is the sole source
+      await _applyLocalOverlay(repo); // re-populate from today's SQLite runs
       _lastPrefetchTime = DateTime.now();
       await _saveLastPrefetchTime(_lastPrefetchTime!);
       return;

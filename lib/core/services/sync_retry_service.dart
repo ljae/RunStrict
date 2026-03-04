@@ -66,12 +66,6 @@ class SyncRetryService {
           '(attempt ${retryCount + 1}/$maxRetries)',
         );
 
-        // Skip runs with no hex captures (nothing to sync)
-        if (run.hexPath.isEmpty) {
-          await _localStorage.updateRunSyncStatus(run.id, 'synced');
-          debugPrint('SyncRetryService: Marked $runId synced (no hexes)');
-          continue;
-        }
 
         final syncResult = await _supabaseService.finalizeRun(run);
         await _localStorage.updateRunSyncStatus(run.id, 'synced');

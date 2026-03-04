@@ -189,8 +189,13 @@ class _TraitorGateScreenState extends ConsumerState<TraitorGateScreen> {
                       ),
                     ],
                   ),
-                  child: const Center(
-                    child: Text('💀', style: TextStyle(fontSize: 56)),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/chaos.webp',
+                      width: 110,
+                      height: 110,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
 

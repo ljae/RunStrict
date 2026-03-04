@@ -13,7 +13,7 @@ A location-based running game that gamifies territory control through hexagonal 
 - **Season**: Fixed 40 days → D-Day reset (The Void)
 - **Teams**: Red (FLAME), Blue (WAVE), Purple (CHAOS - available anytime, irreversible)
 - **Hex System**: Displays color of **last runner** — no ownership. H3 Resolution 9.
-- **Sync Model**: No Realtime/WebSocket. Data synced on app launch, OnResume, and run completion ("The Final Sync")
+- **Sync Model**: No Realtime/WebSocket. Data synced on app launch, OnResume, and run completion ("The Final Sync"). ALL completed runs are uploaded, regardless of flip count.
 - **Scoring**: `flip_points = hexes_flipped × buff_multiplier` — server cap-validated (≤ hex_count × multiplier)
 - **Privacy**: No runner IDs stored in hexes. Minimal timestamps for conflict resolution only.
 
@@ -136,7 +136,7 @@ lib/
 
 | Function | Purpose |
 |----------|---------|
-| `finalize_run(...)` | Accept client flip_points with cap validation, update live hexes, store district_hex |
+| `finalize_run(...)` | Accept client flip_points with cap validation, update live hexes, store district_hex. Handles 0-flip runs safely. |
 | `get_user_buff(user_id)` | Get user's current buff multiplier |
 | `calculate_daily_buffs()` | Daily cron: compute all buffs at midnight GMT+2 |
 | `build_daily_hex_snapshot()` | Daily cron: build tomorrow's hex snapshot |

@@ -1,7 +1,8 @@
-/// Team statistics models extracted from TeamStatsProvider.
-///
-/// These display models support the Team Screen UI and buff comparison.
+// Team statistics models extracted from TeamStatsProvider.
+//
+// These display models support the Team Screen UI and buff comparison.
 import '../../core/services/buff_service.dart';
+import '../../core/utils/gmt2_date_utils.dart';
 
 class YesterdayStats {
   final bool hasData;
@@ -48,14 +49,14 @@ class YesterdayStats {
       runCount: (json['run_count'] as num?)?.toInt() ?? 0,
       date:
           DateTime.tryParse(json['date'] as String? ?? '') ??
-          DateTime.now().subtract(const Duration(days: 1)),
+          Gmt2DateUtils.todayGmt2.subtract(const Duration(days: 1)),
     );
   }
 
   factory YesterdayStats.empty() => YesterdayStats(
     hasData: false,
     runCount: 0,
-    date: DateTime.now().subtract(const Duration(days: 1)),
+    date: Gmt2DateUtils.todayGmt2.subtract(const Duration(days: 1)),
   );
 }
 

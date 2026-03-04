@@ -533,7 +533,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
   Widget _buildSecondaryStats(RunNotifier provider, Color teamColor) {
     final buffState = ref.watch(buffProvider);
     final multiplier = buffState.effectiveMultiplier;
-    final showMultiplier = multiplier > 1;
+    // Always show buff indicator during running (even at 1x)
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -562,8 +562,8 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
               color: teamColor,
             ),
           ),
-          // Buff multiplier display (only show when > 1x)
-          if (showMultiplier) ...[
+          // Buff multiplier display (always visible during running)
+          ...[
             Container(
               width: 1,
               height: 36,
@@ -574,7 +574,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
                 icon: Icons.flash_on,
                 value: '${multiplier}x',
                 label: 'BUFF',
-                color: Colors.amber,
+                color: multiplier > 1 ? Colors.amber : AppTheme.textSecondary,
               ),
             ),
           ],
