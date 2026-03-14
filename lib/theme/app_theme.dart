@@ -167,11 +167,11 @@ class AppTheme {
 
       // Card Theme - Minimal
       cardTheme: CardThemeData(
-        color: surfaceColor.withOpacity(0.5),
+        color: surfaceColor.withValues(alpha: 0.5),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 1),
         ),
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       ),
@@ -197,7 +197,7 @@ class AppTheme {
       // Input Decoration
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceColor.withOpacity(0.5),
+        fillColor: surfaceColor.withValues(alpha: 0.5),
         contentPadding: const EdgeInsets.all(16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -205,16 +205,16 @@ class AppTheme {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.05)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: electricBlue, width: 1.5),
         ),
-        hintStyle: GoogleFonts.sora(color: textSecondary.withOpacity(0.5)),
+        hintStyle: GoogleFonts.sora(color: textSecondary.withValues(alpha: 0.5)),
       ),
 
-      dividerColor: Colors.white.withOpacity(0.05),
+      dividerColor: Colors.white.withValues(alpha: 0.05),
     );
   }
 
@@ -236,7 +236,7 @@ class AppTheme {
   static List<BoxShadow> glowShadow(Color color, {double intensity = 1.0}) {
     return [
       BoxShadow(
-        color: color.withOpacity((0.15 * intensity).clamp(0.0, 1.0)),
+        color: color.withValues(alpha: (0.15 * intensity).clamp(0.0, 1.0)),
         blurRadius: (20 * intensity).abs(), // Ensure non-negative
         spreadRadius: -5 * intensity,
         offset: const Offset(0, 10),
@@ -249,12 +249,12 @@ class AppTheme {
     final baseColor = color ?? surfaceColor;
 
     return BoxDecoration(
-      color: baseColor.withOpacity(0.6), // More transparency
+      color: baseColor.withValues(alpha: 0.6), // More transparency
       borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.2),
+          color: Colors.black.withValues(alpha: 0.2),
           blurRadius: 30,
           offset: const Offset(0, 10),
         ),
@@ -267,7 +267,7 @@ class AppTheme {
   static BoxDecoration tubularBorder(Color color, {double width = 2.0}) {
     return BoxDecoration(
       shape: BoxShape.circle,
-      border: Border.all(color: color.withOpacity(0.5), width: width),
+      border: Border.all(color: color.withValues(alpha: 0.5), width: width),
     );
   }
 

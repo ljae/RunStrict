@@ -55,6 +55,7 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
   PointAnnotationManager? _labelManager;
   PolylineAnnotationManager? _polylineManager; // For route tracking line
   bool _isMapReady = false;
+  bool _isSettingUpLayers = false;
   List<String> _visibleHexIds = [];
   double _currentZoom = 14.0;
   String? _currentUserHexId;
@@ -153,6 +154,7 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
           styleUri: MapboxStyles.DARK,
           onMapCreated: _onMapCreated,
           onCameraChangeListener: _onCameraChangeListener,
+          onStyleLoadedListener: _onStyleLoaded,
         ),
         // Custom glowing location marker overlay
         if (_isMapReady && _userLocation != null && widget.showUserLocation)
@@ -183,104 +185,125 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
         .createPointAnnotationManager();
     _polylineManager = await _mapboxMap!.annotations
         .createPolylineAnnotationManager();
-
-    // Add GeoJSON source for hex polygons (enables atomic updates without flash)
-    await mapboxMap.style.addSource(
-      GeoJsonSource(
-        id: _hexSourceId,
-        data: '{"type":"FeatureCollection","features":[]}',
-      ),
-    );
-
-    // Add fill layer for hex polygons with data-driven styling
-    // Create layer with default values first, then apply expressions via setStyleLayerProperty
-    await mapboxMap.style.addLayer(
-      FillLayer(
-        id: _hexLayerId,
-        sourceId: _hexSourceId,
-        // Placeholder values - will be overridden by expressions below
-        fillColor: Colors.grey.toARGB32(),
-        fillOpacity: 0.3,
-        fillOutlineColor: Colors.grey.toARGB32(),
-        fillAntialias: true,
-      ),
-    );
-
-    // Apply data-driven expressions to read colors from GeoJSON feature properties
-    // setStyleLayerProperty accepts Dart Lists that map to Mapbox GL expressions
-    await mapboxMap.style.setStyleLayerProperty(_hexLayerId, 'fill-color', [
-      'to-color',
-      ['get', 'fill-color'],
-    ]);
-    await mapboxMap.style.setStyleLayerProperty(_hexLayerId, 'fill-opacity', [
-      'get',
-      'fill-opacity',
-    ]);
-    await mapboxMap.style.setStyleLayerProperty(
-      _hexLayerId,
-      'fill-outline-color',
-      [
-        'to-color',
-        ['get', 'fill-outline-color'],
-      ],
-    );
-
-    // Add GeoJSON source for scope boundary line (CITY/ALL view boundary)
-    await mapboxMap.style.addSource(
-      GeoJsonSource(
-        id: _boundarySourceId,
-        data: '{"type":"FeatureCollection","features":[]}',
-      ),
-    );
-
-    await mapboxMap.style.addLayer(
-      LineLayer(
-        id: _boundaryLayerId,
-        sourceId: _boundarySourceId,
-        lineColor: Colors.white.toARGB32(),
-        lineWidth: 8.0,
-        lineOpacity: 0.15,
-        lineBlur: 4.0,
-      ),
-    );
-
-    await mapboxMap.style.addSource(
-      GeoJsonSource(
-        id: _districtBoundarySourceId,
-        data: '{"type":"FeatureCollection","features":[]}',
-      ),
-    );
-
-    await mapboxMap.style.addLayer(
-      LineLayer(
-        id: _districtBoundaryLayerId,
-        sourceId: _districtBoundarySourceId,
-        lineColor: Colors.white.toARGB32(),
-        lineWidth: 3.0,
-        lineOpacity: 0.12,
-        lineBlur: 2.0,
-        lineDasharray: [4.0, 3.0],
-      ),
-    );
-
-    // Enable location component if requested
-    if (widget.showUserLocation) {
-      await _enableLocationComponent();
-    }
-
-    // Get user location and center map
     await _centerOnUserLocation();
+  }
 
-    if (mounted) {
-      setState(() {
-        _isMapReady = true;
-      });
-      _updateHexagons();
-    }
+  /// Called each time the Mapbox style is fully loaded (first load or reload).
+  /// All style-dependent setup (sources, layers, property expressions) must live
+  /// here — NOT in _onMapCreated — to avoid the race where the network-loaded
+  /// dark style finishes loading AFTER _onMapCreated and silently wipes any
+  /// sources/layers added mid-load, causing PlatformException(Layer not in style).
+  Future<void> _onStyleLoaded(StyleLoadedEventData data) async {
+    if (_mapboxMap == null || !mounted) return;
+    if (_isSettingUpLayers) return; // Guard against re-entrant calls
+    _isSettingUpLayers = true;
 
-    // Draw initial routes if available
-    if (widget.todayRoutes != null && widget.todayRoutes!.isNotEmpty) {
-      await _drawRoute();
+    // Hide hexagons while layers are being (re)configured
+    setState(() {
+      _isMapReady = false;
+    });
+
+    final mapboxMap = _mapboxMap!;
+
+    try {
+      // Add GeoJSON source for hex polygons (enables atomic updates without flash)
+      await mapboxMap.style.addSource(
+        GeoJsonSource(
+          id: _hexSourceId,
+          data: '{"type":"FeatureCollection","features":[]}',
+        ),
+      );
+
+      // Add fill layer for hex polygons with data-driven styling.
+      // Create layer with placeholder values first, then apply expressions below.
+      await mapboxMap.style.addLayer(
+        FillLayer(
+          id: _hexLayerId,
+          sourceId: _hexSourceId,
+          fillColor: Colors.grey.toARGB32(),
+          fillOpacity: 0.3,
+          fillOutlineColor: Colors.grey.toARGB32(),
+          fillAntialias: true,
+        ),
+      );
+
+      // Apply data-driven expressions to read colors from GeoJSON feature properties.
+      // setStyleLayerProperty accepts Dart Lists that map to Mapbox GL expressions.
+      await mapboxMap.style.setStyleLayerProperty(_hexLayerId, 'fill-color', [
+        'to-color',
+        ['get', 'fill-color'],
+      ]);
+      await mapboxMap.style.setStyleLayerProperty(_hexLayerId, 'fill-opacity', [
+        'get',
+        'fill-opacity',
+      ]);
+      await mapboxMap.style.setStyleLayerProperty(
+        _hexLayerId,
+        'fill-outline-color',
+        [
+          'to-color',
+          ['get', 'fill-outline-color'],
+        ],
+      );
+
+      // Add GeoJSON source for scope boundary line (DISTRICT/PROVINCE views)
+      await mapboxMap.style.addSource(
+        GeoJsonSource(
+          id: _boundarySourceId,
+          data: '{"type":"FeatureCollection","features":[]}',
+        ),
+      );
+
+      await mapboxMap.style.addLayer(
+        LineLayer(
+          id: _boundaryLayerId,
+          sourceId: _boundarySourceId,
+          lineColor: Colors.white.toARGB32(),
+          lineWidth: 8.0,
+          lineOpacity: 0.15,
+          lineBlur: 4.0,
+        ),
+      );
+
+      await mapboxMap.style.addSource(
+        GeoJsonSource(
+          id: _districtBoundarySourceId,
+          data: '{"type":"FeatureCollection","features":[]}',
+        ),
+      );
+
+      await mapboxMap.style.addLayer(
+        LineLayer(
+          id: _districtBoundaryLayerId,
+          sourceId: _districtBoundarySourceId,
+          lineColor: Colors.white.toARGB32(),
+          lineWidth: 3.0,
+          lineOpacity: 0.12,
+          lineBlur: 2.0,
+          lineDasharray: [4.0, 3.0],
+        ),
+      );
+
+      // Disable built-in Mapbox location indicator (style-dependent operation)
+      if (widget.showUserLocation) {
+        await _enableLocationComponent();
+      }
+
+      if (mounted) {
+        setState(() {
+          _isMapReady = true;
+        });
+        _updateHexagons();
+      }
+
+      // Draw initial routes if available
+      if (widget.todayRoutes != null && widget.todayRoutes!.isNotEmpty) {
+        await _drawRoute();
+      }
+    } catch (e) {
+      debugPrint('HexagonMap: Error setting up style layers: $e');
+    } finally {
+      _isSettingUpLayers = false;
     }
   }
 
@@ -489,7 +512,9 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
   }
 
   /// Update scope boundary line for CITY/ALL views
-  /// Shows a soft blurred line around the parent hex boundary to indicate range
+  /// Shows a soft blurred line around the scope boundary to indicate range.
+  /// - CITY scope: Merged outer boundary of all res-9 children (aligned with gameplay hexes).
+  /// - ALL scope: Merged outer boundary of 7 res-6 district hexes.
   /// [parentHexId] - The parent hex at scope resolution (used to get H3 boundary)
   Future<void> _updateScopeBoundary(
     GeographicScope scope, {
@@ -529,19 +554,24 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
       List<List<double>> coordinates = [];
       List<String> districtHexIds = [];
 
-      if (scope == GeographicScope.all) {
+      if (scope == GeographicScope.province) {
         // For ALL scope (Province), merge the 7 district hexes into one outer boundary
         districtHexIds = hexService.getChildHexIds(
           parentHexId,
-          H3Config.cityResolution,
+          H3Config.districtResolution,
         );
         coordinates = _computeMergedOuterBoundary(districtHexIds);
       } else {
-        // For CITY scope, use the simple parent hex boundary
-        final boundary = hexService.getHexBoundary(parentHexId);
-        if (boundary.isNotEmpty) {
-          coordinates = boundary.map((p) => [p.longitude, p.latitude]).toList();
-          coordinates.add(coordinates.first);
+        // For CITY scope: compute merged outer boundary from all res-9 children.
+        // Using simple getHexBoundary(parentHexId) draws the raw res-6 cell outline,
+        // which is rotated ~57° from res-9 gameplay hexes (H3 aperture-7 rotation).
+        // The merged outer boundary exactly traces the actual hex grid edge.
+        final res9Children = hexService.getAllChildrenAtResolution(
+          parentHexId,
+          H3Config.baseResolution,
+        );
+        if (res9Children.isNotEmpty) {
+          coordinates = _computeMergedOuterBoundary(res9Children);
         }
       }
 
@@ -563,13 +593,13 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
         }
       }
 
-      if (scope == GeographicScope.all) {
+      if (scope == GeographicScope.province) {
         // districtHexIds is already fetched above if scope is ALL
         if (districtHexIds.isEmpty) {
           // Fallback if not fetched (shouldn't happen with above logic, but safe)
           districtHexIds = hexService.getChildHexIds(
             parentHexId,
-            H3Config.cityResolution,
+            H3Config.districtResolution,
           );
         }
 
@@ -712,9 +742,9 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
     if (_currentZoom >= 14) {
       return GeographicScope.zone;
     } else if (_currentZoom >= 12) {
-      return GeographicScope.city;
+      return GeographicScope.district;
     } else {
-      return GeographicScope.all;
+      return GeographicScope.province;
     }
   }
 
@@ -875,13 +905,13 @@ class _HexagonMapState extends ConsumerState<HexagonMap> {
             scopeResolution,
           );
           hexIds = HexService().getAllChildrenAtResolution(
-            parentHexForBoundary,
+            parentHexForBoundary!,
             resolution,
           );
         }
       }
 
-      // Update scope boundary line (CITY/ALL views only)
+      // Update scope boundary line (DISTRICT/PROVINCE views only)
       // Pass the parent hex ID to draw H3's geometric boundary (soft blur line)
       _updateScopeBoundary(currentScope, parentHexId: parentHexForBoundary);
 

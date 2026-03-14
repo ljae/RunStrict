@@ -83,10 +83,10 @@ class AppStateNotifier extends Notifier<AppState> {
         final authUserId = authUser.id;
         final hasProfile = await _authService.hasProfile(authUserId);
         if (!hasProfile) {
-          // Stale session with no profile row — sign out and start fresh
-          debugPrint('AppStateNotifier: Stale session (no profile) — signing out');
+          // Stale session with no profile row — sign out but preserve local run history.
+          // Run history is permanent and cross-season; NEVER wipe it on auth state changes.
+          debugPrint('AppStateNotifier: Stale session (no profile) — signing out, preserving local data');
           await _authService.signOut();
-          await app_storage.LocalStorage().clearAllGuestData();
           state = state.copyWith(
             error: () => null,
             isInitialized: true,
@@ -367,7 +367,7 @@ class AppStateNotifier extends Notifier<AppState> {
       await _authService.signOut();
       await PurchasesService().logout();
       ref.read(proProvider.notifier).setProStatus(false);
-      await app_storage.LocalStorage().clearAllGuestData();
+      await app_storage.LocalStorage().clearSessionCaches();
       final userRepo = ref.read(userRepositoryProvider.notifier);
       await userRepo.deleteFromDisk();
       userRepo.clear();

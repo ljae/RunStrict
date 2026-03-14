@@ -51,7 +51,7 @@ class HexModel {
   /// Get color based on last runner (NOT ownership)
   Color get hexColor {
     if (lastRunnerTeam == null) {
-      return const Color(0xFF2A3550).withOpacity(0.15); // Neutral gray
+      return const Color(0xFF2A3550).withValues(alpha: 0.15); // Neutral gray
     }
     switch (lastRunnerTeam!) {
       case Team.red:
@@ -66,15 +66,15 @@ class HexModel {
   /// Get light color for subtle fills
   Color get hexLightColor {
     if (lastRunnerTeam == null) {
-      return const Color(0xFF2A3550).withOpacity(0.15);
+      return const Color(0xFF2A3550).withValues(alpha: 0.15);
     }
     switch (lastRunnerTeam!) {
       case Team.red:
-        return const Color(0xFFFF335F).withOpacity(0.3);
+        return const Color(0xFFFF335F).withValues(alpha: 0.3);
       case Team.blue:
-        return const Color(0xFF33A4FF).withOpacity(0.3);
+        return const Color(0xFF33A4FF).withValues(alpha: 0.3);
       case Team.purple:
-        return const Color(0xFFA78BFA).withOpacity(0.3);
+        return const Color(0xFFA78BFA).withValues(alpha: 0.3);
     }
   }
 

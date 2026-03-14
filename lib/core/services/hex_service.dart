@@ -100,6 +100,18 @@ class HexService {
   /// Get the parent hex ID (one resolution lower)
   String getParentHexId(String hexId, int parentResolution) {
     _checkInit();
+    if (hexId.isEmpty) {
+      throw ArgumentError(
+        'hexId cannot be empty — received empty string instead of H3 index',
+      );
+    }
+    // Validate hex format before BigInt.parse to surface clear errors early.
+    // Prevents FormatException from escaping through FFI/try-catch gaps on iOS.
+    if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(hexId)) {
+      throw FormatException(
+        'getParentHexId: "$hexId" contains non-hex characters',
+      );
+    }
     final h3Index = BigInt.parse(hexId, radix: 16);
     final parentIndex = h3.cellToParent(h3Index, parentResolution);
     return parentIndex.toRadixString(16);
@@ -120,8 +132,8 @@ class HexService {
   ///
   /// Example counts (H3 has 7 children per parent):
   /// - Res 8 → Res 9: 7 hexes (ZONE)
-  /// - Res 6 → Res 9: 343 hexes (CITY)
-  /// - Res 5 → Res 9: 2,401 hexes (ALL)
+  /// - Res 6 → Res 9: 343 hexes (DISTRICT)
+  /// - Res 5 → Res 9: 2,401 hexes (PROVINCE)
   List<String> getAllChildrenAtResolution(
     String parentHexId,
     int targetResolution,
@@ -189,8 +201,9 @@ class HexService {
   ///
   /// Example:
   /// - baseHexId at Res 9 -> GeographicScope.zone returns Res 8 parent
-  /// - baseHexId at Res 9 -> GeographicScope.city returns Res 6 parent
-  /// - baseHexId at Res 9 -> GeographicScope.all returns Res 5 parent
+  /// - baseHexId at Res 9 -> GeographicScope.zone returns Res 8 parent
+  /// - baseHexId at Res 9 -> GeographicScope.district returns Res 6 parent
+  /// - baseHexId at Res 9 -> GeographicScope.province returns Res 5 parent
   String getScopeHexId(String baseHexId, GeographicScope scope) {
     return getParentHexId(baseHexId, scope.resolution);
   }
@@ -210,8 +223,8 @@ class HexService {
   ///
   /// Note: This can return many hexes for large scopes:
   /// - ZONE (Res 8 -> 9): ~7 hexes
-  /// - CITY (Res 6 -> 9): ~343 hexes
-  /// - ALL (Res 5 -> 9): ~2,401 hexes
+  /// - DISTRICT (Res 6 -> 9): ~343 hexes
+  /// - PROVINCE (Res 5 -> 9): ~2,401 hexes
   List<String> getBaseHexesInScope(String scopeHexId) {
     return getChildHexIds(scopeHexId, H3Config.baseResolution);
   }
@@ -332,7 +345,7 @@ class HexService {
   /// "Adjective + Noun" combination like "Amber Ridge" or "Crystal Vale".
   /// Avoids confusing alphanumeric identifiers.
   String getTerritoryName(String baseHexId) {
-    final res5Parent = getParentHexId(baseHexId, H3Config.allResolution);
+    final res5Parent = getParentHexId(baseHexId, H3Config.provinceResolution);
 
     // Hash the full hex ID for better distribution across word lists.
     // Use two independent hash values from different parts to avoid collisions
@@ -360,10 +373,10 @@ class HexService {
 
   /// Get the raw Territory ID (4-digit hex string) for internal use.
   ///
-  /// Returns the last 4 characters of the Res 5 (ALL scope) parent hex ID.
+  /// Returns the last 4 characters of the Res 5 (PROVINCE scope) parent hex ID.
   /// For display purposes, use [getTerritoryName] instead.
   String getTerritoryId(String baseHexId) {
-    final res5Parent = getParentHexId(baseHexId, H3Config.allResolution);
+    final res5Parent = getParentHexId(baseHexId, H3Config.provinceResolution);
     // Take last 4 hex characters, uppercase for display
     final last4 = res5Parent.length >= 4
         ? res5Parent.substring(res5Parent.length - 4)
@@ -371,30 +384,30 @@ class HexService {
     return last4.toUpperCase();
   }
 
-  /// Get the City number (1-7) within its parent Territory.
+  /// Get the District number (1-7) within its parent Territory.
   ///
-  /// Each Territory (Res 5) contains ~7 City hexes (Res 6).
-  /// This returns the position of the city among its siblings,
+  /// Each Territory (Res 5) contains ~7 District hexes (Res 6).
+  /// This returns the position of the district among its siblings,
   /// providing a simple 1-7 identifier.
   ///
-  /// Returns 1-7 based on the city's position among its 7 siblings.
-  int getCityNumber(String baseHexId) {
-    // Get the Res 6 (city) parent
-    final cityHexId = getParentHexId(baseHexId, H3Config.cityResolution);
+  /// Returns 1-7 based on the district's position among its 7 siblings.
+  int getDistrictNumber(String baseHexId) {
+    // Get the Res 6 (district) parent
+    final districtHexId = getParentHexId(baseHexId, H3Config.districtResolution);
     // Get the Res 5 (territory) parent
-    final territoryHexId = getParentHexId(baseHexId, H3Config.allResolution);
+    final territoryHexId = getParentHexId(baseHexId, H3Config.provinceResolution);
 
-    // Get all 7 city children of this territory
-    final siblingCities = getChildHexIds(
+    // Get all 7 district children of this territory
+    final siblingDistricts = getChildHexIds(
       territoryHexId,
-      H3Config.cityResolution,
+      H3Config.districtResolution,
     );
 
     // Sort siblings for consistent ordering (lexicographic)
-    siblingCities.sort();
+    siblingDistricts.sort();
 
     // Find position (1-based)
-    final index = siblingCities.indexOf(cityHexId);
+    final index = siblingDistricts.indexOf(districtHexId);
     return index >= 0 ? index + 1 : 1;
   }
 
@@ -405,12 +418,12 @@ class HexService {
     return getTerritoryName(baseHexId);
   }
 
-  /// Get formatted city display string for a base hex.
+  /// Get formatted district display string for a base hex.
   ///
   /// Returns "District N" format for UI display.
-  String getCityDisplayName(String baseHexId) {
-    final cityNum = getCityNumber(baseHexId);
-    return 'District $cityNum';
+  String getDistrictDisplayName(String baseHexId) {
+    final districtNum = getDistrictNumber(baseHexId);
+    return 'District $districtNum';
   }
 
   /// Generate a random territory name for dummy data.

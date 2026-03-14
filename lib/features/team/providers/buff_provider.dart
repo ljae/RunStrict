@@ -4,6 +4,7 @@ import '../../../data/models/app_config.dart';
 import '../../../core/services/buff_service.dart';
 import '../../../core/services/remote_config_service.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../../core/services/season_service.dart';
 
 class BuffState {
   final int multiplier;
@@ -18,7 +19,7 @@ class BuffState {
     this.breakdown = const BuffBreakdown(
       multiplier: 1,
       baseBuff: 1,
-      allRangeBonus: 0,
+      provinceRangeBonus: 0,
       reason: 'Default',
       team: '',
     ),
@@ -79,6 +80,16 @@ class BuffNotifier extends Notifier<BuffState> {
   }
 
   void setBuffFromLaunchSync(Map<String, dynamic>? userBuff) {
+    // On Season Day 1, no yesterday data exists within this season.
+    // The server may carry over last season's buff (daily_buff_stats not wiped
+    // by season reset). Override to 1x — all users start equal on Day 1.
+    if (SeasonService().isFirstDay) {
+      state = state.copyWith(
+        multiplier: 1,
+        breakdown: BuffBreakdown.defaultBuff(),
+      );
+      return;
+    }
     if (userBuff == null) {
       state = state.copyWith(
         multiplier: 1,

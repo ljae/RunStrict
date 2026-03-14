@@ -25,7 +25,7 @@ class LocalStorage implements StorageService {
   LocalStorage._internal();
 
   static const String _databaseName = 'run_strict.db';
-  static const int _databaseVersion = 17; // v17: add has_flips to runs
+  static const int _databaseVersion = 19; // v19: rename hex_city_parents to hex_district_parents
 
   static const String _tableRuns = 'runs';
   static const String _tableRoutes = 'routes';
@@ -76,6 +76,7 @@ class LocalStorage implements StorageService {
         teamAtRun TEXT NOT NULL,
         hex_path TEXT DEFAULT '',
         hex_parents TEXT DEFAULT '',
+        hex_district_parents TEXT DEFAULT '',
         buff_multiplier INTEGER DEFAULT 1,
         cv REAL,
         sync_status TEXT DEFAULT 'pending',
@@ -476,6 +477,26 @@ class LocalStorage implements StorageService {
         );
       } catch (e) {
         debugPrint('LocalStorage: v17 migration skipped: $e');
+      }
+    }
+    if (oldVersion < 18) {
+      // v17 → v18: Add hex_city_parents column (Res 6 district parents per hex)
+      try {
+        await db.execute(
+          "ALTER TABLE $_tableRuns ADD COLUMN hex_city_parents TEXT DEFAULT ''",
+        );
+      } catch (e) {
+        debugPrint('LocalStorage: v18 migration skipped: $e');
+      }
+    }
+    if (oldVersion < 19) {
+      // v18 → v19: Rename hex_city_parents to hex_district_parents
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableRuns RENAME COLUMN hex_city_parents TO hex_district_parents',
+        );
+      } catch (e) {
+        debugPrint('LocalStorage: v19 migration skipped: $e');
       }
     }
   }
@@ -889,6 +910,21 @@ class LocalStorage implements StorageService {
       await txn.delete(_tableLeaderboardCache);
       // Note: Don't clear prefetch_meta (home_hex should persist)
     });
+  }
+
+  /// Clear session-specific cache data on logout.
+  ///
+  /// Preserves run history (runs, routes, laps, run_checkpoint) which is
+  /// permanent and cross-season — run history MUST survive sign-out/sign-in.
+  /// Only clears: hex cache, leaderboard cache, prefetch metadata (home_hex).
+  Future<void> clearSessionCaches() async {
+    if (_database == null) return;
+    await _database!.transaction((txn) async {
+      await txn.delete(_tableHexCache);
+      await txn.delete(_tableLeaderboardCache);
+      await txn.delete(_tablePrefetchMeta);
+    });
+    debugPrint('LocalStorage: Cleared session caches (run history preserved)');
   }
 
   // ============ TODAY FLIP POINTS TRACKING ============

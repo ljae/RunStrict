@@ -74,6 +74,7 @@ class SupabaseService {
         'p_duration_seconds': run.durationSeconds,
         'p_hex_path': run.hexPath,
         'p_hex_parents': run.hexParents.isNotEmpty ? run.hexParents : null,
+        'p_hex_district_parents': run.hexDistrictParents.isNotEmpty ? run.hexDistrictParents : null,
         'p_buff_multiplier': run.buffMultiplier,
         'p_cv': run.cv,
         'p_client_points': run.flipPoints,
@@ -132,7 +133,7 @@ class SupabaseService {
         {
           'multiplier': 1,
           'base_buff': 1,
-          'all_range_bonus': 0,
+          'province_range_bonus': 0,
           'reason': 'Default',
         };
   }
@@ -153,11 +154,11 @@ class SupabaseService {
 
   Future<Map<String, dynamic>> getTeamRankings(
     String userId, {
-    String? cityHex,
+    String? districtHex,
   }) async {
     final result = await client.rpc(
       'get_team_rankings',
-      params: {'p_user_id': userId, 'p_city_hex': cityHex},
+      params: {'p_user_id': userId, 'p_district_hex': districtHex},
     );
     return result as Map<String, dynamic>? ?? {};
   }

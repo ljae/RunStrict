@@ -79,7 +79,7 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                 return CustomPaint(
                   painter: VortexPainter(
                     animationValue: _backgroundController.value,
-                    color: AppTheme.electricBlue.withOpacity(0.05),
+                    color: AppTheme.electricBlue.withValues(alpha: 0.05),
                   ),
                 );
               },
@@ -95,7 +95,7 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                   radius: 1.5,
                   colors: [
                     Colors.transparent,
-                    AppTheme.backgroundStart.withOpacity(0.8),
+                    AppTheme.backgroundStart.withValues(alpha: 0.8),
                     AppTheme.backgroundStart,
                   ],
                 ),
@@ -146,12 +146,12 @@ class _TeamSelectionScreenState extends ConsumerState<TeamSelectionScreen>
                 padding: const EdgeInsets.all(24),
                 decoration:
                     AppTheme.tubularBorder(
-                      AppTheme.electricBlue.withOpacity(
-                        0.6 + (_pulseController.value * 0.4),
+                      AppTheme.electricBlue.withValues(
+                        alpha: 0.6 + (_pulseController.value * 0.4),
                       ),
                       width: 3,
                     ).copyWith(
-                      color: AppTheme.surfaceColor.withOpacity(0.5),
+                      color: AppTheme.surfaceColor.withValues(alpha: 0.5),
                       boxShadow: AppTheme.glowShadow(
                         AppTheme.electricBlue,
                         intensity: 0.6 + (_pulseController.value * 0.4),
@@ -336,7 +336,7 @@ class _TeamCardState extends State<_TeamCard>
                       isRed: isRed,
                     ).copyWith(
                       border: Border.all(
-                        color: primaryColor.withOpacity(_isHovered ? 0.8 : 0.3),
+                        color: primaryColor.withValues(alpha: _isHovered ? 0.8 : 0.3),
                         width: 2,
                       ),
                       boxShadow: [
@@ -345,7 +345,7 @@ class _TeamCardState extends State<_TeamCard>
                           intensity: glowIntensity,
                         ),
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -359,7 +359,7 @@ class _TeamCardState extends State<_TeamCard>
                         borderRadius: BorderRadius.circular(16),
                         child: CustomPaint(
                           painter: MeshGridPainter(
-                            color: primaryColor.withOpacity(0.05),
+                            color: primaryColor.withValues(alpha: 0.05),
                             offset: _hoverController.value * 10,
                           ),
                         ),

@@ -420,16 +420,16 @@ class ScoringConfig {
 class HexConfig {
   final int baseResolution;
   final int zoneResolution;
-  final int cityResolution;
-  final int allResolution;
+  final int districtResolution;
+  final int provinceResolution;
   final double captureCheckDistanceMeters;
   final int maxCacheSize;
 
   const HexConfig({
     required this.baseResolution,
     required this.zoneResolution,
-    required this.cityResolution,
-    required this.allResolution,
+    required this.districtResolution,
+    required this.provinceResolution,
     required this.captureCheckDistanceMeters,
     required this.maxCacheSize,
   });
@@ -437,8 +437,8 @@ class HexConfig {
   factory HexConfig.defaults() => const HexConfig(
     baseResolution: 9,
     zoneResolution: 8,
-    cityResolution: 6,
-    allResolution: 5,
+    districtResolution: 6,
+    provinceResolution: 5,
     captureCheckDistanceMeters: 20.0,
     maxCacheSize: 4000,
   );
@@ -446,8 +446,8 @@ class HexConfig {
   factory HexConfig.fromJson(Map<String, dynamic> json) => HexConfig(
     baseResolution: (json['baseResolution'] as num?)?.toInt() ?? 9,
     zoneResolution: (json['zoneResolution'] as num?)?.toInt() ?? 8,
-    cityResolution: (json['cityResolution'] as num?)?.toInt() ?? 6,
-    allResolution: (json['allResolution'] as num?)?.toInt() ?? 5,
+    districtResolution: (json['districtResolution'] as num?)?.toInt() ?? 6,
+    provinceResolution: (json['provinceResolution'] as num?)?.toInt() ?? 5,
     captureCheckDistanceMeters:
         (json['captureCheckDistanceMeters'] as num?)?.toDouble() ?? 20.0,
     maxCacheSize: (json['maxCacheSize'] as num?)?.toInt() ?? 4000,
@@ -456,8 +456,8 @@ class HexConfig {
   Map<String, dynamic> toJson() => {
     'baseResolution': baseResolution,
     'zoneResolution': zoneResolution,
-    'cityResolution': cityResolution,
-    'allResolution': allResolution,
+    'districtResolution': districtResolution,
+    'provinceResolution': provinceResolution,
     'captureCheckDistanceMeters': captureCheckDistanceMeters,
     'maxCacheSize': maxCacheSize,
   };
@@ -465,15 +465,15 @@ class HexConfig {
   HexConfig copyWith({
     int? baseResolution,
     int? zoneResolution,
-    int? cityResolution,
-    int? allResolution,
+    int? districtResolution,
+    int? provinceResolution,
     double? captureCheckDistanceMeters,
     int? maxCacheSize,
   }) => HexConfig(
     baseResolution: baseResolution ?? this.baseResolution,
     zoneResolution: zoneResolution ?? this.zoneResolution,
-    cityResolution: cityResolution ?? this.cityResolution,
-    allResolution: allResolution ?? this.allResolution,
+    districtResolution: districtResolution ?? this.districtResolution,
+    provinceResolution: provinceResolution ?? this.provinceResolution,
     captureCheckDistanceMeters:
         captureCheckDistanceMeters ?? this.captureCheckDistanceMeters,
     maxCacheSize: maxCacheSize ?? this.maxCacheSize,

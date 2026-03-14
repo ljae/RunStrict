@@ -127,12 +127,12 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
             color: widget.baseColor,
             borderRadius: BorderRadius.circular(widget.borderRadius),
             border: Border.all(
-              color: widget.fillColor.withOpacity(0.3),
+              color: widget.fillColor.withValues(alpha: 0.3),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -150,7 +150,7 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
                   return FractionallySizedBox(
                     widthFactor: value,
                     alignment: Alignment.centerLeft,
-                    child: Container(color: widget.fillColor.withOpacity(0.8)),
+                    child: Container(color: widget.fillColor.withValues(alpha: 0.8)),
                   );
                 },
               ),
@@ -198,7 +198,7 @@ class _EnergyHoldButtonState extends State<EnergyHoldButton>
                             width: 40,
                             height: 4,
                             decoration: BoxDecoration(
-                              color: widget.iconColor.withOpacity(0.3),
+                              color: widget.iconColor.withValues(alpha: 0.3),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),

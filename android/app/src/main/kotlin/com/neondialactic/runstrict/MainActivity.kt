@@ -1,4 +1,4 @@
-package com.neondialactic.neon_runner
+package com.neondialactic.runstrict
 
 import io.flutter.embedding.android.FlutterActivity
 

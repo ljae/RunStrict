@@ -13,6 +13,7 @@ import '../../../core/services/supabase_service.dart';
 import '../../../core/services/hex_service.dart';
 import '../../../core/services/app_lifecycle_manager.dart';
 import '../../../core/services/prefetch_service.dart';
+import '../../../core/config/h3_config.dart';
 import '../../../core/providers/user_repository_provider.dart';
 import '../services/voice_announcement_service.dart';
 import '../../../data/models/team.dart';
@@ -23,6 +24,7 @@ import '../../auth/providers/app_state_provider.dart';
 import '../../team/providers/buff_provider.dart';
 import '../../map/providers/hex_data_provider.dart';
 import '../../../core/providers/points_provider.dart';
+import '../../../core/services/remote_config_service.dart';
 
 enum RunEvent { pointEarned }
 
@@ -135,7 +137,9 @@ class RunNotifier extends Notifier<RunState> {
 
   /// Returns true if run is active, starting, or stopping
   bool get isRunning =>
-      state.isStartingRun || state.isStopping || (state.activeRun != null && state.activeRun!.isActive);
+      state.isStartingRun ||
+      state.isStopping ||
+      (state.activeRun != null && state.activeRun!.isActive);
 
   // Getters for UI
   double get currentSpeed {
@@ -204,7 +208,10 @@ class RunNotifier extends Notifier<RunState> {
       await _loadTotalStats();
       state = state.copyWith(error: () => null, isLoading: false);
     } catch (e) {
-      state = state.copyWith(error: () => 'Failed to initialize: $e', isLoading: false);
+      state = state.copyWith(
+        error: () => 'Failed to initialize: $e',
+        isLoading: false,
+      );
     }
   }
 
@@ -229,7 +236,9 @@ class RunNotifier extends Notifier<RunState> {
       final configSnapshot = checkpoint['config_snapshot'] as String?;
 
       if (configSnapshot != null) {
-        debugPrint('RunNotifier: Checkpoint has config_snapshot (${configSnapshot.length} chars)');
+        debugPrint(
+          'RunNotifier: Checkpoint has config_snapshot (${configSnapshot.length} chars)',
+        );
       }
 
       final hexPath = capturedStr.isNotEmpty
@@ -291,6 +300,8 @@ class RunNotifier extends Notifier<RunState> {
       await VoiceAnnouncementService().initialize();
 
       ref.read(buffProvider.notifier).freezeForRun();
+      RemoteConfigService()
+          .freezeForRun(); // freeze game constants for run duration
 
       await _locationService.startTracking();
 
@@ -298,7 +309,9 @@ class RunNotifier extends Notifier<RunState> {
 
       ref.read(hexDataProvider.notifier).clearCapturedHexes();
 
-      final localDb = _storageService is LocalStorage ? _storageService as LocalStorage : null;
+      final localDb = _storageService is LocalStorage
+          ? _storageService as LocalStorage
+          : null;
       _runTracker.setCallbacks(
         onHexCapture: _handleHexCapture,
         onTierChange: (oldTier, newTier) {
@@ -306,7 +319,9 @@ class RunNotifier extends Notifier<RunState> {
         },
         onCheckpoint: localDb != null
             ? (checkpoint) {
-                checkpoint['buff_multiplier'] = ref.read(buffProvider).effectiveMultiplier;
+                checkpoint['buff_multiplier'] = ref
+                    .read(buffProvider)
+                    .effectiveMultiplier;
                 localDb.saveRunCheckpoint(checkpoint);
               }
             : null,
@@ -371,12 +386,14 @@ class RunNotifier extends Notifier<RunState> {
     } on LocationPermissionException {
       _stopTimer();
       ref.read(buffProvider.notifier).unfreezeAfterRun();
+      RemoteConfigService().unfreezeAfterRun();
       await _locationService.stopTracking();
       state = state.copyWith(isStartingRun: false);
       rethrow;
     } catch (e) {
       _stopTimer();
       ref.read(buffProvider.notifier).unfreezeAfterRun();
+      RemoteConfigService().unfreezeAfterRun();
       await _locationService.stopTracking();
       state = state.copyWith(
         isStartingRun: false,
@@ -457,12 +474,15 @@ class RunNotifier extends Notifier<RunState> {
     }
   }
 
-
   /// Stop the current run and save to history
   Future<List<String>> stopRun() async {
     if (!isRunning) return [];
 
-    state = state.copyWith(isStopping: true, isLoading: true, error: () => null);
+    state = state.copyWith(
+      isStopping: true,
+      isLoading: true,
+      error: () => null,
+    );
 
     try {
       _stopTimer();
@@ -481,6 +501,7 @@ class RunNotifier extends Notifier<RunState> {
 
       final effectiveMultiplier = ref.read(buffProvider).effectiveMultiplier;
       ref.read(buffProvider.notifier).unfreezeAfterRun();
+      RemoteConfigService().unfreezeAfterRun();
 
       if (result != null) {
         final capturedHexIds = result.capturedHexIds;
@@ -490,6 +511,7 @@ class RunNotifier extends Notifier<RunState> {
           durationSeconds: state.duration.inSeconds,
           hexPath: capturedHexIds,
           hexParents: result.capturedHexParents,
+          hexDistrictParents: result.capturedHexDistrictParents,
           buffMultiplier: effectiveMultiplier,
           runDate: Gmt2DateUtils.toGmt2DateString(DateTime.now()),
           hasFlips: capturedHexIds.isNotEmpty,
@@ -550,7 +572,11 @@ class RunNotifier extends Notifier<RunState> {
             debugPrint('RunNotifier: Guest post-run hex refresh failed: $e');
           }
           ref.read(hexDataProvider.notifier).clearUserLocation();
-          state = state.copyWith(activeRun: () => null, liveLocation: () => null, routeVersion: 0);
+          state = state.copyWith(
+            activeRun: () => null,
+            liveLocation: () => null,
+            routeVersion: 0,
+          );
           await AppLifecycleManager().onRunCompleted();
           return capturedHexIds;
         }
@@ -560,7 +586,9 @@ class RunNotifier extends Notifier<RunState> {
         int serverValidatedPoints = flipPoints; // fallback to client calc
 
         final connectivityResults = await Connectivity().checkConnectivity();
-        final hasNetwork = !connectivityResults.contains(ConnectivityResult.none);
+        final hasNetwork = !connectivityResults.contains(
+          ConnectivityResult.none,
+        );
 
         if (hasNetwork) {
           try {
@@ -611,12 +639,34 @@ class RunNotifier extends Notifier<RunState> {
         // Reload today's routes so the just-completed run persists on the map
         await ref.read(hexDataProvider.notifier).loadTodayRoutes();
 
+        // If the run started in a different province than the stored home hex,
+        // update local home hex so PrefetchService downloads the correct snapshot.
+        // This mirrors what finalize_run() does server-side:
+        //   users.province_hex = province parent of p_hex_path[1].
+        // Without this, TeamScreen territory shows "No data" after a cross-province run.
+        if (syncSucceeded && completedRun.hexPath.isNotEmpty) {
+          final firstHex = completedRun.hexPath.first;
+          final runProvince = HexService().getScopeHexId(
+            firstHex,
+            GeographicScope.province,
+          );
+          if (runProvince != PrefetchService().homeHexProvince) {
+            debugPrint(
+              'RunNotifier: Province changed $runProvince '
+              '(was ${PrefetchService().homeHexProvince}) — updating local home hex',
+            );
+            await PrefetchService().saveHomeHex(firstHex);
+          }
+        }
+
         // Defensive: refresh hex cache from server + local overlay
         // Ensures map shows correct data even if cache was unexpectedly cleared
         try {
           await PrefetchService().refresh();
           ref.read(hexDataProvider.notifier).notifyHexDataChanged();
-          debugPrint('RunNotifier: Post-run hex refresh done (cache=${HexRepository().cacheStats['size']})');
+          debugPrint(
+            'RunNotifier: Post-run hex refresh done (cache=${HexRepository().cacheStats['size']})',
+          );
         } catch (e) {
           debugPrint('RunNotifier: Post-run hex refresh failed: $e');
         }
@@ -647,10 +697,7 @@ class RunNotifier extends Notifier<RunState> {
 
       ref.read(hexDataProvider.notifier).clearUserLocation();
 
-      state = state.copyWith(
-        activeRun: () => null,
-        routeVersion: 0,
-      );
+      state = state.copyWith(activeRun: () => null, routeVersion: 0);
 
       await AppLifecycleManager().onRunCompleted();
 
@@ -697,13 +744,17 @@ class RunNotifier extends Notifier<RunState> {
       final rows = await _supabaseService.fetchRunHistory(userId, limit: 50);
       if (rows.isEmpty) return;
 
-      debugPrint('RunNotifier._backfillFromServer: Found ${rows.length} runs on server, importing...');
+      debugPrint(
+        'RunNotifier._backfillFromServer: Found ${rows.length} runs on server, importing...',
+      );
 
       for (final row in rows) {
         final flipCount = (row['flip_count'] as num?)?.toInt() ?? 0;
         final flipPoints = (row['flip_points'] as num?)?.toInt() ?? 0;
         // run_history doesn't store buff_multiplier — derive from flip_points/flip_count
-        final derivedBuff = (flipCount > 0) ? (flipPoints / flipCount).round().clamp(1, 10) : 1;
+        final derivedBuff = (flipCount > 0)
+            ? (flipPoints / flipCount).round().clamp(1, 10)
+            : 1;
 
         final run = Run(
           id: row['id'] as String,
@@ -711,7 +762,8 @@ class RunNotifier extends Notifier<RunState> {
           endTime: row['end_time'] != null
               ? DateTime.parse(row['end_time'] as String)
               : null,
-          distanceMeters: ((row['distance_km'] as num?)?.toDouble() ?? 0) * 1000,
+          distanceMeters:
+              ((row['distance_km'] as num?)?.toDouble() ?? 0) * 1000,
           durationSeconds: (row['duration_seconds'] as num?)?.toInt() ?? 0,
           hexesColored: flipCount,
           teamAtRun: Team.values.byName(row['team_at_run'] as String? ?? 'red'),
@@ -723,7 +775,9 @@ class RunNotifier extends Notifier<RunState> {
         await _storageService.saveRun(run);
       }
 
-      debugPrint('RunNotifier._backfillFromServer: Imported ${rows.length} runs');
+      debugPrint(
+        'RunNotifier._backfillFromServer: Imported ${rows.length} runs',
+      );
     } catch (e) {
       debugPrint('RunNotifier._backfillFromServer FAILED: $e');
     }
@@ -748,11 +802,12 @@ class RunNotifier extends Notifier<RunState> {
       await _loadTotalStats();
       state = state.copyWith(error: () => null, isLoading: false);
     } catch (e) {
-      state = state.copyWith(error: () => 'Failed to delete run: $e', isLoading: false);
+      state = state.copyWith(
+        error: () => 'Failed to delete run: $e',
+        isLoading: false,
+      );
     }
   }
 }
 
-final runProvider = NotifierProvider<RunNotifier, RunState>(
-  RunNotifier.new,
-);
+final runProvider = NotifierProvider<RunNotifier, RunState>(RunNotifier.new);

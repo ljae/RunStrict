@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delete Account — RunStrict</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0F172A;
+      --surface:  #1E293B;
+      --border:   #334155;
+      --blue:     #008DFF;
+      --red:      #FF003C;
+      --text:     #FFFFFF;
+      --muted:    #94A3B8;
+      --radius:   12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 64px;
+    }
+
+    /* ── Logo / Header ── */
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 48px;
+    }
+    .logo-hex {
+      width: 36px;
+      height: 36px;
+    }
+    .logo-name {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .logo-name span { color: var(--blue); }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-width: 560px;
+      width: 100%;
+      padding: 36px 32px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .icon-wrap {
+      background: rgba(255, 0, 60, 0.12);
+      border: 1px solid rgba(255, 0, 60, 0.3);
+      border-radius: 10px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .icon-wrap svg { width: 22px; height: 22px; }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-top: 2px;
+    }
+
+    /* ── Divider ── */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 24px 0;
+    }
+
+    /* ── Steps ── */
+    .method-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 14px;
+    }
+
+    .steps {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .steps li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 0.9rem;
+      color: #CBD5E1;
+      line-height: 1.5;
+    }
+    .step-num {
+      background: var(--blue);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    /* ── What's deleted ── */
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .data-item {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.8rem;
+    }
+    .data-item .label {
+      color: var(--muted);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .data-item .val { color: var(--text); font-weight: 500; }
+    .data-item .val.deleted { color: var(--red); }
+    .data-item .val.kept    { color: #22c55e; }
+
+    /* ── Email fallback ── */
+    .fallback {
+      background: rgba(0, 141, 255, 0.07);
+      border: 1px solid rgba(0, 141, 255, 0.25);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+    .fallback p {
+      font-size: 0.875rem;
+      color: #CBD5E1;
+      line-height: 1.6;
+    }
+    .fallback a {
+      color: var(--blue);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .fallback a:hover { text-decoration: underline; }
+
+    .email-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.875rem;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .email-btn:hover { opacity: 0.85; text-decoration: none; }
+    .email-btn svg { width: 16px; height: 16px; }
+
+    /* ── Notice ── */
+    .notice {
+      display: flex;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .notice svg { flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 32px;
+      font-size: 0.775rem;
+      color: var(--muted);
+      text-align: center;
+    }
+    footer a { color: var(--muted); text-decoration: underline; }
+
+    @media (max-width: 480px) {
+      .card { padding: 28px 20px; }
+      .data-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Logo -->
+  <div class="logo">
+    <svg class="logo-hex" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="18,2 33,10 33,26 18,34 3,26 3,10"
+               fill="none" stroke="#008DFF" stroke-width="2"/>
+      <polygon points="18,8 27,13 27,23 18,28 9,23 9,13"
+               fill="#008DFF" opacity="0.2"/>
+    </svg>
+    <div class="logo-name">Run<span>Strict</span></div>
+  </div>
+
+  <!-- Card -->
+  <div class="card">
+
+    <div class="card-header">
+      <div class="icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#FF003C" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Delete Your Account</h1>
+        <div class="subtitle">Remove your profile and all associated data</div>
+      </div>
+    </div>
+
+    <!-- Primary: in-app -->
+    <div class="method-title">— Recommended: delete from the app</div>
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        Open <strong>RunStrict</strong> and sign in to your account
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        Tap your <strong>Profile</strong> icon in the top-right corner
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        Scroll to the bottom and tap <strong>Delete Account</strong>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        Confirm deletion — your account is removed immediately
+      </li>
+    </ol>
+
+    <hr />
+
+    <!-- What gets deleted -->
+    <div class="method-title">— What happens to your data</div>
+    <div class="data-grid">
+      <div class="data-item">
+        <div class="label">Profile &amp; season data</div>
+        <div class="val deleted">Deleted immediately</div>
+      </div>
+      <div class="data-item">
+        <div class="label">Run history (local)</div>
+        <div class="val kept">Stays on your device</div>
+      </div>
+      <div class="data-item">
+        <div class="label">Leaderboard entries</div>
+        <div class="val deleted">Removed within 24h</div>
+      </div>
+      <div class="data-item">
+        <div class="label">Auth credentials</div>
+        <div class="val deleted">Deleted immediately</div>
+      </div>
+    </div>
+
+    <hr />
+
+    <!-- Fallback: email -->
+    <div class="method-title">— Can't access the app?</div>
+    <div class="fallback">
+      <p>
+        If you no longer have access to the app, email us and we'll process
+        your deletion request manually within <strong>30 days</strong>.
+        Include the email address associated with your account.
+      </p>
+      <a class="email-btn"
+         href="mailto:esther.runstrict@gmail.com?subject=Account%20Deletion%20Request&body=Please%20delete%20my%20RunStrict%20account.%0A%0AEmail%20associated%20with%20my%20account%3A%20">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
+        Email Deletion Request
+      </a>
+    </div>
+
+    <hr />
+
+    <!-- Notice -->
+    <div class="notice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      Your personal running history (distance, pace, completed runs) is stored
+      locally on your device only — it is never uploaded to our servers and is
+      not affected by account deletion.
+    </div>
+
+  </div>
+
+  <footer>
+    <p>&copy; 2026 RunStrict &nbsp;·&nbsp; <a href="https://runstrict.com/privacy">Privacy Policy</a></p>
+  </footer>
+
+</body>
+</html>

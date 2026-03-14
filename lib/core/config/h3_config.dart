@@ -9,8 +9,8 @@ import '../services/remote_config_service.dart';
 /// base gameplay hex, with parent resolutions for geographic scope filtering.
 ///
 /// Resolution Reference:
-/// - Res 5: ~252 km², ~8.5km edge (City/Region - ALL scope)
-/// - Res 6: ~36 km², ~3.2km edge (District - CITY scope)
+/// - Res 5: ~252 km², ~8.5km edge (Province - PROVINCE scope)
+/// - Res 6: ~36 km², ~3.2km edge (District - DISTRICT scope)
 /// - Res 8: ~0.73 km², ~461m edge (Neighborhood - ZONE scope)
 /// - Res 9: ~0.10 km², ~174m edge (Block - Base gameplay)
 ///
@@ -28,22 +28,22 @@ class H3Config {
   static int get zoneResolution =>
       RemoteConfigService().config.hexConfig.zoneResolution;
 
-  /// City scope resolution (District level)
+  /// District scope resolution (District level)
   /// Edge: ~3.2km, Area: ~36 km²
-  static int get cityResolution =>
-      RemoteConfigService().config.hexConfig.cityResolution;
+  static int get districtResolution =>
+      RemoteConfigService().config.hexConfig.districtResolution;
 
-  /// All/Region scope resolution (City level)
+  /// Province scope resolution (Province level)
   /// Edge: ~8.5km, Area: ~252 km²
-  static int get allResolution =>
-      RemoteConfigService().config.hexConfig.allResolution;
+  static int get provinceResolution =>
+      RemoteConfigService().config.hexConfig.provinceResolution;
 
   /// Approximate children count per parent
   ///
   /// H3 uses Aperture 7, meaning each parent hex contains ~7 children.
   /// - Res 9 -> Res 8: ~7 hexes (ZONE)
-  /// - Res 9 -> Res 6: ~7^3 = 343 hexes (CITY)
-  /// - Res 9 -> Res 5: ~7^4 = 2,401 hexes (ALL)
+  /// - Res 9 -> Res 6: ~7^3 = 343 hexes (DISTRICT)
+  /// - Res 9 -> Res 5: ~7^4 = 2,401 hexes (PROVINCE)
   static int childrenPerParent(int resolutionDelta) {
     if (resolutionDelta <= 0) return 1;
     return pow(7, resolutionDelta).round();
@@ -65,15 +65,15 @@ enum GeographicScope {
     description: 'Neighborhood',
   ),
 
-  /// City: District level (~3.2km radius)
+  /// District: District level (~3.2km radius)
   /// - Shows individual hexes with stats overlay
   /// - Leaderboard filters by Res 6 parent cell
-  city(resolution: 6, zoomLevel: 12.0, label: 'CITY', description: 'District'),
+  district(resolution: 6, zoomLevel: 12.0, label: 'DISTRICT', description: 'District'),
 
-  /// All: City/Region level (no geographic filter)
+  /// Province: Province level (no geographic filter)
   /// - Shows dense hex grid with stats overlay (~2,401 hexes)
-  /// - Leaderboard shows all users (no filter)
-  all(resolution: 5, zoomLevel: 11.0, label: 'ALL', description: 'Region');
+  /// - Leaderboard shows all users in province
+  province(resolution: 5, zoomLevel: 11.0, label: 'PROVINCE', description: 'Province');
 
   /// H3 resolution for this scope's parent cell grouping
   final int resolution;
@@ -94,21 +94,21 @@ enum GeographicScope {
     required this.description,
   });
 
-  /// Get scope from index (0=zone, 1=city, 2=all)
+  /// Get scope from index (0=zone, 1=district, 2=province)
   static GeographicScope fromIndex(int index) {
     return switch (index) {
       0 => GeographicScope.zone,
-      1 => GeographicScope.city,
-      2 => GeographicScope.all,
+      1 => GeographicScope.district,
+      2 => GeographicScope.province,
       _ => GeographicScope.zone,
     };
   }
 
-  /// Get scope index for UI (zone=0, city=1, all=2)
+  /// Get scope index for UI (zone=0, district=1, province=2)
   int get scopeIndex => switch (this) {
     GeographicScope.zone => 0,
-    GeographicScope.city => 1,
-    GeographicScope.all => 2,
+    GeographicScope.district => 1,
+    GeographicScope.province => 2,
   };
 
   /// Resolution delta from base resolution to this scope

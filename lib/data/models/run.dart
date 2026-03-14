@@ -23,6 +23,7 @@ class Run {
   final Team teamAtRun;
   final List<String> hexPath;
   final List<String> hexParents;
+  final List<String> hexDistrictParents; // Res 6 district parents per hex
   final int buffMultiplier;
   final double? cv; // Coefficient of Variation (null for runs < 1km)
   final String syncStatus; // 'pending', 'synced', 'failed'
@@ -46,6 +47,7 @@ class Run {
     required this.teamAtRun,
     List<String>? hexPath,
     List<String>? hexParents,
+    List<String>? hexDistrictParents,
     this.buffMultiplier = 1,
     this.cv,
     this.syncStatus = 'pending',
@@ -58,6 +60,7 @@ class Run {
     this.isActive = false,
   }) : hexPath = hexPath ?? const [],
        hexParents = hexParents ?? const [],
+       hexDistrictParents = hexDistrictParents ?? const [],
        route = route ?? [],
        hexesPassed = hexesPassed ?? [];
 
@@ -134,6 +137,7 @@ class Run {
     'teamAtRun': teamAtRun.name,
     'hex_path': hexPath.join(','),
     'hex_parents': hexParents.join(','),
+    'hex_district_parents': hexDistrictParents.join(','),
     'buff_multiplier': buffMultiplier,
     'cv': cv,
     'sync_status': syncStatus,
@@ -182,6 +186,11 @@ class Run {
         ? hexParentsStr.split(',')
         : <String>[];
 
+    final hexDistrictParentsStr = map['hex_district_parents'] as String?
+        ?? map['hex_city_parents'] as String?; // backward compat
+    final hexDistrictParents = (hexDistrictParentsStr != null && hexDistrictParentsStr.isNotEmpty)
+        ? hexDistrictParentsStr.split(',')
+        : <String>[];
     return Run(
       id: map['id'] as String,
       startTime: startTime,
@@ -192,6 +201,7 @@ class Run {
       teamAtRun: Team.values.byName(map['teamAtRun'] as String),
       hexPath: hexPath,
       hexParents: hexParents,
+      hexDistrictParents: hexDistrictParents,
       buffMultiplier:
           (map['buff_multiplier'] as num?)?.toInt() ??
           (map['buffMultiplier'] as num?)?.toInt() ??
@@ -217,6 +227,7 @@ class Run {
     'team_at_run': teamAtRun.name,
     'hex_path': hexPath,
     'hex_parents': hexParents,
+    'hex_district_parents': hexDistrictParents,
     'buff_multiplier': buffMultiplier,
     'cv': cv,
     'has_flips': hasFlips,
@@ -252,6 +263,7 @@ class Run {
       teamAtRun: team,
       hexPath: List<String>.from(row['hex_path'] as List? ?? []),
       hexParents: List<String>.from(row['hex_parents'] as List? ?? []),
+      hexDistrictParents: List<String>.from(row['hex_district_parents'] as List? ?? []),
       buffMultiplier: (row['buff_multiplier'] as num?)?.toInt() ?? 1,
       cv: (row['cv'] as num?)?.toDouble(),
       hasFlips: (row['has_flips'] as bool?) ??
@@ -271,6 +283,7 @@ class Run {
     Team? teamAtRun,
     List<String>? hexPath,
     List<String>? hexParents,
+    List<String>? hexDistrictParents,
     int? buffMultiplier,
     Object? cv = const _Unspecified(),
     String? syncStatus,
@@ -292,6 +305,7 @@ class Run {
       teamAtRun: teamAtRun ?? this.teamAtRun,
       hexPath: hexPath ?? this.hexPath,
       hexParents: hexParents ?? this.hexParents,
+      hexDistrictParents: hexDistrictParents ?? this.hexDistrictParents,
       buffMultiplier: buffMultiplier ?? this.buffMultiplier,
       cv: cv is _Unspecified ? this.cv : cv as double?,
       syncStatus: syncStatus ?? this.syncStatus,

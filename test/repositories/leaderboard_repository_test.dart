@@ -145,7 +145,7 @@ void main() {
 
       repository.loadEntries(entries);
 
-      final filtered = repository.filterByScope(GeographicScope.all, null);
+      final filtered = repository.filterByScope(GeographicScope.province, null);
       expect(filtered, hasLength(2));
     });
 
@@ -249,7 +249,7 @@ void main() {
 
       final rank = repository.getUserRankInScope(
         '1',
-        GeographicScope.all,
+        GeographicScope.province,
         '891234567abcdef',
       );
       expect(rank, 1);
@@ -271,7 +271,7 @@ void main() {
 
       final rank = repository.getUserRankInScope(
         'unknown',
-        GeographicScope.all,
+        GeographicScope.province,
         null,
       );
       expect(rank, isNull);
@@ -373,7 +373,7 @@ void main() {
 
       repository.loadEntries(entries);
 
-      final filtered = repository.filterByScope(GeographicScope.all, null);
+      final filtered = repository.filterByScope(GeographicScope.province, null);
       expect(
         () => filtered.add(
           LeaderboardEntry.create(

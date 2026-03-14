@@ -23,6 +23,18 @@ class VoiceAnnouncementService {
 
     await _loadMuteState();
 
+    // iOS Simulator has no AVSpeechSynthesizer hardware — calling speak()
+    // causes a native crash (EXC_BAD_ACCESS in the AVSpeechSynthesizerDelegate
+    // callback). Detect simulator via SIMULATOR_DEVICE_NAME env var (set by Xcode)
+    // and bail out early. All speak() calls are no-ops when _initialized=false.
+    if (Platform.isIOS &&
+        Platform.environment.containsKey('SIMULATOR_DEVICE_NAME')) {
+      debugPrint(
+        'VoiceAnnouncementService: iOS Simulator detected — TTS disabled (no audio hardware)',
+      );
+      return; // _initialized stays false → speak() calls are silent no-ops
+    }
+
     try {
       _tts = FlutterTts();
       await _tts!.setLanguage('en-US');
@@ -48,12 +60,7 @@ class VoiceAnnouncementService {
       }
 
       _initialized = true;
-      if (Platform.isIOS) {
-        // AVSpeechSynthesizer produces NO audio on iOS Simulator — real device only.
-        debugPrint('VoiceAnnouncementService: initialized (muted=$_muted) — NOTE: audio only works on real device, not Simulator');
-      } else {
-        debugPrint('VoiceAnnouncementService: initialized (muted=$_muted)');
-      }
+      debugPrint('VoiceAnnouncementService: initialized (muted=$_muted)');
     } catch (e) {
       debugPrint('VoiceAnnouncementService: initialization FAILED — $e');
       _tts = null;

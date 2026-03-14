@@ -9,7 +9,9 @@ import '../providers/leaderboard_provider.dart';
 import '../../../core/providers/user_repository_provider.dart';
 import '../../../core/services/prefetch_service.dart';
 import '../../../core/services/season_service.dart';
+import '../../../core/providers/infrastructure_providers.dart';
 import '../../auth/providers/app_state_provider.dart';
+import '../../../core/providers/points_provider.dart';
 
 /// League scope for leaderboard rankings
 enum LeagueScope { myLeague, globalTop100 }
@@ -33,7 +35,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   @override
   void initState() {
     super.initState();
-    final seasonService = SeasonService();
+    final seasonService = ref.read(seasonServiceProvider);
     _currentSeason = seasonService.seasonNumber;
     _totalSeasons = seasonService.seasonNumber;
 
@@ -102,14 +104,14 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     if (_isViewingCurrentSeason) {
       if (_selectedScope == LeagueScope.myLeague) {
         // Province-scoped leaderboard from PrefetchService
-        results = PrefetchService().getLeaderboardForScope(GeographicScope.all);
+        results = PrefetchService().getLeaderboardForScope(GeographicScope.province);
       } else {
         results = state.entries;
       }
     } else {
       // Historical: snapshot data, filtered client-side for MY LEAGUE
       if (_selectedScope == LeagueScope.myLeague) {
-        results = notifier.filterByScope(GeographicScope.all);
+        results = notifier.filterByScope(GeographicScope.province);
       } else {
         results = state.entries;
       }
@@ -250,7 +252,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
               isLandscape
                   // Landscape: everything scrolls together
                   ? runners.isEmpty
-                      ? (_isViewingCurrentSeason && SeasonService().isFirstDay
+                          ? (_isViewingCurrentSeason && ref.watch(seasonServiceProvider).isFirstDay
                           ? _buildDay1EmptyState()
                           : _buildEmptyState())
                       : CustomScrollView(
@@ -323,7 +325,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                         Expanded(
                           child: runners.isEmpty
                               ? (_isViewingCurrentSeason &&
-                                      SeasonService().isFirstDay
+                                      ref.watch(seasonServiceProvider).isFirstDay
                                   ? _buildDay1EmptyState()
                                   : _buildEmptyState())
                               : CustomScrollView(
@@ -396,7 +398,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   // ---------------------------------------------------------------------------
 
   Widget _buildSeasonRecordLabel() {
-    final season = SeasonService();
+    final season = ref.watch(seasonServiceProvider);
     final remaining = season.daysRemaining;
     final yesterdayDDay = remaining + 1;
     final showYesterday =
@@ -405,7 +407,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     final baseStyle = GoogleFonts.inter(
       fontSize: 9,
       fontWeight: FontWeight.w600,
-      color: Colors.white.withOpacity(0.2),
+      color: Colors.white.withValues(alpha: 0.2),
       letterSpacing: 2.0,
     );
 
@@ -437,6 +439,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   Widget _buildSeasonStatsSection(BuildContext context) {
     final currentUser = ref.watch(userRepositoryProvider);
 
+    final todayFlipPoints = ref.watch(pointsProvider.select((s) => s.todayFlipPoints));
     if (currentUser == null) {
       return const SizedBox.shrink();
     }
@@ -446,7 +449,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     // leaderboard entry for all stats (points, distance, pace, rank).
     // If the user isn't in the leaderboard (no yesterday data), show zeros.
     final currentSeasonRunners =
-        PrefetchService().getLeaderboardForScope(GeographicScope.all);
+        PrefetchService().getLeaderboardForScope(GeographicScope.province);
     final rank = _getCurrentUserRank(context, currentSeasonRunners);
     final userId = _getCurrentUserId(context);
     final leaderboardEntry = userId != null
@@ -461,7 +464,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
 
     // Day 1: no yesterday data in this season — show a contextual banner instead
     // of zeros, which would imply the user hasn't run yet.
-    if (SeasonService().isFirstDay && _isViewingCurrentSeason) {
+    if (ref.watch(seasonServiceProvider).isFirstDay && _isViewingCurrentSeason) {
       return _buildDay1SeasonRecord();
     }
 
@@ -470,9 +473,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withOpacity(0.3),
+          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.03)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,6 +522,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                           ),
                         ],
                       ),
+                      if (todayFlipPoints > 0 && _isViewingCurrentSeason) ...[
+                        const SizedBox(height: 4),
+                        _buildTodayPointsInline(todayFlipPoints),
+                      ],
                     ],
                   ),
                 ),
@@ -526,7 +533,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                 Container(
                   width: 1,
                   height: 32,
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                 ),
                 // Secondary stats (matching ALL TIME: 4 items with flex: 4)
                 Expanded(
@@ -562,9 +569,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -572,14 +579,14 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
           Icon(
             Icons.schedule,
             size: 10,
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
           ),
           const SizedBox(width: 3),
           Text(
             "Yesterday's snapshot",
             style: GoogleFonts.inter(
               fontSize: 8,
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.white.withValues(alpha: 0.3),
             ),
           ),
         ],
@@ -616,22 +623,22 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   /// Day 1 season record panel — replaces the zero-filled SEASON RECORD
   /// card so users understand the season just started (not that they haven't run).
   Widget _buildDay1SeasonRecord() {
-    final seasonNumber = SeasonService().seasonNumber;
+    final seasonNumber = ref.watch(seasonServiceProvider).seasonNumber;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withOpacity(0.3),
+          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.03)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF8A30).withOpacity(0.12),
+                color: const Color(0xFFFF8A30).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -650,7 +657,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       letterSpacing: 2.0,
                     ),
                   ),
@@ -659,7 +666,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                     'Season just started — your first run will open the record.',
                     style: GoogleFonts.sora(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.55),
+                      color: Colors.white.withValues(alpha: 0.55),
                       height: 1.4,
                     ),
                   ),
@@ -679,7 +686,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
       child: Container(
         height: 36,
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withOpacity(0.3),
+          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Row(
@@ -700,7 +707,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                   duration: const Duration(milliseconds: 200),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.white.withOpacity(0.1)
+                        ? Colors.white.withValues(alpha: 0.1)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(18),
                   ),
@@ -1269,6 +1276,24 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     bool showStats = true,
   }) {
     final teamColor = user.team.color;
+    // Today's flip points — only meaningful for the current season.
+    // Computed as liveSeasonPoints - snapshotSeasonPoints so that runs
+    // made before GMT+2 midnight (e.g. by users in Asia) are correctly
+    // reflected after re-login, even if run_date falls on 'yesterday' in GMT+2.
+    final userId = ref.read(userRepositoryProvider)?.id;
+    final snapshotEntry = userId != null
+        ? PrefetchService()
+            .getLeaderboardForScope(GeographicScope.province)
+            .where((e) => e.id == userId)
+            .firstOrNull
+        : null;
+    final snapshotPoints = snapshotEntry?.seasonPoints ?? 0;
+    // liveSeasonPoints = server season_points + any locally unsynced runs today.
+    final liveSeasonPoints = _isViewingCurrentSeason
+        ? (ref.watch(userRepositoryProvider)?.seasonPoints ?? 0) +
+          ref.watch(pointsProvider.select((s) => s.localUnsyncedToday))
+        : 0;
+    final todayFlipPoints = (liveSeasonPoints - snapshotPoints).clamp(0, 999999).toInt();
 
     return ClipRRect(
       child: BackdropFilter(
@@ -1322,29 +1347,18 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
                   ),
                 ),
                 const Spacer(),
+                // Today's pending flip points badge — shows the gap between
+                // header total and this snapshot record.
+                if (todayFlipPoints > 0) ...[
+                  _buildTodayPointsBadge(todayFlipPoints),
+                  const SizedBox(width: 12),
+                ],
                 if (showStats) ...[
                   Text(
                     rank > 0 ? '#$rank' : '—',
                     style: GoogleFonts.bebasNeue(
                       fontSize: 24,
                       color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-                  Text(
-                    '${user.seasonPoints}',
-                    style: GoogleFonts.sora(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: teamColor,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'pts',
-                    style: GoogleFonts.sora(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ],
@@ -1356,8 +1370,91 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
     );
   }
 
+  /// Badge showing today's flip points that aren't in yesterday's snapshot yet.
+  /// Styled in orange to match the 'temporal today' accent used in _buildSeasonRecordLabel.
+  Widget _buildTodayPointsBadge(int points) {
+    const orange = Color(0xFFFF8A30);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 5, 10, 5),
+      decoration: BoxDecoration(
+        color: orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: orange.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(Icons.bolt_rounded, size: 11, color: orange),
+          const SizedBox(width: 3),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '+$points ',
+                      style: GoogleFonts.sora(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: orange,
+                        height: 1.0,
+                      ),
+                    ),
+                    TextSpan(
+                      text: 'pts',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: orange.withValues(alpha: 0.65),
+                        height: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'adds to season',
+                style: GoogleFonts.inter(
+                  fontSize: 7.5,
+                  color: Colors.white.withValues(alpha: 0.28),
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact inline indicator for the stats card — no pill container.
+  /// Shows '+X pts today' in orange below the big season-record number.
+  Widget _buildTodayPointsInline(int points) {
+    const orange = Color(0xFFFF8A30);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Icon(Icons.bolt_rounded, size: 9, color: orange),
+        const SizedBox(width: 2),
+        Text(
+          '+$points pts today',
+          style: GoogleFonts.inter(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: orange,
+            height: 1.0,
+          ),
+        ),
+      ],
+    );
+  }
+
+
   Widget _buildDay1EmptyState() {
-    final seasonNumber = SeasonService().seasonNumber;
+    final seasonNumber = ref.watch(seasonServiceProvider).seasonNumber;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),

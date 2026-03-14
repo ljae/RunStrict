@@ -32,6 +32,7 @@ class RunStopResult {
   final Run session;
   final List<String> capturedHexIds;
   final List<String> capturedHexParents;
+  final List<String> capturedHexDistrictParents;
   final double? cv;
   final int? stabilityScore;
   final List<LapModel> laps;
@@ -40,6 +41,7 @@ class RunStopResult {
     required this.session,
     required this.capturedHexIds,
     required this.capturedHexParents,
+    required this.capturedHexDistrictParents,
     this.cv,
     this.stabilityScore,
     required this.laps,
@@ -81,6 +83,7 @@ class RunTracker {
 
   final List<String> _capturedHexIds = [];
   final List<String> _capturedHexParents = [];
+  final List<String> _capturedHexDistrictParents = [];
 
   /// List of completed laps (1km each) for CV calculation
   final List<LapModel> _completedLaps = [];
@@ -99,6 +102,7 @@ class RunTracker {
 
   List<String> get capturedHexIds => List.unmodifiable(_capturedHexIds);
   List<String> get capturedHexParents => List.unmodifiable(_capturedHexParents);
+  List<String> get capturedHexDistrictParents => List.unmodifiable(_capturedHexDistrictParents);
 
   /// Get list of completed laps (immutable)
   List<LapModel> get completedLaps => List.unmodifiable(_completedLaps);
@@ -153,6 +157,7 @@ class RunTracker {
     _gpsValidator.reset();
     _capturedHexIds.clear();
     _capturedHexParents.clear();
+    _capturedHexDistrictParents.clear();
     _completedLaps.clear();
     _currentLapStartDistance = 0;
     _currentLapStartTimestampMs = null;
@@ -186,16 +191,23 @@ class RunTracker {
       _hexResolution,
     );
 
-    // First point - record it (no capture until we have moving avg pace)
+    // First point — validate accuracy and reported speed before accepting.
+    // Ignoring validation here pollutes _lastValidPoint with a stale/cached GPS
+    // fix, causing ALL subsequent real points to fail trajectory speed checks
+    // (e.g. 80m stale fix → next real point 80m away in 2s = 40 m/s → rejected forever).
     if (_lastValidPoint == null) {
+      final firstResult = _gpsValidator.validate(null, point);
+      if (!firstResult.isValid) {
+        debugPrint(
+          'First GPS point rejected (waiting for better fix): '
+          '${firstResult.rejectionReason}',
+        );
+        return; // Don't anchor _lastValidPoint to a bad fix — wait for next poll
+      }
       _lastValidPoint = point;
       _currentRun!.addPoint(point);
       _currentRun!.currentHexId = currentHexId;
       _currentRun!.distanceInCurrentHex = 0;
-
-      // Initialize validator with first point (no pace data yet)
-      _gpsValidator.validate(null, point);
-
       debugPrint(
         'First point recorded: hexId=$currentHexId (awaiting pace data)',
       );
@@ -281,7 +293,10 @@ class RunTracker {
             _currentRun!.recordFlip(currentHexId);
             _capturedHexIds.add(currentHexId);
             _capturedHexParents.add(
-              _hexService.getParentHexId(currentHexId, H3Config.allResolution),
+              _hexService.getParentHexId(currentHexId, H3Config.provinceResolution),
+            );
+            _capturedHexDistrictParents.add(
+              _hexService.getParentHexId(currentHexId, H3Config.districtResolution),
             );
             debugPrint(
               'HEX FLIPPED ON ENTRY! '
@@ -310,7 +325,10 @@ class RunTracker {
             _currentRun!.recordFlip(currentHexId);
             _capturedHexIds.add(currentHexId);
             _capturedHexParents.add(
-              _hexService.getParentHexId(currentHexId, H3Config.allResolution),
+              _hexService.getParentHexId(currentHexId, H3Config.provinceResolution),
+            );
+            _capturedHexDistrictParents.add(
+              _hexService.getParentHexId(currentHexId, H3Config.districtResolution),
             );
             debugPrint(
               'HEX FLIPPED ON STAY! '
@@ -450,6 +468,7 @@ class RunTracker {
     final completedRun = _currentRun!;
     final hexIds = List<String>.from(_capturedHexIds);
     final hexParents = List<String>.from(_capturedHexParents);
+    final hexDistrictParents = List<String>.from(_capturedHexDistrictParents);
 
     // Calculate CV from completed laps
     final laps = List<LapModel>.from(_completedLaps);
@@ -477,6 +496,7 @@ class RunTracker {
     _gpsValidator.reset();
     _capturedHexIds.clear();
     _capturedHexParents.clear();
+    _capturedHexDistrictParents.clear();
     _completedLaps.clear();
     _currentLapStartDistance = 0;
     _currentLapStartTimestampMs = null;
@@ -490,6 +510,7 @@ class RunTracker {
       session: completedRun,
       capturedHexIds: hexIds,
       capturedHexParents: hexParents,
+      capturedHexDistrictParents: hexDistrictParents,
       cv: cv,
       stabilityScore: stabilityScore,
       laps: laps,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../data/models/team.dart';
@@ -54,32 +55,40 @@ class AuthService {
   }
 
   Future<String> signInWithGoogle() async {
-    final completer = Completer<String>();
-    late final StreamSubscription<AuthState> sub;
-
-    sub = _client.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.signedIn &&
-          data.session?.user != null) {
-        sub.cancel();
-        if (!completer.isCompleted) {
-          completer.complete(data.session!.user.id);
-        }
-      }
-    });
-
-    await _client.auth.signInWithOAuth(
-      OAuthProvider.google,
-      redirectTo: 'com.neondialactic.neonRunner://login-callback',
-      authScreenLaunchMode: LaunchMode.externalApplication,
+    // Native Google Sign-In — no browser, same pattern as Apple Sign-In.
+    // Uses the google_sign_in SDK to obtain an idToken, then exchanges it
+    // with Supabase via signInWithIdToken (no WebView involved).
+    final googleSignIn = GoogleSignIn(
+      clientId:
+          '132757424136-l4q9av4eraph10cvvmaajjmdmgklkl11.apps.googleusercontent.com',
+      serverClientId:
+          '132757424136-3iptph363tgb5debgotg0i81is615kmj.apps.googleusercontent.com',
     );
 
-    return completer.future.timeout(
-      const Duration(minutes: 2),
-      onTimeout: () {
-        sub.cancel();
-        throw AuthException('Google Sign-In timed out');
-      },
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) {
+      throw AuthException('Google Sign-In cancelled');
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    if (idToken == null) {
+      throw AuthException('Google Sign-In failed: No identity token received');
+    }
+
+    final response = await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: googleAuth.accessToken,
     );
+
+    final authUser = response.user;
+    if (authUser == null) {
+      throw AuthException('Google Sign-In failed: No user returned');
+    }
+
+    debugPrint('AuthService: Google sign in - ${authUser.id}');
+    return authUser.id;
   }
 
   // ── Profile Management ──────────────────────────────────────
@@ -219,9 +228,22 @@ class AuthService {
     final userId = currentAuthUser?.id;
     if (userId == null) return;
 
-    await _client.from('users').delete().eq('id', userId);
-    await signOut();
+    try {
+      // Edge Function uses service role to hard-delete from auth.users
+      // (also deletes from public.users before auth deletion)
+      await _client.functions.invoke('delete-account');
+      debugPrint(
+        'AuthService: Account fully deleted (auth + profile) - $userId',
+      );
+    } catch (e) {
+      // Edge Function unavailable — fall back to profile-only deletion
+      debugPrint(
+        'AuthService: deleteAccount Edge Function failed, falling back - $e',
+      );
+      await _client.from('users').delete().eq('id', userId);
+    }
 
+    await signOut();
     debugPrint('AuthService: Account deleted - $userId');
   }
 }

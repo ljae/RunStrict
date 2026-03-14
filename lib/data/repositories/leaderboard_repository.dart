@@ -61,11 +61,11 @@ class LeaderboardRepository {
   /// Returns entries whose home hex shares the same parent cell as the
   /// reference home hex at the specified scope level.
   ///
-  /// For [GeographicScope.all], returns all entries (no geographic filter).
+  /// For [GeographicScope.province], returns all entries (no geographic filter).
   /// If [homeHex] is null and scope is not ALL, returns empty list.
   List<LeaderboardEntry> filterByScope(GeographicScope scope, String? homeHex) {
     // All scope means no geographic filtering
-    if (scope == GeographicScope.all) return entries;
+    if (scope == GeographicScope.province) return entries;
 
     // Need a reference hex for other scopes
     if (homeHex == null) {

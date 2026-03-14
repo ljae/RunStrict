@@ -46,15 +46,16 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
   }
 
   /// Convert a DateTime to the selected display timezone (local or GMT+2).
-  DateTime _convertToDisplayTimezone(DateTime utcTime) {
+  /// [time] may be UTC, local, or any timezone — .toUtc() normalises it first.
+  DateTime _convertToDisplayTimezone(DateTime time) {
     if (_useGmt2) {
       final offsetHours = RemoteConfigService()
           .config
           .seasonConfig
           .serverTimezoneOffsetHours;
-      return utcTime.toUtc().add(Duration(hours: offsetHours));
+      return time.toUtc().add(Duration(hours: offsetHours));
     }
-    return utcTime.toLocal();
+    return time.toLocal();
   }
 
   /// Calculate range boundaries based on anchor date and period
@@ -565,9 +566,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,9 +618,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -673,11 +674,11 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.white.withOpacity(0.1)
+                        ? Colors.white.withValues(alpha: 0.1)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                     border: isSelected
-                        ? Border.all(color: Colors.white.withOpacity(0.2))
+                        ? Border.all(color: Colors.white.withValues(alpha: 0.2))
                         : null,
                   ),
                   child: Column(
@@ -732,7 +733,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Row(
       children: [
         Expanded(
-          child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
+          child: Container(height: 1, color: Colors.white.withValues(alpha: 0.05)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -747,7 +748,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
           ),
         ),
         Expanded(
-          child: Container(height: 1, color: Colors.white.withOpacity(0.05)),
+          child: Container(height: 1, color: Colors.white.withValues(alpha: 0.05)),
         ),
       ],
     );
@@ -760,7 +761,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
       child: Container(
         height: 36,
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withOpacity(0.3),
+          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Row(
@@ -783,7 +784,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                   duration: const Duration(milliseconds: 200),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.white.withOpacity(0.1)
+                        ? Colors.white.withValues(alpha: 0.1)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(18),
                   ),
@@ -879,9 +880,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.3),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.03)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -892,7 +893,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
             style: GoogleFonts.inter(
               fontSize: 8,
               fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               letterSpacing: 1.5,
             ),
           ),
@@ -937,7 +938,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
               Container(
                 width: 1,
                 height: 24,
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
               ),
               // Secondary stats
               Expanded(
@@ -1049,9 +1050,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.3),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.03)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1065,7 +1066,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   letterSpacing: 2.0,
                 ),
               ),
@@ -1113,7 +1114,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
               Container(
                 width: 1,
                 height: 32,
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
               ),
               // Secondary stats
               Expanded(
@@ -1212,9 +1213,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1262,7 +1263,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
       height: 28,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -1291,7 +1292,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
       height: 28,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -1325,7 +1326,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? _teamColor.withOpacity(0.2) : Colors.transparent,
+          color: isSelected ? _teamColor.withValues(alpha: 0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: label != null
@@ -1626,9 +1627,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.6),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Row(
         children: [
@@ -1637,9 +1638,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppTheme.electricBlue.withOpacity(0.1),
+              color: AppTheme.electricBlue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.electricBlue.withOpacity(0.2)),
+              border: Border.all(color: AppTheme.electricBlue.withValues(alpha: 0.2)),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1658,7 +1659,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 8,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.electricBlue.withOpacity(0.7),
+                    color: AppTheme.electricBlue.withValues(alpha: 0.7),
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -1702,7 +1703,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                       width: 3,
                       height: 3,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -1722,7 +1723,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                         width: 3,
                         height: 3,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -1746,9 +1747,9 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: _teamColor.withOpacity(0.1),
+                color: _teamColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _teamColor.withOpacity(0.2)),
+                border: Border.all(color: _teamColor.withValues(alpha: 0.2)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1767,7 +1768,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       fontWeight: FontWeight.w500,
-                      color: _teamColor.withOpacity(0.7),
+                      color: _teamColor.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -1788,7 +1789,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
             Icon(
               Icons.directions_run_rounded,
               size: 64,
-              color: Colors.white.withOpacity(0.08),
+              color: Colors.white.withValues(alpha: 0.08),
             ),
             const SizedBox(height: 16),
             Text(
@@ -1812,16 +1813,16 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
       return Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withOpacity(0.3),
+          color: AppTheme.surfaceColor.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: Column(
           children: [
             Icon(
               Icons.date_range_rounded,
               size: 32,
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1842,7 +1843,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
+                color: Colors.white.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -1865,7 +1866,7 @@ class _RunHistoryScreenState extends ConsumerState<RunHistoryScreen> {
               'tap day',
               style: GoogleFonts.inter(
                 fontSize: 9,
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 fontStyle: FontStyle.italic,
               ),
             ),

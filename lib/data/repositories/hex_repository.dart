@@ -281,7 +281,7 @@ class HexRepository {
           ? DateTime.parse(hexData['last_flipped_at'] as String)
           : null;
 
-      final existing = _hexCache.get(hexId);
+      final existing = _hexCache.get(hexId); // cache-merge: intentional direct cache read (no overlay needed for conflict resolution)
       if (existing != null) {
         // Only update if server data is newer (conflict resolution)
         if (flippedAt != null &&
@@ -351,51 +351,51 @@ class HexRepository {
   }
 
   /// Compute hex dominance from cached data for given scope parents.
-  /// Returns {'allRange': {red, blue, purple, total}, 'cityRange': {...}}
+  /// Returns {'provinceRange': {red, blue, purple, total}, 'districtRange': {...}}
   Map<String, Map<String, int>> computeHexDominance({
-    required String homeHexAll,
-    String? homeHexCity,
+    required String homeHexProvince,
+    String? homeHexDistrict,
     bool includeLocalOverlay = true,
   }) {
-    int allRed = 0, allBlue = 0, allPurple = 0, allTotal = 0;
-    int cityRed = 0, cityBlue = 0, cityPurple = 0, cityTotal = 0;
+    int provinceRed = 0, provinceBlue = 0, provincePurple = 0, provinceTotal = 0;
+    int districtRed = 0, districtBlue = 0, districtPurple = 0, districtTotal = 0;
 
     final hexService = HexService();
 
     _hexCache.forEach((hexId, hex) {
       // Local overlay wins over LRU cache for dominance counting
       final effectiveTeam = (includeLocalOverlay ? _localOverlayHexes[hexId] : null) ?? hex.lastRunnerTeam;
-      final parentAll = hexService.getParentHexId(
+      final parentProvince = hexService.getParentHexId(
         hexId,
-        H3Config.allResolution,
+        H3Config.provinceResolution,
       );
-      if (parentAll == homeHexAll) {
-        allTotal++;
+      if (parentProvince == homeHexProvince) {
+        provinceTotal++;
         switch (effectiveTeam) {
           case Team.red:
-            allRed++;
+            provinceRed++;
           case Team.blue:
-            allBlue++;
+            provinceBlue++;
           case Team.purple:
-            allPurple++;
+            provincePurple++;
           case null:
             break;
         }
 
-        if (homeHexCity != null) {
-          final parentCity = hexService.getParentHexId(
+        if (homeHexDistrict != null) {
+          final parentDistrict = hexService.getParentHexId(
             hexId,
-            H3Config.cityResolution,
+            H3Config.districtResolution,
           );
-          if (parentCity == homeHexCity) {
-            cityTotal++;
+          if (parentDistrict == homeHexDistrict) {
+            districtTotal++;
             switch (effectiveTeam) {
               case Team.red:
-                cityRed++;
+                districtRed++;
               case Team.blue:
-                cityBlue++;
+                districtBlue++;
               case Team.purple:
-                cityPurple++;
+                districtPurple++;
               case null:
                 break;
             }
@@ -407,36 +407,36 @@ class HexRepository {
     // Also count overlay-only hexes not present in the LRU cache
     if (includeLocalOverlay) {
     for (final entry in _localOverlayHexes.entries) {
-      if (_hexCache.get(entry.key) != null) continue; // already counted above
-      final parentAll = hexService.getParentHexId(
+      if (_hexCache.get(entry.key) != null) continue; // dedup: intentional — checking if overlay hex already counted via LRU iteration above
+      final parentProvince = hexService.getParentHexId(
         entry.key,
-        H3Config.allResolution,
+        H3Config.provinceResolution,
       );
-      if (parentAll == homeHexAll) {
-        allTotal++;
+      if (parentProvince == homeHexProvince) {
+        provinceTotal++;
         switch (entry.value) {
           case Team.red:
-            allRed++;
+            provinceRed++;
           case Team.blue:
-            allBlue++;
+            provinceBlue++;
           case Team.purple:
-            allPurple++;
+            provincePurple++;
         }
 
-        if (homeHexCity != null) {
-          final parentCity = hexService.getParentHexId(
+        if (homeHexDistrict != null) {
+          final parentDistrict = hexService.getParentHexId(
             entry.key,
-            H3Config.cityResolution,
+            H3Config.districtResolution,
           );
-          if (parentCity == homeHexCity) {
-            cityTotal++;
+          if (parentDistrict == homeHexDistrict) {
+            districtTotal++;
             switch (entry.value) {
               case Team.red:
-                cityRed++;
+                districtRed++;
               case Team.blue:
-                cityBlue++;
+                districtBlue++;
               case Team.purple:
-                cityPurple++;
+                districtPurple++;
             }
           }
         }
@@ -445,17 +445,17 @@ class HexRepository {
     } // end if (includeLocalOverlay)
 
     return {
-      'allRange': {
-        'red': allRed,
-        'blue': allBlue,
-        'purple': allPurple,
-        'total': allTotal,
+      'provinceRange': {
+        'red': provinceRed,
+        'blue': provinceBlue,
+        'purple': provincePurple,
+        'total': provinceTotal,
       },
-      'cityRange': {
-        'red': cityRed,
-        'blue': cityBlue,
-        'purple': cityPurple,
-        'total': cityTotal,
+      'districtRange': {
+        'red': districtRed,
+        'blue': districtBlue,
+        'purple': districtPurple,
+        'total': districtTotal,
       },
     };
   }

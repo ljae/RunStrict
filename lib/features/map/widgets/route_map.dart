@@ -94,6 +94,7 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
   Size? _mapWidgetSize; // Actual size of the map widget (from LayoutBuilder)
   bool _pendingHexRedraw = false; // Flag to redraw hexes after current draw completes
   bool _pendingRouteUpdate = false; // Flag: route update queued while processing
+  bool _isInitializingLocation = false; // Guard against concurrent _initializeWithCurrentLocation calls
 
   // Navigation mode camera settings
   // These values create the "car navigation" chase camera effect:
@@ -197,9 +198,11 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
                 widget.showLiveLocation &&
                 (widget.liveLocation != null || widget.route.isNotEmpty || _currentUserLocation != null))
               _NavigationMarkerOverlay(
-                key: ValueKey(
-                  'nav_marker_${widget.routeVersion}_${widget.liveLocation.hashCode}_$_cameraChangeCounter',
-                ),
+                key: widget.navigationMode
+                    ? const ValueKey('nav_marker_nav')
+                    : ValueKey(
+                        'nav_marker_${widget.routeVersion}_${widget.liveLocation.hashCode}_$_cameraChangeCounter',
+                      ),
                 mapboxMap: _mapboxMap!,
                 userLocation: widget.liveLocation ??
                     (widget.route.isNotEmpty
@@ -244,7 +247,7 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
         color: NeonTheme.surfaceDark,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: NeonTheme.neonCyan.withOpacity(0.2),
+          color: NeonTheme.neonCyan.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -255,7 +258,7 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
             Icon(
               Icons.map_outlined,
               size: 48,
-              color: NeonTheme.neonCyan.withOpacity(0.3),
+              color: NeonTheme.neonCyan.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 8),
             Text(
@@ -434,9 +437,34 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
   }
 
   Future<void> _initializeWithCurrentLocation() async {
+    // Guard: prevent concurrent calls (async gap between call and setState)
+    if (_isInitializingLocation) return;
+    _isInitializingLocation = true;
     try {
       final position = await geo.Geolocator.getCurrentPosition();
       if (!mounted) return;
+
+      // Skip if accuracy is too poor — a stale/cached fix (e.g. 80m off) will
+      // snap the camera to the wrong location and the marker appears lost.
+      // Let the run tracker's first validated GPS point drive the camera instead.
+      final accuracy = position.accuracy;
+      const maxAcceptableAccuracyM = 50.0;
+      if (accuracy > maxAcceptableAccuracyM) {
+        debugPrint(
+          '_initializeWithCurrentLocation: skipping poor GPS fix '
+          '(accuracy=${accuracy.toStringAsFixed(1)}m > ${maxAcceptableAccuracyM}m)',
+        );
+        // Still set _currentUserLocation so the marker condition in build() is satisfied,
+        // but don't snap the camera to a bad position.
+        setState(() {
+          _currentUserLocation = latlong.LatLng(
+            position.latitude,
+            position.longitude,
+          );
+        });
+        return;
+      }
+
       setState(() {
         _currentUserLocation = latlong.LatLng(
           position.latitude,
@@ -472,6 +500,8 @@ class _RouteMapState extends ConsumerState<RouteMap> with TickerProviderStateMix
       }
     } catch (e) {
       debugPrint('Error getting current location: $e');
+    } finally {
+      _isInitializingLocation = false;
     }
   }
 

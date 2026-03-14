@@ -6,6 +6,7 @@ import '../services/prefetch_service.dart';
 import '../services/supabase_service.dart';
 import '../services/sync_retry_service.dart';
 import '../services/app_lifecycle_manager.dart';
+import '../services/season_service.dart';
 
 /// Infrastructure singleton providers for DI + testability.
 ///
@@ -20,3 +21,4 @@ final syncRetryServiceProvider = Provider<SyncRetryService>((ref) => SyncRetrySe
 final appLifecycleManagerProvider = Provider<AppLifecycleManager>((ref) => AppLifecycleManager());
 final hexRepositoryProvider = Provider<HexRepository>((ref) => HexRepository());
 final leaderboardRepositoryProvider = Provider<LeaderboardRepository>((ref) => LeaderboardRepository());
+final seasonServiceProvider = Provider<SeasonService>((ref) => SeasonService());

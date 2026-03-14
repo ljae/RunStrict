@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -101,9 +102,11 @@ class LocationService {
       );
     }
 
-    // Request background location permission for iOS (optional, won't block)
+    // Request background location permission for iOS (optional, non-blocking).
+    // Using unawaited to avoid blocking startTracking() with a system dialog
+    // that appears mid-countdown and makes the app appear halted.
     if (permission.isGranted) {
-      await Permission.locationAlways.request();
+      unawaited(Permission.locationAlways.request());
     }
 
     return PermissionResult(
@@ -114,12 +117,45 @@ class LocationService {
     );
   }
 
-  /// Start tracking GPS location with fixed 0.5Hz polling
-  ///
-  /// Fixed polling rate (0.5Hz = every 2 seconds) for:
-  /// - Battery optimization
-  /// - Consistent behavior across all speeds
-  /// - Reduced lag and smoother UI updates
+  /// Build platform-specific location settings.
+  /// Android: uses a foreground service with a persistent notification so GPS
+  /// keeps working when the screen is off — no ACCESS_BACKGROUND_LOCATION needed.
+  /// iOS: uses fitness activity type for better accuracy during runs.
+  LocationSettings _buildLocationSettings({int? distanceFilterMeters}) {
+    final accuracy = LocationAccuracy.high;
+    if (Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: accuracy,
+        intervalDuration: Duration(
+          milliseconds: (1000 / _fixedPollingRateHz).round(),
+        ),
+        distanceFilter: distanceFilterMeters ?? 0,
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'Run in Progress',
+          notificationText: 'Runstrict is tracking your route',
+          enableWakeLock: true,
+          notificationChannelName: 'RunStrict Location Tracking',
+        ),
+      );
+    }
+    if (Platform.isIOS || Platform.isMacOS) {
+      return AppleSettings(
+        accuracy: accuracy,
+        activityType: ActivityType.fitness,
+        distanceFilter: distanceFilterMeters ?? 0,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    }
+    return LocationSettings(
+      accuracy: accuracy,
+      distanceFilter: distanceFilterMeters ?? 0,
+    );
+  }
+
+  /// Start tracking GPS location.
+  /// On Android, launches a foreground service with a persistent notification
+  /// so GPS continues when the screen is off.
   Future<void> startTracking() async {
     if (_isTracking) return;
 
@@ -133,45 +169,29 @@ class LocationService {
 
     _isTracking = true;
 
-    final pollingInterval = Duration(
-      milliseconds: (1000 / _fixedPollingRateHz).round(),
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: _buildLocationSettings(),
+    ).listen(
+      (Position position) {
+        if (!_isTracking) return;
+        _locationController.add(LocationPoint(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          timestamp: position.timestamp,
+          accuracy: position.accuracy,
+          speed: position.speed,
+          altitude: position.altitude,
+          heading: position.heading,
+        ));
+      },
+      onError: (error) {
+        debugPrint('LocationService: GPS stream error - $error');
+        _errorController.add('GPS signal lost: $error');
+      },
     );
-
-    _pollingTimer = Timer.periodic(pollingInterval, (_) async {
-      await _pollLocation();
-    });
-
-    await _pollLocation();
   }
 
-  Future<void> _pollLocation() async {
-    if (!_isTracking) return;
-
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-
-      final locationPoint = LocationPoint(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        timestamp: position.timestamp,
-        accuracy: position.accuracy,
-        speed: position.speed,
-        altitude: position.altitude,
-        heading: position.heading,
-      );
-
-      _locationController.add(locationPoint);
-    } catch (e) {
-      debugPrint('LocationService: GPS polling error - $e');
-      _errorController.add('GPS signal lost: $e');
-    }
-  }
-
-  /// Start tracking with distance-based updates (original behavior)
+  /// Start tracking with distance-based updates.
   Future<void> startTrackingDistanceBased({
     int distanceFilterMeters = 5,
   }) async {
@@ -187,36 +207,32 @@ class LocationService {
 
     _isTracking = true;
 
-    final locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: distanceFilterMeters,
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: _buildLocationSettings(
+        distanceFilterMeters: distanceFilterMeters,
+      ),
+    ).listen(
+      (Position position) {
+        _locationController.add(LocationPoint(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          timestamp: position.timestamp,
+          accuracy: position.accuracy,
+          speed: position.speed,
+          altitude: position.altitude,
+          heading: position.heading,
+        ));
+      },
+      onError: (error) {
+        debugPrint('LocationService: Distance-based tracking error - $error');
+        _errorController.add('GPS signal lost: $error');
+      },
     );
-
-    _positionSubscription =
-        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
-          (Position position) {
-            final locationPoint = LocationPoint(
-              latitude: position.latitude,
-              longitude: position.longitude,
-              timestamp: position.timestamp,
-              accuracy: position.accuracy,
-              speed: position.speed,
-              altitude: position.altitude,
-              heading: position.heading,
-            );
-            _locationController.add(locationPoint);
-          },
-          onError: (error) {
-            debugPrint('LocationService: Distance-based tracking error - $error');
-            _errorController.add('GPS signal lost: $error');
-          },
-        );
   }
 
-  /// Stop tracking GPS location
+  /// Stop tracking GPS location and stop the foreground service (Android).
   Future<void> stopTracking() async {
     if (!_isTracking) return;
-
     _pollingTimer?.cancel();
     _pollingTimer = null;
     await _positionSubscription?.cancel();
@@ -248,8 +264,7 @@ class LocationService {
     } catch (e) {
       // Log error for debugging
       // TODO: Replace with proper logging in production
-      // ignore: avoid_print
-      print('Error getting current location: $e');
+      debugPrint('Error getting current location: $e');
       return null;
     }
   }

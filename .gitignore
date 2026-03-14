@@ -54,3 +54,10 @@ build_output*.txt
 *.env
 .env.*
 .mcp.json
+
+# Android release signing (never commit — contains passwords)
+android/release.jks
+android/key.properties
+
+# Production build script (never commit — contains API keys)
+build.sh

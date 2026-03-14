@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  RunStrict Privacy Manifest — required for all App Store submissions since April 2024.
+
+	  APIs used with required reasons:
+	  - File timestamps  : sqflite (SQLite run history database)
+	  - UserDefaults     : shared_preferences (mute settings, app state)
+	  - System boot time : MapboxMaps, sensors_plus (elapsed-time calculations)
+	  - Disk space       : sqflite / path_provider (capacity checks before writes)
+
+	  Data collected:
+	  - Precise location : GPS during active runs only
+	  - Coarse location  : Home hex (H3 res-6, ~3.2 km) stored for leaderboard anchoring
+	  - Usage data       : AdMob ad interactions
+	  - Device ID        : IDFA (only when ATT authorized)
+	-->
+
+	<!-- ── Tracking ────────────────────────────────────────────────────────── -->
+	<!-- Set to true because AdMob may use IDFA for personalized ads after ATT. -->
+	<key>NSPrivacyTracking</key>
+	<true/>
+
+	<key>NSPrivacyTrackingDomains</key>
+	<array>
+		<string>googleadservices.com</string>
+		<string>googlesyndication.com</string>
+		<string>doubleclick.net</string>
+		<string>google-analytics.com</string>
+		<string>googletagmanager.com</string>
+		<string>pagead2.googlesyndication.com</string>
+	</array>
+
+	<!-- ── Required Reason APIs ─────────────────────────────────────────────── -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+
+		<!-- File timestamps — sqflite reads/writes SQLite DB files.
+		     Reason C617.1: Access file timestamps to display or order them. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+
+		<!-- User Defaults — shared_preferences_foundation stores mute settings,
+		     app configuration, and caches. Reason CA92.1: read/write own defaults. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+
+		<!-- System boot time — MapboxMaps SDK and sensors_plus use CACurrentMediaTime
+		     (mach_absolute_time) for animation timing and sensor sampling intervals.
+		     Reason 35F9.1: measure elapsed time on-device, not transmitted. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+
+		<!-- Disk space — sqflite and path_provider check available disk space
+		     before writing run history and route data.
+		     Reason E174.1: check available capacity to decide whether to proceed. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+
+	</array>
+
+	<!-- ── Collected Data Types ─────────────────────────────────────────────── -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+
+		<!-- Precise GPS location — collected only during active user-initiated runs.
+		     Linked to the user's account (run history). Not used for tracking. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- Coarse location — H3 resolution-6 home hex (~3.2 km area) derived from
+		     GPS fix at run start; stored server-side as the leaderboard anchor. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+
+		<!-- Usage data — AdMob records ad impressions and interactions.
+		     Linked to device advertising ID (IDFA) when ATT is authorized. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+
+		<!-- Device ID — IDFA used by AdMob for personalized ads only when
+		     the user grants App Tracking Transparency authorization. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+
+	</array>
+
+</dict>
+</plist>

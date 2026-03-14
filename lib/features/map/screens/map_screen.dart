@@ -398,11 +398,11 @@ class _TeamStatsOverlay extends StatelessWidget {
         : prefetch.homeHex;
 
     String scopeLabel;
-    if (scope == GeographicScope.city && displayHex != null) {
+    if (scope == GeographicScope.district && displayHex != null) {
       // CITY -> "District N"
-      final districtNum = HexService().getCityNumber(displayHex);
+      final districtNum = HexService().getDistrictNumber(displayHex);
       scopeLabel = 'DISTRICT $districtNum';
-    } else if (scope == GeographicScope.all && displayHex != null) {
+    } else if (scope == GeographicScope.province && displayHex != null) {
       // ALL -> Territory name (e.g., "Amber Ridge")
       scopeLabel = HexService().getTerritoryName(displayHex).toUpperCase();
     } else {
@@ -677,9 +677,9 @@ class _ZoomLevelSelector extends StatelessWidget {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.7),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -696,7 +696,7 @@ class _ZoomLevelSelector extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isActive
-                    ? AppTheme.electricBlue.withOpacity(0.2)
+                    ? AppTheme.electricBlue.withValues(alpha: 0.2)
                     : Colors.transparent,
               ),
               child: Center(

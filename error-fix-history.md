@@ -1,7 +1,7 @@
 # Error Fix History
 
 > Track all fixes to prevent duplicated errors or mistakes.
-> Updated: 2026-03-03
+> Updated: 2026-03-08
 
 ---
 
@@ -28,13 +28,201 @@
 | 15 | **`handle_season_transition` cron must run at 21:55 UTC (5 min before midnight)** | `build_daily_hex_snapshot()` runs at 22:00 UTC (midnight GMT+2). If `reset_season()` runs after or simultaneously, hexes are still populated when the new season's Day-1 snapshot is built — new season starts with S5 territory. `handle_season_transition` must run at 21:55 UTC to wipe hexes first. |
 | 16 | **`updateHexColor` must use `getHex()` not `_hexCache.get()`** | `getHex()` merges `_hexCache` + `_localOverlayHexes`. Using raw `_hexCache.get()` ignores today's flips in the overlay — if the snapshot showed hex as BLUE but the user already flipped it RED today (in overlay), `updateHexColor` sees BLUE and re-counts the flip. Same-color running = spurious flip points. |
 | 17 | **Dart `if` in widget tree must be INSIDE the `children: [...]` list** | Placing `if (cond) ...[...]` AFTER the closing `],` of a Column/Row `children` list (but still inside the parent widget call) causes a build error: "Expected an identifier, but got 'if'" + "Too many positional arguments". Always ensure `if` spreads go inside `children: [ ..., if (cond) ...[...], ]` before the closing `]`. |
+| 18 | **finalize_run province change must update local home hex** | `finalize_run()` updates `users.province_hex` server-side. If the client doesn't also update the local SQLite home hex, PrefetchService keeps downloading the old province snapshot → `computeHexDominance` returns 0 → TeamScreen territory shows "No data". Fix: after successful `finalizeRun()`, compare run's province against `PrefetchService().homeHexProvince` and call `saveHomeHex(firstHex)` if different. |
 | 18 | **`computeHexDominance` for TeamScreen must pass `includeLocalOverlay: false`** | Default is `true` (merges `_localOverlayHexes` = today's own flips). TeamScreen territory is "yesterday's snapshot" — it must never include today's runs. On Day 1 this causes the map to show non-zero territory despite the season just resetting. Always use `includeLocalOverlay: false` in `TeamStatsNotifier`. |
 | 19 | **Buff indicator must always show during running** | `showMultiplier = multiplier > 1` hides the ⚡ BUFF stat on the running screen when buff is 1x. New users and Day-1 runners never see their buff status. Show always; use dim color (`AppTheme.textSecondary`) for 1x, amber for > 1x. |
+| 20 | **Buff reads `hex_snapshot`, not live `hexes`** | `calculate_daily_buffs()` must read `hex_snapshot` (frozen at midnight). Reading live `hexes` causes buff ≠ territory display because hexes diverge during the day. |
+| 21 | **Province win query must filter by `province_hex`** | `get_user_buff()` province query must include `AND province_hex = v_province_hex`. `LIMIT 1` alone picks a random province row → wrong buff for most users. |
+| 22 | **`midnight_cron_batch()` must sequence: snapshot first, then buffs** | If `calculate_daily_buffs()` runs before `build_daily_hex_snapshot()` finishes, buff calc reads yesterday's snapshot → stale buff for first hours of each day. Use `midnight_cron_batch()`. |
+| 23 | **`city_hex` (Res 6) must be stored per hex for district accuracy** | District-level buff accuracy requires `hexes.city_hex` (Res 6 parent). Without it, server uses province counts as approximation for district wins — multi-district provinces show wrong winner. |
+| 24 | **Run history MUST survive logout / stale session** | NEVER call `clearAllGuestData()` for authenticated users. On logout, call `clearSessionCaches()` (clears hex/leaderboard/prefetch caches only). Stale session detection must sign out without touching runs, routes, or laps. |
+| 25 | **Guard `isNotEmpty` alongside `!= null` before H3 BigInt parsing** | `BigInt.parse("", radix: 16)` throws `FormatException`. Any string from server data (home_hex, district_hex) can be `""` even when non-null. Always check `.isNotEmpty` before passing to `HexService.getParentHexId()` / `getScopeHexId()`. Wrap H3 calls in `try/catch` at the call site. |
 
 **Pre-edit script**: `./scripts/pre-edit-check.sh` — interactive checklist for any edit.
 **Pre-edit search**: `./scripts/pre-edit-check.sh --search <component>` — grep history for your component.
 
 ---
+## Bug Fix: TeamScreen Territory Shows "No Data" After Cross-Province Run (2026-03-14)
+
+### Problem
+TeamScreen territory cards ("Rustic Canyon" province and "District 1") showed "No data" — all bars empty, 0 hex counts — even though BLUE had clear dominance (23 blue vs 19 red hexes) in that province. The buff correctly showed 2x (server-calculated correctly), but the territory visualization was broken.
+
+### Root Cause
+Two-step causal chain:
+
+1. **`finalize_run()` updates `users.province_hex` server-side** (to the province of the run's first hex) when a user runs in a new area. The user ran in "Rustic Canyon" (`85283473fffffff`) on 2026-03-12, updating their server `province_hex`.
+
+2. **Local SQLite home hex was never updated.** `PrefetchService._homeHex` is loaded from local SQLite (`_loadHomeHex()`) and only changes via explicit Profile screen → `updateHomeHex()`. It remained as the old province's home hex. The `_homeHexProvince` (derived from the old `_homeHex`) pointed to the old province.
+
+3. **`_downloadHexData()` uses `_homeHexProvince`** as the download anchor. So it downloaded the hex snapshot for the OLD province — not Rustic Canyon.
+
+4. **`computeHexDominance(homeHexProvince: wrongProvince)`** found 0 colored hexes in the LRU cache for Rustic Canyon → `claimed == 0` → "No data" rendered.
+
+The `users.province_hex` server field and the local SQLite home hex were permanently out of sync after a cross-province run.
+
+### Fix
+**`lib/features/run/providers/run_provider.dart`** — After `finalizeRun()` succeeds:
+
+```dart
+// If the run started in a different province → update local home hex
+if (syncSucceeded && completedRun.hexPath.isNotEmpty) {
+  final firstHex = completedRun.hexPath.first;
+  final runProvince = HexService().getScopeHexId(
+    firstHex,
+    GeographicScope.province,
+  );
+  if (runProvince != PrefetchService().homeHexProvince) {
+    debugPrint(
+      'RunNotifier: Province changed $runProvince '
+      '(was ${PrefetchService().homeHexProvince}) — updating local home hex',
+    );
+    await PrefetchService().saveHomeHex(firstHex);
+  }
+}
+```
+
+This block runs BEFORE the existing `PrefetchService().refresh()` call, so `_homeHexProvince` is already updated when the refresh downloads the new province snapshot.
+
+Also added import: `import '../../../core/config/h3_config.dart';` for `GeographicScope`.
+
+### Verification
+- `flutter analyze lib/features/run/providers/run_provider.dart` → 2 pre-existing warnings, 0 errors (my change introduced 0 new issues)
+- `./scripts/post-revision-check.sh` → 0 FAILs, 1 pre-existing WARN
+
+### Lesson
+**Invariant #18**: After `finalize_run()` succeeds, if the run's province (first hex's Res-5 parent) differs from `PrefetchService().homeHexProvince`, update local home hex via `PrefetchService().saveHomeHex()`. Without this, territory display permanently shows "No data" for users who run in a new area. The subsequent `PrefetchService().refresh()` (already called post-run) will then download the correct snapshot.
+
+The broader rule: any server-side field derived from run data (`province_hex`, `district_hex`) must have a corresponding local update when that field changes. Never assume the server and local are in sync for location-derived state.
+
+---
+
+## Bug Fix: FormatException — Could Not Parse BigInt in LeaderboardScreen (2026-03-08)
+
+### Problem
+App crashed on `LeaderboardScreen` with `FormatException: Could not parse BigInt` when filtering leaderboard entries by scope. Crash consistently reproduced on Season Day 1 after a new user selected their team. Stack trace:
+
+```
+FormatException: Could not parse BigInt
+#2  HexService.getParentHexId (hex_service.dart:103)
+#3  HexService.getScopeHexId (hex_service.dart:196)
+#4  LeaderboardEntry.isInScope (leaderboard_provider.dart:185)
+#5  LeaderboardNotifier.filterByScope.<anonymous closure> (leaderboard_provider.dart:282)
+```
+
+### Root Cause
+Two-layer failure:
+
+**Layer 1 — `LeaderboardEntry.isInScope`** (province path, line 177): Guarded against `null` district hex but NOT against empty string `""`. Seed data and new-user rows can have `home_hex = ""` (empty string, non-null). The check `if (districtHex != null && referenceDistrictHex != null)` passed for `""`, forwarding it into `getParentHexId()`.
+
+**Layer 2 — `HexService.getParentHexId`** (line 103): Immediately called `BigInt.parse(hexId, radix: 16)` with no guard. `BigInt.parse("", radix: 16)` throws `FormatException: Could not parse BigInt`.
+
+The fallback `homeHex` path had the same gap — `if (homeHex == null || referenceHomeHex == null)` passed for `""` too, sending the empty string into `getScopeHexId()` → `getParentHexId()` → crash.
+
+**Context**: On Day 1, `PrefetchService` skips leaderboard download (`Day 1 — skipping leaderboard download`) but `LeaderboardScreen.initState()` calls `fetchLeaderboard()` directly, which fetches from server. Server entries can have `home_hex = ""` for seed/new users.
+
+### Fix
+**`lib/features/leaderboard/providers/leaderboard_provider.dart`** — `LeaderboardEntry.isInScope()`:
+- Added `.isNotEmpty` checks alongside `!= null` checks for both `districtHex` and `referenceDistrictHex` in the province path
+- Wrapped both H3 computation blocks in `try/catch (_)` — invalid H3 silently falls through to next path or returns `false`
+- Added `homeHex!.isEmpty` and `referenceHomeHex.isEmpty` guards in the homeHex fallback path
+
+**`lib/core/services/hex_service.dart`** — `getParentHexId()`:
+- Added early `if (hexId.isEmpty)` guard that throws `ArgumentError` with a descriptive message before `BigInt.parse` is reached
+- Provides a clear failure point that the `isInScope` try/catch catches and handles gracefully
+
+```dart
+// hex_service.dart — getParentHexId() guard
+String getParentHexId(String hexId, int parentResolution) {
+  _checkInit();
+  if (hexId.isEmpty) {
+    throw ArgumentError(
+      'hexId cannot be empty — received empty string instead of H3 index',
+    );
+  }
+  final h3Index = BigInt.parse(hexId, radix: 16);
+  ...
+}
+
+// leaderboard_provider.dart — isInScope() two-layer defense
+bool isInScope(String? referenceHomeHex, GeographicScope scope, {
+  String? referenceDistrictHex,
+}) {
+  // Province path: guard null AND empty
+  if (scope == GeographicScope.province &&
+      districtHex != null && districtHex!.isNotEmpty &&
+      referenceDistrictHex != null && referenceDistrictHex.isNotEmpty) {
+    try {
+      final myParent = hexService.getParentHexId(districtHex!, H3Config.provinceResolution);
+      final refParent = hexService.getParentHexId(referenceDistrictHex, H3Config.provinceResolution);
+      return myParent == refParent;
+    } catch (_) {
+      // Invalid H3 index — fall through to homeHex path
+    }
+  }
+  // Fallback: guard null AND empty
+  if (homeHex == null || homeHex!.isEmpty ||
+      referenceHomeHex == null || referenceHomeHex.isEmpty) return false;
+  try {
+    final myParent = hexService.getScopeHexId(homeHex!, scope);
+    final refParent = hexService.getScopeHexId(referenceHomeHex, scope);
+    return myParent == refParent;
+  } catch (_) {
+    return false;
+  }
+}
+```
+
+### Verification
+- LSP diagnostics: 0 errors on both changed files
+- `flutter analyze lib/`: 0 errors (remaining errors are pre-existing in test files)
+
+### Lesson Learned
+Empty string (`""`) and `null` are distinct failure modes. Guards like `if (x == null)` silently pass `""` through to H3 parsing, causing `FormatException`. Always check `isNotEmpty` alongside `!= null` for any string that feeds into H3 BigInt parsing. Wrap ALL H3 computation in `try/catch` at the calling site — H3 functions are unforgiving of malformed input.
+
+---
+## Bug Fix: Run History Wiped on Logout and Stale Session Detection (2026-03-08)
+
+### Problem
+Existing users lost all local run history (SQLite `runs`, `routes`, `laps` tables) after logging out and back in, or when the app detected a stale session (authenticated user with no Supabase profile row — e.g. during profile registration flow). All personal run data disappeared permanently.
+
+### Root Cause
+**Bug #1 — `clearAllGuestData()` called on every logout:**
+`AppStateNotifier.logout()` called `LocalStorage().clearAllGuestData()` unconditionally. Despite the misleading name, this method deletes ALL rows from `runs`, `routes`, `laps`, and `run_checkpoint` tables — with no `user_id` filter (no such column exists). Every logout wiped the entire local run history, regardless of whether the user was a guest or an authenticated user.
+
+**Bug #2 — Stale session detection triggered the same wipe:**
+`AppStateNotifier.initialize()` detected stale sessions (authenticated Supabase user but `hasProfile()` returns false) and called `clearAllGuestData()` before signing out. This fires on Day 1 for any new user during the profile registration window — wiping any runs performed before profile setup completed.
+
+### Fix
+**`lib/core/storage/local_storage.dart`** — Added `clearSessionCaches()` method:
+```dart
+/// Clear session-specific cache data on logout.
+/// Preserves run history (runs, routes, laps, run_checkpoint) which is
+/// permanent and cross-season — run history MUST survive sign-out/sign-in.
+/// Only clears: hex cache, leaderboard cache, prefetch metadata (home_hex).
+Future<void> clearSessionCaches() async {
+  if (_database == null) return;
+  await _database!.transaction((txn) async {
+    await txn.delete(_tableHexCache);
+    await txn.delete(_tableLeaderboardCache);
+    await txn.delete(_tablePrefetchMeta);
+  });
+  debugPrint('LocalStorage: Cleared session caches (run history preserved)');
+}
+```
+
+**`lib/features/auth/providers/app_state_provider.dart`** — Two changes:
+1. `logout()`: replaced `clearAllGuestData()` with `clearSessionCaches()`
+2. `initialize()` stale session path: removed `clearAllGuestData()` entirely — stale sessions now sign out but preserve all local run data
+
+### Verification
+- LSP diagnostics: 0 errors on both changed files
+- `flutter analyze lib/`: 0 errors (2 pre-existing info-level warnings unrelated to changes)
+
+### Lesson Learned
+Run history is **permanent and cross-season** — it must NEVER be cleared by auth state changes. The only correct clearing events are user-initiated data wipe. A method named `clearAllGuestData()` that deletes authenticated user data is a naming and design trap. Session logout should only clear server-cached data (hex snapshot, leaderboard cache, prefetch metadata), never the local run log.
+
+---
+
 ## Bug Fix: Territory Shows Today's Runs Instead of Snapshot (2026-03-03)
 
 ### Problem
@@ -1454,3 +1642,95 @@ Remove the spurious middle `),`. Only ONE closer belongs to the Row:
 After replacing any widget with a multi-line wrapper widget, count that the
 replacement produces exactly ONE closing `)` at the correct indentation level.
 The original widget’s trailing `)` must not survive into the replacement.
+
+
+---
+
+## Bug Fix: Buff System — Snapshot/Live Hexes Divergence + Province Filter Missing (2026-03-05)
+
+**Date**: 2026-03-05
+**Severity**: Critical (buff multiplier wrong for all users; territory display and buff out of sync)
+
+### Problem
+User reported 2x buff (RED) despite territory display showing BLUE dominating both province
+(red=36, blue=44) and district. The app correctly showed BLUE winning on the TeamScreen,
+but `get_user_buff()` returned `multiplier=2, has_province_win=true`.
+
+### Root Causes (6 bugs)
+
+**Bug A** (prior session): `calculate_daily_buffs()` compared `hexes.parent_hex` (Res 5)
+against `daily_buff_stats.city_hex` (Res 6) → always 0 rows → tie → RED awarded district win.
+
+**Bug B** (prior session): `>=` instead of `>` in dominance → ties awarded RED.
+
+**Bug C** (prior session): Province counting was global (all provinces) not scoped to
+user's home province.
+
+**Bug D** (this session): `calculate_daily_buffs()` read live `hexes` table (updated by
+`finalize_run()` continuously), but territory display read `hex_snapshot` (frozen at midnight).
+Live hexes had red=41, blue=40 → RED wins. Snapshot had red=36, blue=44 → BLUE wins.
+Divergence accumulates throughout the day as runs complete.
+
+**Bug E** (this session): `get_user_buff()` province query used `WHERE date = v_today_gmt2
+LIMIT 1` — no `province_hex` filter. With 21+ province rows, `LIMIT 1` picked whichever
+PostgreSQL returned first, often a different province.
+
+**Bug F** (this session): `hex_snapshot` had no `city_hex` column — server couldn't do true
+Res 6 district counting without H3 PostgreSQL extension. District win used province scope
+as approximation.
+
+### Fixes Applied
+
+**Server migration `fix_buff_use_hex_snapshot_phase1`:**
+- `get_hex_snapshot()`: UTC `CURRENT_DATE` → GMT+2 date (prevents 22:00-00:00 UTC window
+  where clients download yesterday's snapshot)
+- `calculate_daily_buffs()`: reads `hex_snapshot` (not live `hexes`); strict `>` dominance;
+  per-province scoped; writes to `daily_province_range_stats` with `(date, province_hex)` PK
+- `get_user_buff()`: province query adds `AND province_hex = v_province_hex`; fallback reads
+  `hex_snapshot` instead of live `hexes`
+- `midnight_cron_batch()`: new wrapper → guaranteed sequence: build_snapshot → calc_buffs
+- RLS enabled on `daily_province_range_stats`
+
+**Server migration `add_city_hex_for_district_accuracy`:**
+- `city_hex TEXT` added to `hexes` and `hex_snapshot` (with indexes)
+- `finalize_run()`: new param `p_hex_city_parents TEXT[]`, stores Res 6 parent per hex
+- `build_daily_hex_snapshot()`: copies `city_hex` into snapshot
+- `calculate_daily_buffs()`: uses `city_hex` from snapshot when available for true Res 6
+  district counts; falls back to province approximation otherwise (auto-upgrades after first run)
+
+**Client changes:**
+
+| File | Change |
+|------|--------|
+| `run_tracker.dart` | Added `_capturedHexCityParents`, collects Res 6 parent on each flip (2 capture paths); exposes getter; clears on start/stop |
+| `run_tracker.dart` | `RunStopResult` — added `capturedHexCityParents` field |
+| `run.dart` | Added `hexCityParents` field; full serialization: `toMap`/`fromMap` (SQLite), `toRow`/`fromRow` (Supabase), `copyWith` |
+| `local_storage.dart` | Bumped DB to v18; added `hex_city_parents TEXT DEFAULT ''` to `_onCreate` schema; v18 migration via `ALTER TABLE` |
+| `run_provider.dart` | Passes `hexCityParents: result.capturedHexCityParents` in `copyWith` |
+| `supabase_service.dart` | Sends `'p_hex_city_parents': run.hexCityParents.isNotEmpty ? run.hexCityParents : null` |
+
+### Verification
+- `daily_province_range_stats` home province `85283473fffffff`: `leading_team='blue'`, red=36, blue=44 ✅
+- `daily_buff_stats` user district `86283472fffffff`: `dominant_team='blue'`, red=36, blue=44 ✅
+- `get_user_buff('08f88e4b-26f1-4028-a481-bbf140e588a1')` → `multiplier=1, has_province_win=false, has_district_win=false` ✅
+- `flutter analyze lib/`: 0 new errors ✅
+- LSP diagnostics on all modified files: 0 errors ✅
+
+### cron job update required
+Replace the two separate pg_cron entries with a single `midnight_cron_batch()` call to
+guarantee ordering (snapshot must complete before buff calculation reads it):
+```sql
+-- OLD (two jobs, no ordering guarantee):
+-- 0 22 * * * → build_daily_hex_snapshot()
+-- 0 22 * * * → calculate_daily_buffs()
+
+-- NEW (one job, guaranteed ordering):
+-- 0 22 * * * → midnight_cron_batch()
+```
+
+### Lesson
+**Buff and territory display must read the same data source.** Any intermediate data store
+(live `hexes`) that diverges from the display source (`hex_snapshot`) causes a visible
+contradiction. The canonical fix: buff calculation reads from the frozen snapshot, not live
+data. Province/district queries must always be scoped by the user's `province_hex` — never
+`LIMIT 1` without a scope filter when multiple rows exist for the same date.

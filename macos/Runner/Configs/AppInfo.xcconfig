@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = neon_runner
+PRODUCT_NAME = runstrict
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.neondialactic.neonRunner
+PRODUCT_BUNDLE_IDENTIFIER = com.neondialactic.runstrict
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.neondialactic. All rights reserved.

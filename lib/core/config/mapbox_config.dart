@@ -6,5 +6,10 @@
 // 3. For production, use environment variables or secure storage
 
 class MapboxConfig {
-  static const String accessToken = 'pk.eyJ1Ijoid2l4eGltIiwiYSI6ImNtamRyMjZtMTAzbWEzZXM2dXRtanRoaTUifQ.7ph9tK2QfAg9Qtd3gKyXJA';
+  // Production: set via --dart-define=MAPBOX_ACCESS_TOKEN=...
+  // Development: falls back to dev token below.
+  static const String accessToken = String.fromEnvironment(
+    'MAPBOX_ACCESS_TOKEN',
+    defaultValue: '',
+  );
 }

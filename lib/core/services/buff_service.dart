@@ -6,7 +6,7 @@ import 'remote_config_service.dart';
 class BuffBreakdown {
   final int multiplier;
   final int baseBuff;
-  final int allRangeBonus;
+  final int provinceRangeBonus;
   final int districtBonus;
   final int provinceBonus;
   final String reason;
@@ -21,7 +21,7 @@ class BuffBreakdown {
   const BuffBreakdown({
     required this.multiplier,
     required this.baseBuff,
-    required this.allRangeBonus,
+    required this.provinceRangeBonus,
     this.districtBonus = 0,
     this.provinceBonus = 0,
     required this.reason,
@@ -37,7 +37,7 @@ class BuffBreakdown {
   factory BuffBreakdown.fromJson(Map<String, dynamic> json) => BuffBreakdown(
     multiplier: (json['multiplier'] as num?)?.toInt() ?? 1,
     baseBuff: (json['base_buff'] as num?)?.toInt() ?? 1,
-    allRangeBonus: (json['all_range_bonus'] as num?)?.toInt() ?? 0,
+    provinceRangeBonus: (json['province_range_bonus'] as num?)?.toInt() ?? 0,
     districtBonus: (json['district_bonus'] as num?)?.toInt() ?? 0,
     provinceBonus: (json['province_bonus'] as num?)?.toInt() ?? 0,
     reason: json['reason'] as String? ?? 'Unknown',
@@ -53,7 +53,7 @@ class BuffBreakdown {
   factory BuffBreakdown.defaultBuff() => const BuffBreakdown(
     multiplier: 1,
     baseBuff: 1,
-    allRangeBonus: 0,
+    provinceRangeBonus: 0,
     reason: 'Default',
     team: '',
   );

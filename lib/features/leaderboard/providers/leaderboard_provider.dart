@@ -172,19 +172,38 @@ class LeaderboardEntry {
     final hexService = HexService();
 
     // For ALL (province) scope, prefer district_hex → Res 5 parent
-    if (scope == GeographicScope.all &&
+    if (scope == GeographicScope.province &&
         districtHex != null &&
-        referenceDistrictHex != null) {
-      final myParent = hexService.getParentHexId(districtHex!, H3Config.allResolution);
-      final refParent = hexService.getParentHexId(referenceDistrictHex, H3Config.allResolution);
-      return myParent == refParent;
+        districtHex!.isNotEmpty &&
+        referenceDistrictHex != null &&
+        referenceDistrictHex.isNotEmpty) {
+      try {
+        final myParent = hexService.getParentHexId(
+          districtHex!,
+          H3Config.provinceResolution,
+        );
+        final refParent = hexService.getParentHexId(
+          referenceDistrictHex,
+          H3Config.provinceResolution,
+        );
+        return myParent == refParent;
+      } catch (_) {
+        // Invalid H3 index — fall through to homeHex path
+      }
     }
 
     // Fallback: use home_hex
-    if (homeHex == null || referenceHomeHex == null) return false;
-    final myParent = hexService.getScopeHexId(homeHex!, scope);
-    final refParent = hexService.getScopeHexId(referenceHomeHex, scope);
-    return myParent == refParent;
+    if (homeHex == null ||
+        homeHex!.isEmpty ||
+        referenceHomeHex == null ||
+        referenceHomeHex.isEmpty) return false;
+    try {
+      final myParent = hexService.getScopeHexId(homeHex!, scope);
+      final refParent = hexService.getScopeHexId(referenceHomeHex, scope);
+      return myParent == refParent;
+    } catch (_) {
+      return false;
+    }
   }
 }
 
@@ -277,14 +296,20 @@ class LeaderboardNotifier extends Notifier<LeaderboardState> {
       return state.entries;
     }
 
-    final referenceDistrict = _prefetchService.homeHexCity;
-    return state.entries
+    final referenceDistrict = _prefetchService.homeHexDistrict;
+    try {
+      return state.entries
         .where((e) => e.isInScope(
               referenceHex,
               scope,
               referenceDistrictHex: referenceDistrict,
-            ))
-        .toList();
+            ),
+          )
+          .toList();
+    } catch (e) {
+      debugPrint('LeaderboardNotifier.filterByScope: H3 error — $e');
+      return state.entries;
+    }
   }
 
   List<LeaderboardEntry> filterByTeamAndScope(

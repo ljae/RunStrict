@@ -201,7 +201,7 @@ class NeonTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: neonCyan.withOpacity(0.2), width: 1),
+          side: BorderSide(color: neonCyan.withValues(alpha: 0.2), width: 1),
         ),
       ),
 
@@ -227,7 +227,7 @@ class NeonTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: neonCyan,
-          side: BorderSide(color: neonCyan.withOpacity(0.5), width: 2),
+          side: BorderSide(color: neonCyan.withValues(alpha: 0.5), width: 2),
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -249,12 +249,12 @@ class NeonTheme {
   static List<BoxShadow> neonGlow(Color color, {double intensity = 1.0}) {
     return [
       BoxShadow(
-        color: color.withOpacity(0.6 * intensity),
+        color: color.withValues(alpha: 0.6 * intensity),
         blurRadius: 20,
         spreadRadius: 0,
       ),
       BoxShadow(
-        color: color.withOpacity(0.3 * intensity),
+        color: color.withValues(alpha: 0.3 * intensity),
         blurRadius: 40,
         spreadRadius: 5,
       ),
@@ -265,7 +265,7 @@ class NeonTheme {
   static List<BoxShadow> innerGlow(Color color) {
     return [
       BoxShadow(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         blurRadius: 10,
         spreadRadius: -5,
       ),
@@ -276,7 +276,7 @@ class NeonTheme {
   static List<BoxShadow> elevatedCard() {
     return [
       BoxShadow(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withValues(alpha: 0.5),
         blurRadius: 20,
         offset: const Offset(0, 10),
       ),

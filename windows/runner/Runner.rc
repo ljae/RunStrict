@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.neondialactic" "\0"
-            VALUE "FileDescription", "neon_runner" "\0"
+            VALUE "FileDescription", "runstrict" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "neon_runner" "\0"
+            VALUE "InternalName", "runstrict" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.neondialactic. All rights reserved." "\0"
-            VALUE "OriginalFilename", "neon_runner.exe" "\0"
-            VALUE "ProductName", "neon_runner" "\0"
+            VALUE "OriginalFilename", "runstrict.exe" "\0"
+            VALUE "ProductName", "runstrict" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

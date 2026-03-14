@@ -87,9 +87,9 @@ class TeamRankings {
   final int userYesterdayPoints;
   final int userRank;
   final int eliteThreshold;
-  final String? cityHex;
+  final String? districtHex;
   final List<RankingEntry> redEliteTop3;
-  final int redRunnerCountCity;
+  final int redRunnerCountDistrict;
   final int eliteCutoffRank;
 
   const TeamRankings({
@@ -98,9 +98,9 @@ class TeamRankings {
     required this.userYesterdayPoints,
     required this.userRank,
     required this.eliteThreshold,
-    this.cityHex,
+    this.districtHex,
     required this.redEliteTop3,
-    this.redRunnerCountCity = 0,
+    this.redRunnerCountDistrict = 0,
     this.eliteCutoffRank = 0,
   });
 
@@ -119,9 +119,9 @@ class TeamRankings {
           (json['user_yesterday_points'] as num?)?.toInt() ?? 0,
       userRank: (json['user_rank'] as num?)?.toInt() ?? 0,
       eliteThreshold: (json['elite_threshold'] as num?)?.toInt() ?? 0,
-      cityHex: json['city_hex'] as String?,
+      districtHex: json['district_hex'] as String?,
       redEliteTop3: parseEntries(json['red_elite_top3']),
-      redRunnerCountCity: (json['red_runner_count_city'] as num?)?.toInt() ?? 0,
+      redRunnerCountDistrict: (json['red_runner_count_district'] as num?)?.toInt() ?? 0,
       eliteCutoffRank: (json['elite_cutoff_rank'] as num?)?.toInt() ?? 0,
     );
   }
@@ -195,8 +195,8 @@ class HexDominanceScope {
 }
 
 class HexDominance {
-  final HexDominanceScope allRange;
-  final HexDominanceScope? cityRange;
+  final HexDominanceScope provinceRange;
+  final HexDominanceScope? districtRange;
 
   /// User-friendly territory name (e.g., "Amber Ridge", "Crystal Vale")
   final String? territoryName;
@@ -205,25 +205,25 @@ class HexDominance {
   final int? districtNumber;
 
   const HexDominance({
-    required this.allRange,
-    this.cityRange,
+    required this.provinceRange,
+    this.districtRange,
     this.territoryName,
     this.districtNumber,
   });
 
   factory HexDominance.fromJson(Map<String, dynamic> json) => HexDominance(
-    allRange: HexDominanceScope.fromJson(
-      json['all_range'] as Map<String, dynamic>?,
+    provinceRange: HexDominanceScope.fromJson(
+      json['province_range'] as Map<String, dynamic>?,
     ),
-    cityRange: json['city_range'] != null
-        ? HexDominanceScope.fromJson(json['city_range'] as Map<String, dynamic>)
+    districtRange: json['district_range'] != null
+        ? HexDominanceScope.fromJson(json['district_range'] as Map<String, dynamic>)
         : null,
     territoryName: json['territory_name'] as String?,
     districtNumber: (json['district_number'] as num?)?.toInt(),
   );
 
   factory HexDominance.empty() => const HexDominance(
-    allRange: HexDominanceScope(
+    provinceRange: HexDominanceScope(
       redHexCount: 0,
       blueHexCount: 0,
       purpleHexCount: 0,
@@ -232,14 +232,14 @@ class HexDominance {
 
   /// Copy with updated territory naming fields
   HexDominance copyWith({
-    HexDominanceScope? allRange,
-    HexDominanceScope? cityRange,
+    HexDominanceScope? provinceRange,
+    HexDominanceScope? districtRange,
     String? territoryName,
     int? districtNumber,
   }) {
     return HexDominance(
-      allRange: allRange ?? this.allRange,
-      cityRange: cityRange ?? this.cityRange,
+      provinceRange: provinceRange ?? this.provinceRange,
+      districtRange: districtRange ?? this.districtRange,
       territoryName: territoryName ?? this.territoryName,
       districtNumber: districtNumber ?? this.districtNumber,
     );
@@ -252,7 +252,7 @@ class RedTeamBuff {
   final int commonMultiplier; // Always 1
   final bool isElite; // Is the user (or hypothetical) in elite tier?
   final int activeMultiplier; // The actual base multiplier being used
-  final int redRunnerCountCity; // Total RED runners in city range
+  final int redRunnerCountDistrict; // Total RED runners in district range
   final int eliteCutoffRank; // Rank cutoff for elite (top 20%)
 
   const RedTeamBuff({
@@ -260,7 +260,7 @@ class RedTeamBuff {
     this.commonMultiplier = 1,
     required this.isElite,
     required this.activeMultiplier,
-    required this.redRunnerCountCity,
+    required this.redRunnerCountDistrict,
     required this.eliteCutoffRank,
   });
 }
@@ -268,18 +268,18 @@ class RedTeamBuff {
 /// Purple team participation stats
 class PurpleParticipation {
   final int runnersRanYesterday;
-  final int totalPurpleInCity;
+  final int totalPurpleInDistrict;
   final double participationRate; // 0.0 to 1.0
 
   const PurpleParticipation({
     required this.runnersRanYesterday,
-    required this.totalPurpleInCity,
+    required this.totalPurpleInDistrict,
     required this.participationRate,
   });
 
   factory PurpleParticipation.empty() => const PurpleParticipation(
     runnersRanYesterday: 0,
-    totalPurpleInCity: 0,
+    totalPurpleInDistrict: 0,
     participationRate: 0.0,
   );
 
@@ -305,7 +305,7 @@ class TeamBuffComparison {
   });
 
   // Delegate to BuffBreakdown (eliminates duplicate fields)
-  int get allRangeBonus => breakdown.allRangeBonus;
+  int get provinceRangeBonus => breakdown.provinceRangeBonus;
   int get districtWinBonus => breakdown.hasDistrictWin ? 1 : 0;
   int get provinceWinBonus => breakdown.hasProvinceWin ? 1 : 0;
   String get userTeam => breakdown.team;

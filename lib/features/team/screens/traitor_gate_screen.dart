@@ -4,7 +4,7 @@ import '../../../theme/app_theme.dart';
 import '../../auth/providers/app_state_provider.dart';
 import '../../run/providers/run_provider.dart';
 import '../../../core/providers/user_repository_provider.dart';
-import '../../../core/services/season_service.dart';
+import '../../../core/providers/infrastructure_providers.dart';
 
 /// Traitor's Gate - Purple team defection screen.
 ///
@@ -126,7 +126,7 @@ class _TraitorGateScreenState extends ConsumerState<TraitorGateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final seasonService = SeasonService();
+    final seasonService = ref.watch(seasonServiceProvider);
 
     // Safety check: redirect if purple not unlocked
     if (!seasonService.isPurpleUnlocked) {

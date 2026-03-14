@@ -1,3 +1,13 @@
+// GMT+2 Date Utilities — Server / Game Domain Helper
+//
+// This class provides date/string conversions anchored to the server
+// timezone (GMT+2 by default). It is the canonical implementation for
+// all Domain A (server-side game logic) date operations.
+//
+// For the full timezone architecture — which functions must use GMT+2,
+// which use device local time, and how the user toggle works — see:
+//   lib/core/config/timezone_config.dart
+//
 import '../services/remote_config_service.dart';
 
 class Gmt2DateUtils {

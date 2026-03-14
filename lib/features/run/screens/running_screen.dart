@@ -336,9 +336,9 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      AppTheme.backgroundStart.withOpacity(0.6),
+                      AppTheme.backgroundStart.withValues(alpha: 0.6),
                       Colors.transparent,
-                      AppTheme.backgroundStart.withOpacity(0.8),
+                      AppTheme.backgroundStart.withValues(alpha: 0.8),
                     ],
                     stops: const [0.0, 0.4, 1.0],
                   ),
@@ -439,9 +439,9 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceColor.withOpacity(0.3),
+            color: AppTheme.surfaceColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -510,7 +510,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
             // Minimal shadow, ensure non-negative blur
             shadows: [
               Shadow(
-                color: teamColor.withOpacity(0.3),
+                color: teamColor.withValues(alpha: 0.3),
                 blurRadius: 20, // Static positive value
                 offset: const Offset(0, 4),
               ),
@@ -539,9 +539,9 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.3),
+        color: AppTheme.surfaceColor.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
@@ -553,7 +553,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
               color: Colors.white,
             ),
           ),
-          Container(width: 1, height: 36, color: Colors.white.withOpacity(0.1)),
+          Container(width: 1, height: 36, color: Colors.white.withValues(alpha: 0.1)),
           Expanded(
             child: _buildStatItem(
               icon: Icons.speed,
@@ -567,7 +567,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
             Container(
               width: 1,
               height: 36,
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
             ),
             Expanded(
               child: _buildStatItem(
@@ -592,7 +592,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color.withOpacity(0.8), size: 18),
+        Icon(icon, color: color.withValues(alpha: 0.8), size: 18),
         const SizedBox(height: 4),
         Text(
           value,
@@ -647,7 +647,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: EnergyHoldButton(
           icon: Icons.stop_rounded,
-          baseColor: AppTheme.surfaceColor.withOpacity(0.9),
+          baseColor: AppTheme.surfaceColor.withValues(alpha: 0.9),
           fillColor: teamColor,
           iconColor: teamColor,
           onComplete: _stopRun,
@@ -667,7 +667,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: EnergyHoldButton(
               icon: Icons.directions_run,
-              baseColor: teamColor.withOpacity(0.2),
+              baseColor: teamColor.withValues(alpha: 0.2),
               fillColor: teamColor,
               iconColor: Colors.white,
               onComplete: _startRun,
@@ -685,7 +685,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
 
     return Positioned.fill(
       child: Container(
-        color: AppTheme.backgroundStart.withOpacity(0.9),
+        color: AppTheme.backgroundStart.withValues(alpha: 0.9),
         child: Center(
           child: AnimatedBuilder(
             animation: _countdownController,
@@ -707,12 +707,12 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
                           height: 1.0,
                           shadows: [
                             Shadow(
-                              color: teamColor.withOpacity(0.6),
+                              color: teamColor.withValues(alpha: 0.6),
                               blurRadius: 40,
                               offset: const Offset(0, 0),
                             ),
                             Shadow(
-                              color: teamColor.withOpacity(0.3),
+                              color: teamColor.withValues(alpha: 0.3),
                               blurRadius: 80,
                               offset: const Offset(0, 0),
                             ),
@@ -746,7 +746,7 @@ class _RunningScreenState extends ConsumerState<RunningScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.athleticRed.withOpacity(0.9),
+        color: AppTheme.athleticRed.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(

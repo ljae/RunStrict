@@ -16,11 +16,11 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
-  sdk: ^3.10.4
-  flutter: ">=3.0.0"
+  sdk: '>=3.11.0 <4.0.0'
+  flutter: ">=3.27.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -58,7 +58,7 @@ dependencies:
   google_fonts: ^6.2.1
 
   # Backend (Auth + Database + Realtime + Storage)
-  supabase_flutter: ^2.0.0
+  supabase_flutter: ^2.8.0
 
   # Sensors (Anti-spoofing)
   sensors_plus: ^6.1.1
@@ -72,6 +72,7 @@ dependencies:
 
   # Social auth
   sign_in_with_apple: ^6.1.0
+  google_sign_in: ^6.2.1
   crypto: ^3.0.6
 
   # Animations
@@ -83,6 +84,7 @@ dependencies:
 
   # Ads
   google_mobile_ads: ^5.3.0
+  app_tracking_transparency: ^2.0.6  # ATT prompt required before AdMob init (iOS 14+)
 
   # In-App Purchases (RevenueCat)
   purchases_flutter: ^8.0.0

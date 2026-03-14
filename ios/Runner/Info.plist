@@ -7,7 +7,13 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.neondialactic.neonRunner</string>
+				<string>com.neondialactic.runstrict</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.132757424136-l4q9av4eraph10cvvmaajjmdmgklkl11</string>
 			</array>
 		</dict>
 	</array>
@@ -16,7 +22,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Neon Runner</string>
+	<string>RunStrict</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,7 +30,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>neon_runner</string>
+	<string>runstrict</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -34,17 +40,19 @@
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FLTEnableImpeller</key>
-	<false/>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>We need your location to track your runs accurately.</string>
+	<string>RunStrict tracks your route in the background while your phone screen is off, so your hex territory captures are recorded throughout your entire run.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>We need your location to track runs even when the app is in the background.</string>
+	<string>RunStrict tracks your route in the background while your phone screen is off, so your hex territory captures are recorded throughout your entire run.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We need your location to track your runs and calculate distance.</string>
+	<string>RunStrict uses your location to track your running route, calculate distance, and determine which hex territories you pass through.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>We use motion data to verify your running activity and prevent GPS spoofing.</string>
+	<string>Motion data confirms you are physically running, ensuring fair scoring and run validation.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>We use this identifier to show you relevant ads and support free access to RunStrict. You can opt out and still use the app with non-personalized ads.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
@@ -52,13 +60,51 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>GADApplicationIdentifier</key>
-		<string>ca-app-pub-3940256099942544~1458002511</string>
+		<!-- PRODUCTION: Real AdMob App ID. Must match publisher of ad unit IDs in ad_service.dart. Never mix publisher accounts → SIGABRT. -->
+		<string>ca-app-pub-5211646950805880~6418697246</string>
 	<key>SKAdNetworkItems</key>
 	<array>
-		<dict>
-			<key>SKAdNetworkIdentifier</key>
-			<string>cstr6suwn9.skadnetwork</string>
-		</dict>
+		<!-- Google AdMob / Google Ads networks (AdMob 11.x required list) -->
+		<dict><key>SKAdNetworkIdentifier</key><string>cstr6suwn9.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>4fzdc2evr5.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>4pfyvq9l8r.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>2fnua5tdw4.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>ydx93a7ass.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>5a6flpkh64.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>p78axxw29g.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>v72qych5uu.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>c6k4g5qg8m.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>s39g8k73mm.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>3qy4746246.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>3sh42y64l3.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>f38h382jlk.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>hs6bdukanm.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>prcb7njmu6.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>v4nxqhlyqp.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>wzmmz9fp6w.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>su67r6k2v3.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>yclnxrl5pm.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>7ug5zh24hu.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>gta9lk7p23.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>vutu7akeur.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>y5ghdn53zk.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>n38lu8286q.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>47vhws6wlr.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>kbd757ywx3.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>9t245vhmpl.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>a2p9lx4jpn.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>22mmun2rn5.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>4468km3ulz.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>2u9pt9hc89.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>8s468mfl3y.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>klf5c3l5u5.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>ppxm28t8ap.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>74b6s63p6l.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>mtkv5xtk9e.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>kbmxgpxpgc.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>wg4vff78zm.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>523jjuq3hy.skadnetwork</string></dict>
+		<dict><key>SKAdNetworkIdentifier</key><string>qqp299437r.skadnetwork</string></dict>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

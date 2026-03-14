@@ -339,6 +339,8 @@ Calculated daily at midnight GMT+2 via Edge Function. Frozen at run start.
 **New users** = 1x (default until yesterday's data exists)
 - Elite threshold stored in `daily_buff_stats.red_elite_threshold_points` (from `run_history.flip_points`)
 - District scoping uses `users.district_hex` (Res 6 H3 parent, set by `finalize_run()`)
+- **Province Win** = the user's local **H3 Res-5 province** (`users.province_hex`, set by `finalize_run()` from `p_hex_parents[1]`). This matches exactly what the Territory section in TeamScreen displays. It does **NOT** mean server-wide global dominance.
+- `daily_province_range_stats` keyed by `(stat_date, province_hex)` — one row per Res-5 province per day
 
 ### Purple Team (Protocol of Chaos)
 
@@ -467,6 +469,7 @@ Skipped during active runs (including stopRun via `_isStopping` flag). Throttled
 - **Local overlay**: User's own today's flips stored in SQLite, applied on top of snapshot
 - **Live `hexes` table**: Updated by `finalize_run()` for buff/dominance only, NOT for flip counting
 - **District scoping**: `users.district_hex` (Res 6 H3 parent) set by `finalize_run()`
+- **Province scoping**: `users.province_hex` (Res 5) set by `finalize_run()` from `p_hex_parents[1]` (first hex's province parent). Used for buff province win — scoped to user's local Res-5 area, matching TeamScreen Territory display.
 - **Hex parent_hex**: Res 5 province (for snapshot/delta download), NOT Res 6 district
 - **Dominance query**: `get_hex_dominance(p_parent_hex)` filters by Res 5 province hex
 
@@ -759,10 +762,10 @@ Graceful fallback when no accelerometer: iOS Simulator, some Android devices, se
 | Scope | Enum Value | H3 Resolution | Description |
 |-------|------------|---------------|-------------|
 | **ZONE** | `zone` | 8 | Neighborhood (~461m) |
-| **DISTRICT** | `district` | 6 | District (~3.2km) — `users.district_hex`, `daily_buff_stats.city_hex` |
+| **DISTRICT** | `district` | 6 | District (~3.2km) — `users.district_hex`, `daily_buff_stats.district_hex` |
 | **PROVINCE** | `province` | 5 | Province/Metro — `hexes.parent_hex`, `hex_snapshot.parent_hex` |
 
-Legacy code references `city` (now `district`) and `all` (now `province`).
+Legacy code references `city` (now `district`) and `all` (now `province`). These are fully renamed.
 - `hexes.parent_hex` = Res 5 (province) — used for snapshot/delta/dominance queries
 - `users.district_hex` = Res 6 (district) — used for buff/rankings scoping
 - Base gameplay hex = Res 9
@@ -777,7 +780,7 @@ Unified: `X'XX` (apostrophe separator, no trailing `"`). Examples: `5'30`, `6'05
 - **FlipPoints Header**: Shows season total points (not today's). Uses `FittedBox` for overflow. Airport departure board flip animation.
 - **Google AdMob**: BannerAd on MapScreen (all scope views, portrait + landscape). `AdService` singleton. Test IDs during dev.
 - **Landscape Layout**: MapScreen — ad + zoom selector in column. LeaderboardScreen — single `CustomScrollView`.
-- **SQLite version**: v15 (v12 added `hex_path`, `buff_multiplier`, `run_checkpoint`; v15 current)
+- **SQLite version**: v19 (v12 added `hex_path`, `buff_multiplier`, `run_checkpoint`; v15 added lap tracking; v17 added `has_flips` to runs; v19 renamed `hex_city_parents` → `hex_district_parents`)
 
 ---
 
@@ -786,22 +789,24 @@ Unified: `X'XX` (apostrophe separator, no trailing `"`). Examples: `5'30`, `6'05
 ```sql
 users            -- id, name, team, avatar, season_points, manifesto,
                  -- sex, birthday, nationality,
-                 -- home_hex, home_hex_end, season_home_hex, district_hex,
+                 -- home_hex, home_hex_end, season_home_hex, district_hex, province_hex,
                  -- total_distance_km, avg_pace_min_per_km, avg_cv, total_runs, cv_run_count
-hexes            -- id (H3 index), last_runner_team, last_flipped_at, parent_hex (Res 5 province)
+hexes            -- id (H3 index), last_runner_team, last_flipped_at, parent_hex (Res 5 province), district_hex (Res 6)
 hex_snapshot     -- hex_id, last_runner_team, snapshot_date, parent_hex (frozen daily snapshot)
 runs             -- id, user_id, team_at_run, distance_meters, hex_path[] (partitioned monthly)
 run_history      -- id, user_id, run_date, distance_km, duration_seconds, flip_count, flip_points, cv, has_flips
 daily_stats      -- id, user_id, date_key, total_distance_km, flip_count (partitioned monthly)
-daily_buff_stats -- stat_date, city_hex, dominant_team, red/blue/purple_hex_count,
+daily_buff_stats -- stat_date, district_hex, dominant_team, red/blue/purple_hex_count,
                  -- red_elite_threshold_points, purple_participation_rate
+daily_province_range_stats -- stat_date, province_hex (Res 5), leading_team, red/blue/purple_hex_count
+                 -- (one row per Res-5 province per day; used for province win in buff)
 season_leaderboard_snapshot -- user_id, season_number, rank, name, team, season_points,
                  -- total_distance_km, avg_pace_min_per_km, avg_cv, total_runs,
                  -- home_hex, home_hex_end, manifesto, nationality (frozen at midnight)
 ```
 
 **Key RPC Functions:**
-- `finalize_run(...)` → cap-validate flip_points, update live hexes for buff/dominance, store district_hex. Handles 0-flip runs safely.
+- `finalize_run(...)` → cap-validate flip_points, update live hexes for buff/dominance, store district_hex + province_hex. Handles 0-flip runs safely.
 - `get_user_buff(user_id)` → get user's current buff multiplier
 - `calculate_daily_buffs()` → daily cron at midnight GMT+2
 - `build_daily_hex_snapshot()` → daily cron to build tomorrow's snapshot at midnight GMT+2
@@ -847,6 +852,7 @@ season_leaderboard_snapshot -- user_id, season_number, rank, name, team, season_
 - Don't put business logic in widgets — use services/providers
 - Don't hardcode colors — use `AppTheme` constants
 - Don't use `ChangeNotifier`, `StateNotifier`, or legacy `provider` package — Riverpod 3.0 only
+  - **Exception:** `_RouterRefreshNotifier` in `lib/app/routes.dart` extends `ChangeNotifier` as a `GoRouter.refreshListenable` adapter. This is a private, scoped adapter following the GoRouter team's official Riverpod integration pattern — `GoRouter.refreshListenable` requires a `Listenable`, not a Riverpod primitive. Do not replace without a concrete benefit.
 - Don't create new state management patterns
 - Don't store derived/calculated data in database (calculate on-demand)
 - Don't create backend API endpoints — use RLS + Edge Functions
@@ -881,6 +887,50 @@ flutter test --coverage                   # With coverage
 
 > For detailed game rules, data architecture, sync strategy, and UI specs → see [DEVELOPMENT_SPEC.md](./DEVELOPMENT_SPEC.md)
 
+
+---
+
+## Post-Revision Hook
+
+Run `./scripts/post-revision-check.sh` **after every code change** before committing.
+
+```bash
+./scripts/post-revision-check.sh            # Full audit of lib/ (82 Dart files)
+./scripts/post-revision-check.sh --staged   # Git hook mode: staged files only
+SKIP_REVISION_CHECK=1 git commit             # Emergency bypass (leaves audit trail)
+```
+
+Installed as a git pre-commit hook (`ln -sf ../../scripts/post-revision-check.sh .git/hooks/pre-commit`).
+The hook runs automatically on every `git commit`.
+
+### What It Checks (21 rules across 10 groups)
+
+| Group | Rules | Maps To |
+|-------|-------|---------|
+| A — Code quality | withOpacity, print(), lint suppression, StateNotifier, ChangeNotifier | AGENTS.md |
+| B — Riverpod 3.0 | ref.watch(.notifier) misuse | riverpod_rule.md |
+| C — Data domain | UserModel server fields in display layer | Invariant #7 |
+| D — Points & sync | Client flipPoints to onRunSynced, math.max(totalSeasonPoints) | Invariants #2, #12 |
+| E — HexRepository | _hexCache.get() bypass, clearAll() misuse, computeHexDominance overlay | Invariants #3, #4, #16, #18 |
+| F — Timezone | DateTime.now() in server-domain models | Invariant #11 |
+| G — (disabled) | Snapshot date +1 offset — enforced server-side; undetectable via grep | Invariant #1 |
+| H — SQL partition | created_at vs run_date in queries | Invariant #8 |
+| I — SQLite DDL | local_storage.dart modified (single advisory WARN) | Missing comma crash |
+| J — AdMob | App ID vs ad unit publisher mismatch | SIGABRT crash |
+| K — OnResume | _onAppResume() missing provider refreshes | Invariant #5 |
+
+**FAILs** block the commit. **WARNs** are advisory (do not block).
+
+### Sentinel Comments (suppress known-good false positives)
+
+If you add a new `_hexCache.get()` call that is legitimately outside `getHex()`
+(cache-merge or dedup context), add one of these comments on the same line:
+
+```dart
+final existing = _hexCache.get(id); // cache-merge: intentional
+if (_hexCache.get(id) != null) continue; // dedup: intentional
+HexRepository().clearAll(); // province-change: clearAll() is correct here
+```
 
 ---
 

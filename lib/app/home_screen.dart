@@ -13,6 +13,7 @@ import '../core/providers/connectivity_provider.dart';
 import '../core/widgets/season_countdown_widget.dart';
 import '../core/widgets/flip_points_widget.dart';
 import '../core/services/season_service.dart';
+import '../core/providers/infrastructure_providers.dart';
 import '../core/services/app_lifecycle_manager.dart';
 import '../core/services/prefetch_service.dart';
 import '../features/map/screens/map_screen.dart';
@@ -48,7 +49,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     // Initialize season service (in production, startDate would come from backend)
-    _seasonService = SeasonService();
+    _seasonService = ref.read(seasonServiceProvider);
 
     // Points service is now provided globally via Provider
     // Crew data loading is now handled by CrewScreen to support Join/Create flows

@@ -10,6 +10,7 @@ import '../../../core/config/h3_config.dart';
 import '../../../core/services/hex_service.dart';
 import '../../../core/services/prefetch_service.dart';
 import '../../../core/services/season_service.dart';
+import '../../../core/providers/infrastructure_providers.dart';
 import '../../../core/services/sync_retry_service.dart';
 import '../../../core/providers/points_provider.dart';
 import '../../../theme/app_theme.dart';
@@ -37,8 +38,8 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final userId = user?.id;
     final userTeam = user?.team.name;
     // Server data always uses home hex (Snapshot Domain)
-    final cityHex = PrefetchService().homeHexCity; // Res 6 for buff/rankings
-    final provinceHex = PrefetchService().homeHexAll; // Res 5 for hex dominance
+    final districtHex = PrefetchService().homeHexDistrict; // Res 6 for buff/rankings
+    final provinceHex = PrefetchService().homeHexProvince; // Res 5 for hex dominance
     if (userId != null) {
       // Ensure pending runs are synced before reading server data.
       // This prevents yesterday's points from showing less than local SQLite.
@@ -54,7 +55,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
 
       await ref.read(teamStatsProvider.notifier).loadTeamData(
         userId,
-        cityHex: cityHex,
+        districtHex: districtHex,
         provinceHex: provinceHex,
         userTeam: userTeam,
         userName: user?.name,
@@ -67,10 +68,10 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final stats = ref.read(teamStatsProvider);
     final dominance = stats.dominance;
     if (dominance == null) return;
-    final total = dominance.allRange.total;
+    final total = dominance.provinceRange.total;
     if (total == 0) return;
-    final red = (dominance.allRange.redHexCount / total) * 100;
-    final blue = (dominance.allRange.blueHexCount / total) * 100;
+    final red = (dominance.provinceRange.redHexCount / total) * 100;
+    final blue = (dominance.provinceRange.blueHexCount / total) * 100;
     ref.read(appStateProvider.notifier).updateTerritoryBalance(red, blue);
   }
 
@@ -185,8 +186,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
 
   String _yesterdayLabel() {
     // Day 1: yesterday is last season — show new-season context instead
-    if (SeasonService().isFirstDay) {
-      final n = SeasonService().seasonNumber;
+    final season = ref.watch(seasonServiceProvider);
+    if (season.isFirstDay) {
+      final n = season.seasonNumber;
       return 'SEASON $n · DAY 1';
     }
     // Show the actual server-timezone date being queried
@@ -200,7 +202,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
         ? '${months[date.month]} ${date.day}'
         : 'YESTERDAY';
 
-    final season = SeasonService();
+
     final remaining = season.daysRemaining;
     final yesterdayDDay = remaining + 1;
     if (remaining >= 0 && yesterdayDDay <= SeasonService.seasonDurationDays) {
@@ -237,7 +239,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
             Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: SeasonService().isFirstDay
+                child: ref.watch(seasonServiceProvider).isFirstDay
                     ? _buildDay1YesterdayBody()
                     : Text(
                         'No flip points yesterday',
@@ -382,14 +384,14 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
         ? HexService().getTerritoryName(homeHex)
         : (dominance?.territoryName ?? 'Unknown');
     final districtNumber = homeHex != null
-        ? HexService().getCityNumber(homeHex)
+        ? HexService().getDistrictNumber(homeHex)
         : (dominance?.districtNumber ?? 1);
 
     final provinceHexCount = H3Config.childrenPerParent(
-      H3Config.baseResolution - H3Config.allResolution,
+      H3Config.baseResolution - H3Config.provinceResolution,
     );
     final districtHexCount = H3Config.childrenPerParent(
-      H3Config.baseResolution - H3Config.cityResolution,
+      H3Config.baseResolution - H3Config.districtResolution,
     );
 
     return Column(
@@ -417,7 +419,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
               child: _buildTerritoryCard(
                 territoryName,
                 _formatHexCount(provinceHexCount),
-                dominance?.allRange,
+                dominance?.provinceRange,
                 totalHexCount: provinceHexCount,
                 isTerritory: true,
               ),
@@ -427,7 +429,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
               child: _buildTerritoryCard(
                 'District $districtNumber',
                 _formatHexCount(districtHexCount),
-                dominance?.cityRange,
+                dominance?.districtRange,
                 totalHexCount: districtHexCount,
                 isTerritory: false,
               ),
@@ -624,7 +626,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (SeasonService().isFirstDay) ...[
+              if (ref.watch(seasonServiceProvider).isFirstDay) ...[
                 // Day 1: no yesterday rankings exist yet
                 _buildDay1RankingsBody(),
               ] else if (userTeam == Team.red) ...[
@@ -650,7 +652,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                   ),
                 ),
               ],
-              if (rankings != null && userTeam != Team.purple && !SeasonService().isFirstDay) ...[
+              if (rankings != null && userTeam != Team.purple && !ref.watch(seasonServiceProvider).isFirstDay) ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -909,7 +911,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
             ],
           ),
           // Day 1: explain why everyone starts at 1x
-          if (SeasonService().isFirstDay) ...[
+          if (ref.watch(seasonServiceProvider).isFirstDay) ...[
             const SizedBox(height: 8),
             Text(
               'ALL START EQUAL TODAY · RUN TO EARN TOMORROW’S BUFF',
@@ -940,14 +942,14 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
 
     // Determine territory winners from server dominance data (midnight snapshot).
     // dominantTeam returns null on ties, so no team gets a false win badge.
-    final provinceDominant = dominance?.allRange.dominantTeam;
+    final provinceDominant = dominance?.provinceRange.dominantTeam;
     final provinceWinner = provinceDominant == 'red'
         ? Team.red
         : provinceDominant == 'blue'
         ? Team.blue
         : null;
 
-    final districtDominant = dominance?.cityRange?.dominantTeam;
+    final districtDominant = dominance?.districtRange?.dominantTeam;
     final districtWinner = districtDominant == 'red'
         ? Team.red
         : districtDominant == 'blue'
@@ -1162,7 +1164,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${redBuff.redRunnerCountCity}',
+                      '${redBuff.redRunnerCountDistrict}',
                       style: GoogleFonts.sora(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -1537,7 +1539,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final participation = ref.read(teamStatsProvider).purpleParticipation;
     final percent = participation?.participationPercent ?? 0;
     final runnersRan = participation?.runnersRanYesterday ?? 0;
-    final totalPurple = participation?.totalPurpleInCity ?? 0;
+    final totalPurple = participation?.totalPurpleInDistrict ?? 0;
 
     // Calculate buff multiplier based on participation rate
     // 0-29% = 1x, 30-59% = 2x, 60-100% = 3x

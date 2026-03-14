@@ -41,5 +41,21 @@
       "h3", "scope boundary", "navigation camera", "route map",
       "territory", "hex grid"
     ]
+  },
+  "apple-appstore-reviewer": {
+    "description": "Apple App Store review specialist: rejection risks, compliance checklist, reviewer notes, IAP/privacy/permissions audit",
+    "fileTriggers": {
+      "pathPatterns": [
+        "ios/**/*",
+        "ios/Runner/Info.plist",
+        "ios/Runner/*.entitlements"
+      ]
+    },
+    "keywordTriggers": [
+      "app store", "appstore", "review", "rejection", "apple review",
+      "info.plist", "entitlements", "privacy manifest", "iap", "storekit",
+      "submission", "app store connect", "reviewer notes", "testflight",
+      "permission", "privacy policy", "account deletion", "sign in with apple"
+    ]
   }
 }

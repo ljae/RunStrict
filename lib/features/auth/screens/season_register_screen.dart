@@ -4,6 +4,7 @@ import '../../../data/models/team.dart';
 import '../providers/app_state_provider.dart';
 import '../../../theme/app_theme.dart';
 import '../../../core/services/season_service.dart';
+import '../../../core/providers/infrastructure_providers.dart';
 import '../../../core/services/hex_service.dart';
 import '../../../core/services/prefetch_service.dart';
 
@@ -64,7 +65,7 @@ class _SeasonRegisterScreenState extends ConsumerState<SeasonRegisterScreen>
     if (homeHex != null) {
       setState(() {
         _territory = HexService().getTerritoryName(homeHex);
-        _district = HexService().getCityDisplayName(homeHex);
+        _district = HexService().getDistrictDisplayName(homeHex);
       });
     }
   }
@@ -78,7 +79,7 @@ class _SeasonRegisterScreenState extends ConsumerState<SeasonRegisterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final season = SeasonService();
+    final season = ref.watch(seasonServiceProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundStart,
@@ -465,14 +466,17 @@ class _FlameTeamHalf extends StatelessWidget {
                       Icon(Icons.star_rounded, color: _color, size: 12),
                       const SizedBox(width: 3),
                     ],
-                    Text(
-                      label,
-                      style: AppTheme.themeData.textTheme.bodySmall?.copyWith(
-                        color: isHighlight ? _color : AppTheme.textSecondary,
-                        fontWeight: isHighlight
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        fontSize: 11,
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: AppTheme.themeData.textTheme.bodySmall?.copyWith(
+                          color: isHighlight ? _color : AppTheme.textSecondary,
+                          fontWeight: isHighlight
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

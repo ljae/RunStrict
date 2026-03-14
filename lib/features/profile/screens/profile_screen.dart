@@ -16,11 +16,13 @@ import '../../../data/models/team.dart';
 import '../../../core/services/hex_service.dart';
 import '../../../core/services/prefetch_service.dart';
 import '../../../core/services/season_service.dart';
+import '../../../core/providers/infrastructure_providers.dart';
 import '../../../data/models/user_model.dart';
 import '../../../core/utils/country_utils.dart';
 import '../../run/services/voice_announcement_service.dart';
 import '../../../core/providers/pro_provider.dart';
 import '../../../core/services/purchases_service.dart';
+import '../../auth/screens/terms_screen.dart';
 
 /// Profile screen displaying user manifesto, avatar, team, and season stats.
 ///
@@ -67,7 +69,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _seasonService = SeasonService();
+    _seasonService = ref.read(seasonServiceProvider);
     _usernameController = TextEditingController();
     _voiceMuted = VoiceAnnouncementService().isMuted;
     final user = ref.read(userRepositoryProvider);
@@ -230,10 +232,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final fromHex = prefetch.homeHex;
     final toHex = prefetch.gpsHex;
     final fromName = fromHex != null
-        ? '${hexService.getTerritoryName(fromHex)} \u00b7 ${hexService.getCityDisplayName(fromHex)}'
+        ? '${hexService.getTerritoryName(fromHex)} \u00b7 ${hexService.getDistrictDisplayName(fromHex)}'
         : 'Unknown';
     final toName = toHex != null
-        ? '${hexService.getTerritoryName(toHex)} \u00b7 ${hexService.getCityDisplayName(toHex)}'
+        ? '${hexService.getTerritoryName(toHex)} \u00b7 ${hexService.getDistrictDisplayName(toHex)}'
         : 'Current GPS';
 
     final teamColor = _teamColor(appState.userTeam ?? Team.red);
@@ -249,66 +251,69 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // FROM
-            Row(
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // FROM
+                Row(
+                  children: [
+                    Text(
+                      'From: ',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        fromName,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.8),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // TO
+                Row(
+                  children: [
+                    Text(
+                      '  To: ',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        toName,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: teamColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 Text(
-                  'From: ',
+                  'Your buff will reset to 1x\n(no yesterday data in new district).',
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: AppTheme.textMuted,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    fromName,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.8),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            // TO
-            Row(
-              children: [
-                Text(
-                  '  To: ',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppTheme.textMuted,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    toName,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: teamColor,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Your buff will reset to 1x\n(no yesterday data in new district).',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ],
-        ),
+          ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -346,6 +351,80 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } finally {
       if (mounted) {
         setState(() => _isUpdatingLocation = false);
+      }
+    }
+  }
+
+  Future<void> _handleDeleteAccount() async {
+    final teamColor = _teamColor(
+      ref.read(appStateProvider.notifier).userTeam ?? Team.red,
+    );
+    // Two-step confirmation — first dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: Text(
+          'Delete Account?',
+          style: GoogleFonts.sora(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Your profile and season data will be permanently removed from our '
+          'servers. Your local run history on this device is not affected.\n\n'
+          'This cannot be undone.',
+          style: GoogleFonts.sora(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'DELETE',
+              style: TextStyle(
+                color: AppTheme.athleticRed,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Second confirmation — type 'DELETE'
+    final doubleConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const _DeleteConfirmDialog(),
+    );
+    if (doubleConfirmed != true || !mounted) return;
+
+    try {
+      await AuthService().deleteAccount();
+      if (!mounted) return;
+      await ref.read(appStateProvider.notifier).logout();
+    } catch (e) {
+      debugPrint('ProfileScreen: Delete account failed - $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Delete failed. Please try again.',
+              style: GoogleFonts.sora(color: Colors.white),
+            ),
+            backgroundColor: AppTheme.athleticRed,
+          ),
+        );
       }
     }
   }
@@ -569,7 +648,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _buildNormalMode(BuildContext context) {
-    final appState = ref.watch(appStateProvider.notifier);
+    final appState = ref.read(appStateProvider.notifier);
     final isGuest = ref.watch(appStateProvider.select((s) => s.isGuest));
     final user = ref.watch(userRepositoryProvider);
 
@@ -820,6 +899,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               const SizedBox(height: AppTheme.spacingL),
                               _RemoveAdsCard(teamColor: teamColor),
                             ],
+                            const SizedBox(height: AppTheme.spacingL),
+                            const _LegalLinksRow(),
+                            const SizedBox(height: AppTheme.spacingM),
+                            _DangerZoneCard(
+                              onDeleteAccount: _handleDeleteAccount,
+                            ),
                           ],
                         ),
                       ),
@@ -909,7 +994,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       if (_seasonService.isPurpleUnlocked &&
                           user.team != Team.purple) ...[
                         const SizedBox(height: AppTheme.spacingL),
-                        const _TraitorGateButton(),
+                      const _TraitorGateButton(),
+                      const SizedBox(height: AppTheme.spacingL),
+                      const _LegalLinksRow(),
+                      const SizedBox(height: AppTheme.spacingM),
+                      _DangerZoneCard(onDeleteAccount: _handleDeleteAccount),
                       ],
                       const SizedBox(height: AppTheme.spacingXL),
                     ],
@@ -1562,13 +1651,13 @@ class _LocationCard extends StatelessWidget {
         ? hexService.getTerritoryName(registeredHex!)
         : 'Not set';
     final regDistrict = registeredHex != null
-        ? hexService.getCityDisplayName(registeredHex!)
+        ? hexService.getDistrictDisplayName(registeredHex!)
         : '';
 
     // Dual-location layout when outside province
     if (isOutsideProvince && gpsHex != null) {
       final gpsTerritory = hexService.getTerritoryName(gpsHex!);
-      final gpsDistrict = hexService.getCityDisplayName(gpsHex!);
+      final gpsDistrict = hexService.getDistrictDisplayName(gpsHex!);
 
       return Container(
         width: double.infinity,
@@ -1802,7 +1891,7 @@ class _GpsLocationCard extends StatelessWidget {
         ? hexService.getTerritoryName(gpsHex!)
         : null;
     final district = gpsHex != null
-        ? hexService.getCityDisplayName(gpsHex!)
+        ? hexService.getDistrictDisplayName(gpsHex!)
         : null;
 
     return Container(
@@ -1938,7 +2027,27 @@ class _RemoveAdsCard extends ConsumerStatefulWidget {
 class _RemoveAdsCardState extends ConsumerState<_RemoveAdsCard> {
   bool _isPurchasing = false;
   bool _isRestoring = false;
+  String? _priceString;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadPrice();
+  }
+
+  Future<void> _loadPrice() async {
+    try {
+      final offerings = await PurchasesService().getOfferings();
+      final pkg = offerings?.current?.lifetime ??
+          offerings?.current?.availablePackages.firstOrNull;
+      if (mounted && pkg != null) {
+        setState(
+          () => _priceString = pkg.storeProduct.priceString,
+        );
+      }
+    } catch (_) {}
+
+  }
   Future<void> _purchase() async {
     setState(() => _isPurchasing = true);
 
@@ -2038,7 +2147,7 @@ class _RemoveAdsCardState extends ConsumerState<_RemoveAdsCard> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isPurchasing ? null : _purchase,
+              onPressed: null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.teamColor,
                 foregroundColor: Colors.white,
@@ -2059,14 +2168,32 @@ class _RemoveAdsCardState extends ConsumerState<_RemoveAdsCard> {
                       ),
                     )
                   : Text(
-                      isDebug ? 'REMOVE ADS (DEBUG)' : 'REMOVE ADS',
+                      _priceString != null
+                          ? 'REMOVE ADS — $_priceString'
+                          : 'REMOVE ADS',
                       style: GoogleFonts.sora(
-                        fontSize: 14,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.0,
                       ),
                     ),
             ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'One-time purchase · No subscription',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '🔜 Coming soon — stay tuned!',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+            ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           GestureDetector(
@@ -2091,6 +2218,245 @@ class _RemoveAdsCardState extends ConsumerState<_RemoveAdsCard> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Legal Links Row ────────────────────────────────────────────────────────
+class _LegalLinksRow extends StatelessWidget {
+  const _LegalLinksRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              fullscreenDialog: true,
+              builder: (_) => const TermsScreen(initialTab: 0),
+            ),
+          ),
+          child: Text(
+            'Terms of Service',
+            style: GoogleFonts.sora(
+              fontSize: 12,
+              color: AppTheme.textMuted,
+              decoration: TextDecoration.underline,
+              decorationColor: AppTheme.textMuted,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            '·',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              fullscreenDialog: true,
+              builder: (_) => const TermsScreen(initialTab: 1),
+            ),
+          ),
+          child: Text(
+            'Privacy Policy',
+            style: GoogleFonts.sora(
+              fontSize: 12,
+              color: AppTheme.textMuted,
+              decoration: TextDecoration.underline,
+              decorationColor: AppTheme.textMuted,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Danger Zone Card ───────────────────────────────────────────────────────
+class _DangerZoneCard extends StatelessWidget {
+  final VoidCallback onDeleteAccount;
+  const _DangerZoneCard({required this.onDeleteAccount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppTheme.spacingM),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.athleticRed.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'DANGER ZONE',
+            style: GoogleFonts.sora(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.athleticRed.withValues(alpha: 0.7),
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingM),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: onDeleteAccount,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: AppTheme.athleticRed.withValues(alpha: 0.5),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                'Delete Account',
+                style: GoogleFonts.sora(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.athleticRed,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Isolated StatefulWidget for the 'type DELETE' confirmation dialog.
+/// Owns its TextEditingController and removes the controller listener in
+/// [deactivate] — NOT [dispose] — to prevent setState being scheduled
+/// between element deactivation and disposal, which causes:
+///   • '_dependents.isEmpty': is not true (InheritedElement.debugDeactivated)
+///   • 'dirty widget in wrong build scope' (InputDecorator)
+class _DeleteConfirmDialog extends StatefulWidget {
+  const _DeleteConfirmDialog();
+
+  @override
+  State<_DeleteConfirmDialog> createState() => _DeleteConfirmDialogState();
+}
+
+class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onChanged);
+  }
+
+  void _onChanged() {
+    // mounted check as secondary guard; primary guard is removeListener in
+    // deactivate() which fires before the deactivate→dispose window.
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void deactivate() {
+    // Remove listener here (not just dispose) so the controller cannot
+    // trigger setState on an inactive element between deactivate/dispose.
+    _controller.removeListener(_onChanged);
+    super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isValid = _controller.text.trim() == 'DELETE';
+    return AlertDialog(
+      backgroundColor: AppTheme.surfaceColor,
+      title: Text(
+        'Are you sure?',
+        style: GoogleFonts.sora(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Type DELETE to confirm:',
+              style: GoogleFonts.sora(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              style: GoogleFonts.sora(
+                color: Colors.white,
+                fontSize: 14,
+              ),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppTheme.backgroundStart,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: AppTheme.athleticRed.withValues(alpha: 0.4),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(
+                    color: AppTheme.athleticRed.withValues(alpha: 0.4),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppTheme.athleticRed),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(
+            'Cancel',
+            style: TextStyle(color: AppTheme.textMuted),
+          ),
+        ),
+        TextButton(
+          onPressed: isValid ? () => Navigator.pop(context, true) : null,
+          child: Text(
+            'CONFIRM DELETE',
+            style: TextStyle(
+              color: isValid ? AppTheme.athleticRed : AppTheme.textMuted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

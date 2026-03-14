@@ -103,7 +103,7 @@ class AppLifecycleManager with WidgetsBindingObserver {
     final season = SeasonService();
     final serverNow = season.serverTime; // Current time in GMT+2
     // Next midnight GMT+2
-    final nextMidnight = DateTime(
+    final nextMidnight = DateTime.utc(
       serverNow.year,
       serverNow.month,
       serverNow.day + 1,
@@ -111,9 +111,9 @@ class AppLifecycleManager with WidgetsBindingObserver {
     // Duration until midnight + 5 second buffer for cron completion
     var delay = nextMidnight.difference(serverNow) + const Duration(seconds: 5);
 
-    // Safety: if delay is negative or zero (clock drift), fire in 60s
-    if (delay.isNegative || delay == Duration.zero) {
-      delay = const Duration(seconds: 60);
+    // Safety: if delay is out of range (clock drift, tz mismatch), use 24h fallback
+    if (delay <= Duration.zero || delay > const Duration(hours: 25)) {
+      delay = const Duration(hours: 24);
     }
 
     _midnightTimer = Timer(delay, _onMidnightReached);

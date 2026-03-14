@@ -102,11 +102,15 @@ class _RunCalendarState extends State<RunCalendar> {
     return widget.timezoneConverter?.call(time) ?? time;
   }
 
-  /// Group runs by date (year-month-day key) in display timezone
+  /// Group runs by date (year-month-day key) in display timezone.
+  /// Uses _convertTime() so the grouping matches the displayed timezone,
+  /// preventing runs near midnight from appearing on the wrong day when
+  /// the toggle is set to GMT+2.
   Map<String, List<Run>> get _runsByDate {
     final map = <String, List<Run>>{};
     for (final run in widget.runs) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(run.startTime);
+      final displayTime = _convertTime(run.startTime);
+      final dateKey = DateFormat('yyyy-MM-dd').format(displayTime);
       map.putIfAbsent(dateKey, () => []);
       map[dateKey]!.add(run);
     }

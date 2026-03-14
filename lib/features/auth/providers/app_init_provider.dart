@@ -17,6 +17,7 @@ import '../../map/providers/hex_data_provider.dart';
 import '../../../core/providers/user_repository_provider.dart';
 import '../../team/providers/team_stats_provider.dart';
 import '../../../core/providers/pro_provider.dart';
+import '../../../core/services/remote_config_service.dart';
 
 class AppInitState {
   final bool isPrefetching;
@@ -100,11 +101,13 @@ class AppInitNotifier extends Notifier<AppInitState> {
     );
 
     Future.delayed(untilMidnight, () {
+      if (!ref.mounted) return;
       final currentState = ref.read(appStateProvider);
       if (!currentState.isGuest) return;
 
       debugPrint('AppInitNotifier: Guest midnight wipe triggered');
       LocalStorage().clearAllGuestData().then((_) {
+        if (!ref.mounted) return;
         ref.read(appStateProvider.notifier).endGuestSession();
       });
     });
@@ -118,10 +121,10 @@ class AppInitNotifier extends Notifier<AppInitState> {
 
     try {
       final supabase = SupabaseService();
-      final launchCityHex = PrefetchService().homeHexCity;
+      final launchDistrictHex = PrefetchService().homeHexDistrict;
       final result = await supabase.appLaunchSync(
         appState.currentUser!.id,
-        districtHex: launchCityHex,
+        districtHex: launchDistrictHex,
       );
 
       final userStats = result['user_stats'] as Map<String, dynamic>?;
@@ -200,6 +203,25 @@ class AppInitNotifier extends Notifier<AppInitState> {
     } finally {
       state = state.copyWith(isPrefetching: false);
     }
+
+    // Auto-fix: if GPS failed during initialize() and home hex is still null,
+    // retry once so the map shows territory without requiring manual user action.
+    if (!PrefetchService().hasHomeHex) {
+      final userId = ref.read(appStateProvider.notifier).currentUser?.id;
+      if (userId != null) {
+        debugPrint(
+          'AppInitNotifier: Home hex null after prefetch — auto-updating from GPS',
+        );
+        try {
+          await PrefetchService().updateHomeHex(userId);
+          if (ref.mounted) {
+            ref.read(hexDataProvider.notifier).notifyHexDataChanged();
+          }
+        } catch (e) {
+          debugPrint('AppInitNotifier: Auto home hex update failed — $e');
+        }
+      }
+    }
   }
 
   Future<void> _initializePrefetch() => initializePrefetch();
@@ -216,6 +238,11 @@ class AppInitNotifier extends Notifier<AppInitState> {
   Future<void> _onAppResume() async {
     // Guest mode: skip all server refresh
     if (ref.read(appStateProvider).isGuest) return;
+
+    // Refresh remote config first — downstream services use the updated values.
+    // Safe: no-op when frozen (active run) or configVersion unchanged; falls
+    // back to cache offline.
+    await RemoteConfigService().refresh();
 
     // Refresh pro status (purchase may have completed externally)
     ref.read(proProvider.notifier).refresh();
@@ -237,12 +264,12 @@ class AppInitNotifier extends Notifier<AppInitState> {
       points.onRunSynced(syncedPoints);
     }
 
-    final cityHex = PrefetchService().homeHexCity;
+    final districtHex = PrefetchService().homeHexDistrict;
     try {
       final supabase = SupabaseService();
       final result = await supabase.appLaunchSync(
         userId,
-        districtHex: cityHex,
+        districtHex: districtHex,
       );
       final userStats = result['user_stats'] as Map<String, dynamic>?;
       final serverSeasonPoints =
@@ -277,10 +304,10 @@ class AppInitNotifier extends Notifier<AppInitState> {
       // so stale rankings (showing only the user) persist without this call.
       final user = ref.read(userRepositoryProvider);
       if (user != null) {
-        final provinceHex = PrefetchService().homeHexAll;
+        final provinceHex = PrefetchService().homeHexProvince;
         ref.read(teamStatsProvider.notifier).loadTeamData(
           user.id,
-          cityHex: cityHex,
+          districtHex: districtHex,
           provinceHex: provinceHex,
           userTeam: user.team.name,
           userName: user.name,
