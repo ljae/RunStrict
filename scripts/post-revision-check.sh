@@ -271,7 +271,7 @@ grep_all FAIL A2 "print() — use debugPrint()" \
 
 grep_all WARN A3 "Lint suppression (// ignore:)" \
   '//\s*ignore:' \
-  'AGENTS.md: do not suppress lint without a justifying comment explaining why.'
+  'docs/style/dos-and-donts.md: do not suppress lint without a justifying comment explaining why.'
 
 grep_all FAIL A4 "StateNotifier — banned; use Notifier<T>" \
   '(extends|with)\s+StateNotifier\b' \

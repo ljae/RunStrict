@@ -14,6 +14,7 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HISTORY_FILE="$REPO_ROOT/error-fix-history.md"
+ARCHIVE_FILE="$REPO_ROOT/docs/invariants/fix-archive.md"
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
@@ -40,10 +41,15 @@ ask()    {
 # ---------------------------------------------------------------------------
 if [[ "${1:-}" == "--search" ]]; then
   term="${2:?Usage: $0 --search <term>}"
-  header "Searching error-fix-history.md for: \"$term\""
-  if grep -n -i "$term" "$HISTORY_FILE"; then
-    echo ""
-  else
+  header "Searching error-fix-history.md (index) + docs/invariants/fix-archive.md for: \"$term\""
+  found=0
+  if grep -n -i --color=always "$term" "$HISTORY_FILE" 2>/dev/null; then
+    found=1
+  fi
+  if [[ -f "$ARCHIVE_FILE" ]] && grep -n -i --color=always "$term" "$ARCHIVE_FILE" 2>/dev/null; then
+    found=1
+  fi
+  if [[ "$found" -eq 0 ]]; then
     warn "No matches found for \"$term\""
   fi
   exit 0
@@ -82,11 +88,17 @@ if [[ -z "$COMPONENT" ]]; then
   warn "No component specified — skipping error history search."
 else
   echo ""
-  echo -e "  Searching ${CYAN}error-fix-history.md${RESET} for \"$COMPONENT\"..."
-  MATCHES=$(grep -c -i "$COMPONENT" "$HISTORY_FILE" 2>/dev/null || echo 0)
+  echo -e "  Searching ${CYAN}error-fix-history.md${RESET} + ${CYAN}docs/invariants/fix-archive.md${RESET} for \"$COMPONENT\"..."
+  MATCHES_INDEX=$(grep -c -i "$COMPONENT" "$HISTORY_FILE" 2>/dev/null || echo 0)
+  MATCHES_ARCHIVE=0
+  if [[ -f "$ARCHIVE_FILE" ]]; then
+    MATCHES_ARCHIVE=$(grep -c -i "$COMPONENT" "$ARCHIVE_FILE" 2>/dev/null || echo 0)
+  fi
+  MATCHES=$((MATCHES_INDEX + MATCHES_ARCHIVE))
   if [[ "$MATCHES" -gt 0 ]]; then
-    warn "Found $MATCHES line(s) mentioning \"$COMPONENT\" in error-fix-history.md:"
-    grep -n -i "$COMPONENT" "$HISTORY_FILE" | head -10 | while IFS= read -r line; do
+    warn "Found $MATCHES line(s) mentioning \"$COMPONENT\" (index: $MATCHES_INDEX, archive: $MATCHES_ARCHIVE):"
+    { grep -n -i "$COMPONENT" "$HISTORY_FILE" 2>/dev/null; \
+      [[ -f "$ARCHIVE_FILE" ]] && grep -n -i "$COMPONENT" "$ARCHIVE_FILE" 2>/dev/null; } | head -10 | while IFS= read -r line; do
       echo "    $line"
     done
     echo ""

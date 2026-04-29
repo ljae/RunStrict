@@ -747,7 +747,7 @@ All app data belongs to exactly one of two domains. **Never mix them.**
 - Downloaded on app launch / OnResume via prefetch
 - Created by server at midnight GMT+2 from all runners' uploaded data
 - **NEVER changes from running** — frozen until next prefetch
-- **Always anchored to home hex** — `PrefetchService` downloads using `homeHex`/`homeHexAll` (never GPS)
+- **Always anchored to home hex** — `PrefetchService` downloads using `homeHex`/`homeHexProvince` (never GPS)
 
 | Data | Source | Used By |
 |------|--------|---------|
@@ -786,9 +786,9 @@ Server data and map display use different location anchors. This prevents server
 
 | Concern | Location Anchor | Implementation |
 |---------|----------------|----------------|
-| Hex snapshot download | **Home hex** | `PrefetchService._homeHexAll` in `_downloadHexData()` |
+| Hex snapshot download | **Home hex** | `PrefetchService._homeHexProvince` in `_downloadHexData()` |
 | Leaderboard filtering | **Home hex** | `LeaderboardProvider.filterByScope()` reads `_prefetchService.homeHex` |
-| TeamScreen territory/city | **Home hex** | `PrefetchService().homeHexCity` / `homeHex` |
+| TeamScreen territory/district | **Home hex** | `PrefetchService().homeHexDistrict` / `homeHex` |
 | Season register location | **Home hex** | `PrefetchService().homeHex` |
 | MapScreen camera centering | **GPS hex** (outside province) | `PrefetchService().gpsHex` via `isOutsideHomeProvince` |
 | MapScreen territory overlay | **GPS hex** (outside province) | `_TeamStatsOverlay` uses `gpsHex` for display hex |
@@ -796,7 +796,7 @@ Server data and map display use different location anchors. This prevents server
 | Hex capture | **Disabled** outside province | `_OutsideProvinceBanner` on MapScreen |
 
 **PrefetchService getters** (no `activeHex*` — removed to prevent domain conflation):
-- `homeHex`, `homeHexCity`, `homeHexAll` — registered home location (server data anchor)
+- `homeHex`, `homeHexDistrict` (Res 6), `homeHexProvince` (Res 5), `homeHexRegion` — registered home location (server data anchor)
 - `gpsHex`, `getGpsHexAtScope()` — current GPS position (map display only)
 - `isOutsideHomeProvince` — GPS province ≠ home province
 

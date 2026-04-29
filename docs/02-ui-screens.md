@@ -394,4 +394,4 @@ Applies to: TeamScreen (yesterday stats), RunHistoryScreen (ALL TIME + period pa
 - **Hex capture** → **disabled** when outside province (floating banner on MapScreen)
 - **ProfileScreen** → shows BOTH registered home and GPS location when outside province
 
-`PrefetchService` getters: `homeHex`/`homeHexCity`/`homeHexAll` (server anchor), `gpsHex`/`getGpsHexAtScope()` (map display), `isOutsideHomeProvince` (detection).
+`PrefetchService` getters: `homeHex`/`homeHexDistrict` (Res 6) / `homeHexProvince` (Res 5) (server anchor), `gpsHex`/`getGpsHexAtScope()` (map display), `isOutsideHomeProvince` (detection).
